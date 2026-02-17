@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h2>🛠️ Admin Print Queue</h2>
+    <div id="container" style="width: 100%; max-width: 700px;"></div>
+
+    <script>
+        const BIN_ID = '{{ bin_id }}'; 
+        const API_KEY = '{{ api_key }}';
+        let fullRecord = {};
+
+        async function loadAdmin() {
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
+            const data = await res.json();
+            fullRecord = data.record;
+            render();
+        }
+
+        function render() {
+            document.getElementById('container').innerHTML = fullRecord.orders.map((o, i) => `
+                <div class="order-card" style="display:block;">
+                    <strong>User: ${o.user}</strong> | <span>Status: ${o.status}</span><br>
+                    <div style="background:#eee; padding:10px; font-size:12px; word-break:break-all; margin:10px 0; border-radius:5px; border: 1px solid #ccc;">
+                        <strong>FULL LINK:</strong> ${o.link}
+                    </div>
+                    
+                    <div class="btn-group">
+                        <input type="number" id="p-${i}" placeholder="Rp" style="width:60px;">
+                        <button onclick="sendQuote(${i})" style="background:#6f42c1; width:auto; padding:5px 10px;">Send Quote</button>
+                        <button class="btn-print" onclick="update(${i}, 'Printing')">Start Print</button>
+                        <button class="btn-done" onclick="update(${i}, 'Completed')">Done</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function sendQuote(idx) {
+            const price = document.getElementById(`p-${idx}`).value;
+            fullRecord.orders[idx].price = price;
+            fullRecord.orders[idx].status = 'Quoted';
+            fullRecord.orders[idx].eta = 'Awaiting your approval';
+            await save();
+        }
+
+        async function update(idx, status) {
+            fullRecord.orders[idx].status = status;
+            fullRecord.orders[idx].eta = status === 'Printing' ? prompt("Mins left?") + " mins" : "Ready!";
+            await save();
+        }
+
+        async function save() {
+            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
+                body: JSON.stringify(fullRecord)
+            });
+            render();
+        }
+        loadAdmin();
+    </script>
+</body>
+</html>

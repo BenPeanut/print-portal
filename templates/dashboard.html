@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="card">
+        <h2>Welcome, <span id="userTag"></span></h2>
+        <input type="text" id="orderLink" placeholder="Paste MakerWorld Link Here">
+        <button onclick="submitOrder()">Request Print</button>
+        <button onclick="logout()" style="background:#666; margin-top:10px; height: 30px; font-size: 12px;">Logout</button>
+    </div>
+
+    <div style="width: 100%; max-width: 450px; margin-top: 20px;">
+        <h3>My Orders</h3>
+        <div id="userOrders"></div>
+    </div>
+
+    <script>
+        const BIN_ID = '{{ bin_id }}'; 
+        const API_KEY = '{{ api_key }}';
+        const currentUser = localStorage.getItem('currentUser');
+
+        if(!currentUser) window.location.href = "/";
+        document.getElementById('userTag').innerText = currentUser;
+
+        async function submitOrder() {
+            const link = document.getElementById('orderLink').value;
+            if(!link) return;
+
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
+            const data = await res.json();
+            
+            data.record.orders.push({
+                user: currentUser,
+                link: link,
+                status: 'Awaiting Approval',
+                price: null,
+                eta: 'Pending Review',
+                id: Date.now()
+            });
+
+            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
+                body: JSON.stringify(data.record)
+            });
+            location.reload();
+        }
+
+        async function loadMyOrders() {
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
+            const data = await res.json();
+            const myOrders = data.record.orders.filter(o => o.user === currentUser);
+            
+            document.getElementById('userOrders').innerHTML = myOrders.map(o => {
+                let quoteHtml = "";
+                if(o.status === 'Quoted') {
+                    quoteHtml = `
+                        <div style="background: #fff3cd; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                            <p><strong>Quote: Rp${o.price}</strong></p>
+                            <button onclick="respond(${o.id}, 'Confirmed')" style="background:green; width:45%;">Accept</button>
+                            <button onclick="respond(${o.id}, 'Denied')" style="background:red; width:45%;">Deny</button>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="order-card" style="display:block; border-left-color: ${o.status === 'Completed' ? 'green' : 'orange'}">
+                        <strong>Status: ${o.status}</strong><br>
+                        ${o.price ? `<span>Cost: Rp${o.price}</span><br>` : ''}
+                        <span class="eta-text">🕒 ${o.eta}</span>
+                        ${quoteHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function respond(id, decision) {
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
+            const data = await res.json();
+            const order = data.record.orders.find(o => o.id === id);
+            order.status = decision;
+            order.eta = decision === 'Confirmed' ? 'In Queue' : 'Cancelled';
+            
+            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
+                body: JSON.stringify(data.record)
+            });
+            location.reload();
+        }
+
+        function logout() { localStorage.clear(); window.location.href="/"; }
+        loadMyOrders();
+    </script>
+</body>
+</html>
