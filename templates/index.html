@@ -1,59 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Login - MakerWorld Print</title>
+    <title>3D Print Request</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; }
+        input, select, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+        .box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
 </head>
 <body>
-    <div class="card">
-        <h2>👤 Login or Sign Up</h2>
-        <input type="text" id="username" placeholder="Username">
-        <input type="password" id="password" placeholder="Password">
-        <button onclick="auth()">Enter Dashboard</button>
-        <p id="msg" style="font-size: 12px; color: #666;"></p>
+    <h1>Benaiah's 3D Printing Service</h1>
+    
+    <div class="box">
+        <h3>Request a Print</h3>
+        <form action="/submit_order" method="POST">
+            <label>Link to Model (MakerWorld):</label>
+            <input type="url" name="makerworld_link" required placeholder="https://makerworld.com/...">
+            
+            <label>Select Color:</label>
+            <select name="color" required>
+                <option value="" disabled selected>Choose a filament...</option>
+                {% for color in filaments %}
+                <option value="{{ color }}">{{ color }}</option>
+                {% endfor %}
+            </select>
+            
+            <button type="submit" style="background-color: #00ae42; color: white; border: none;">Submit Order</button>
+        </form>
     </div>
 
-    <script>
-        const BIN_ID = '{{ bin_id }}'; 
-        const API_KEY = '{{ api_key }}';
-
-        async function auth() {
-            const user = document.getElementById('username').value.trim();
-            const pass = document.getElementById('password').value.trim();
-            if(!user || !pass) return alert("Fill everything out!");
-
-            document.getElementById('msg').innerText = "Checking bin...";
-            
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
-            const data = await res.json();
-            let record = data.record;
-
-            // Initialize bins if they don't exist
-            if(!record.users) record.users = {};
-            if(!record.orders) record.orders = [];
-
-            if(record.users[user]) {
-                if(record.users[user] === pass) {
-                    login(user);
-                } else {
-                    alert("Wrong password!");
-                }
-            } else {
-                // New User Creation
-                record.users[user] = pass;
-                await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-                    body: JSON.stringify(record)
-                });
-                login(user);
-            }
-        }
-
-        function login(user) {
-            localStorage.setItem('currentUser', user);
-            window.location.href = "/dashboard";
-        }
-    </script>
+    <div class="box">
+        <h3>Check Order Status</h3>
+        <form action="/check_order" method="POST">
+            <input type="text" name="order_id" placeholder="Enter Order ID" required>
+            <button type="submit">Check Status</button>
+        </form>
+    </div>
 </body>
 </html>

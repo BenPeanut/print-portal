@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h2>Order Tracking</h2>
+            <div style="margin: 20px 0; padding: 20px; background: #f1f5f9; border-radius: 8px;">
+                <p><strong>Order ID:</strong> {{ order.id }}</p>
+                <p><strong>Status:</strong> <span style="color: var(--primary); font-weight: bold;">{{ order.status }}</span></p>
+                <p><strong>Price:</strong> {{ order.price }}</p>
+                <p><strong>Filament:</strong> {{ order.color }}</p>
+            </div>
+            <a href="/" style="text-decoration: none; color: var(--primary);">← Back to Home</a>
+        </div>
+    </div>
+</body>
+</html>

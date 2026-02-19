@@ -1,66 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin Dashboard</title>
+    <title>Order Receipt</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h2>🛠️ Admin Print Queue</h2>
-    <div id="container" style="width: 100%; max-width: 700px;"></div>
+    <div class="container">
+        <div class="box">
+            <h1 style="color: var(--bambu-green); margin-top:0;">{{ order.get('name', 'Unnamed Order') }}</h1>
+            <p style="color: #888;">Order ID: {{ order.id }}</p>
+            
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid var(--bambu-green);">
+                <p><strong>Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
+                <p><strong>Color:</strong> {{ order.color }}</p>
+                <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.get('delivery_time', 'Pending Quote') }}</span></p>
+            </div>
 
-    <script>
-        const BIN_ID = '{{ bin_id }}'; 
-        const API_KEY = '{{ api_key }}';
-        let fullRecord = {};
+            <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px;">Price Breakdown</h3>
+            <table class="price-table">
+                <tr>
+                    <td>Printing Cost</td>
+                    <td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td>
+                </tr>
+                <tr>
+                    <td>Materials & Extras</td>
+                    <td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td>
+                </tr>
+                <tr class="total" style="border-top: 2px solid var(--carbon);">
+                    <td style="padding-top:15px;">Total Amount</td>
+                    <td align="right" style="padding-top:15px;">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
+                </tr>
+            </table>
 
-        async function loadAdmin() {
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
-            const data = await res.json();
-            fullRecord = data.record;
-            render();
-        }
-
-        function render() {
-            document.getElementById('container').innerHTML = fullRecord.orders.map((o, i) => `
-                <div class="order-card" style="display:block;">
-                    <strong>User: ${o.user}</strong> | <span>Status: ${o.status}</span><br>
-                    <div style="background:#eee; padding:10px; font-size:12px; word-break:break-all; margin:10px 0; border-radius:5px; border: 1px solid #ccc;">
-                        <strong>FULL LINK:</strong> ${o.link}
-                    </div>
-                    
-                    <div class="btn-group">
-                        <input type="number" id="p-${i}" placeholder="Rp" style="width:60px;">
-                        <button onclick="sendQuote(${i})" style="background:#6f42c1; width:auto; padding:5px 10px;">Send Quote</button>
-                        <button class="btn-print" onclick="update(${i}, 'Printing')">Start Print</button>
-                        <button class="btn-done" onclick="update(${i}, 'Completed')">Done</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        async function sendQuote(idx) {
-            const price = document.getElementById(`p-${idx}`).value;
-            fullRecord.orders[idx].price = price;
-            fullRecord.orders[idx].status = 'Quoted';
-            fullRecord.orders[idx].eta = 'Awaiting your approval';
-            await save();
-        }
-
-        async function update(idx, status) {
-            fullRecord.orders[idx].status = status;
-            fullRecord.orders[idx].eta = status === 'Printing' ? prompt("Mins left?") + " mins" : "Ready!";
-            await save();
-        }
-
-        async function save() {
-            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-                body: JSON.stringify(fullRecord)
-            });
-            render();
-        }
-        loadAdmin();
-    </script>
+            <div style="margin-top:30px; background: #eee; padding: 15px; border-radius: 8px;">
+                <form action="/name_order/{{ order.id }}" method="POST">
+                    <label style="font-weight:bold; font-size: 0.9em;">Update Order Nickname:</label>
+                    <input type="text" name="order_name" placeholder="e.g. My Cool Toy" required>
+                    <button type="submit" style="margin-top:5px; background: var(--carbon);">Save Nickname</button>
+                </form>
+            </div>
+            <br>
+            <a href="/" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return Home</a>
+        </div>
+    </div>
 </body>
 </html>

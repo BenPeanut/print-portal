@@ -1,57 +1,27 @@
 :root {
-    --primary: #00853f;       /* MakerWorld Emerald Green */
-    --primary-light: #e6f3ec;
-    --dark: #1a1a1a;
-    --gray: #f4f4f4;
-    --orange: #ff9800;
+    --bambu-green: #00ae42;
+    --carbon: #2c2c2c;
+    --bg: #f4f4f4;
+    --white: #ffffff;
 }
 
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--gray);
-    margin: 0; padding: 20px;
-    display: flex; flex-direction: column; align-items: center;
-}
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--carbon); margin: 0; padding: 0; }
+.container { max-width: 800px; margin: 40px auto; padding: 20px; }
 
-.card {
-    background: white;
-    width: 100%; max-width: 450px;
-    padding: 25px; border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    border-top: 5px solid var(--primary);
-}
+/* Cards & Sections */
+.box { background: var(--white); border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; border-top: 5px solid var(--bambu-green); }
 
-h2 { color: var(--primary); margin-top: 0; }
+/* Inputs & Buttons */
+input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+button { width: 100%; padding: 12px; background: var(--bambu-green); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
+button:hover { background: #008f36; }
 
-input {
-    width: 100%; padding: 12px; margin: 10px 0;
-    border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;
-}
+/* Price Table Separation */
+.price-table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+.price-table td { padding: 12px 0; border-bottom: 1px solid #eee; }
+.price-table .total { font-weight: bold; color: var(--bambu-green); font-size: 1.2em; border-bottom: none; }
 
-button {
-    width: 100%; padding: 12px; border: none; border-radius: 6px;
-    background: var(--primary); color: white; font-weight: bold;
-    cursor: pointer; transition: 0.3s;
-}
-
-button:hover { opacity: 0.9; transform: translateY(-1px); }
-
-/* Dashboard Specific Styles */
-.order-card {
-    background: white; padding: 15px; margin-top: 15px;
-    border-radius: 8px; border-left: 6px solid var(--orange);
-    display: flex; justify-content: space-between; align-items: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.status-tag {
-    font-size: 11px; font-weight: bold; text-transform: uppercase;
-    padding: 3px 8px; border-radius: 10px;
-}
-
-.eta-text { font-size: 13px; color: #666; font-style: italic; }
-
-.btn-group { display: flex; gap: 5px; }
-.btn-small { padding: 6px 10px; font-size: 11px; width: auto; }
-.btn-print { background: #007bff; }
-.btn-done { background: var(--primary); }
+/* Dashboard Specific */
+.admin-table { width: 100%; border-collapse: collapse; background: white; }
+.admin-table th { background: var(--carbon); color: white; padding: 12px; }
+.admin-table td { padding: 12px; border-bottom: 1px solid #ddd; }

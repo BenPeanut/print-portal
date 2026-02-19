@@ -1,99 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>My Dashboard</title>
+    <title>Admin Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .link-btn {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #2c2c2c; /* Carbon Grey */
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .link-btn:hover { background: #000; }
+    </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Welcome, <span id="userTag"></span></h2>
-        <input type="text" id="orderLink" placeholder="Paste MakerWorld Link Here">
-        <button onclick="submitOrder()">Request Print</button>
-        <button onclick="logout()" style="background:#666; margin-top:10px; height: 30px; font-size: 12px;">Logout</button>
+    <div style="padding: 20px;">
+        <h1 style="color: var(--bambu-green);">Bambula Management</h1>
+
+        <div class="box">
+            <h3>Update Available Colors</h3>
+            <form action="/update_colors" method="POST" style="display:flex; gap:10px;">
+                <input type="text" name="colors_list" value="{{ current_colors }}" style="flex:1;">
+                <button type="submit" style="width: auto; padding: 0 20px;">Update</button>
+            </form>
+        </div>
+
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Order Info</th>
+                    <th>Color</th>
+                    <th>Link</th> <th>Details & Delivery</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>
+                        <strong>{{ order.get('name', 'No Name') }}</strong><br>
+                        <small style="color:#888;">ID: {{ order.id }}</small>
+                    </td>
+                    <td><span class="badge">{{ order.color }}</span></td>
+                    <td>
+                        <a href="{{ order.link }}" target="_blank" class="link-btn">🔗 Open MakerWorld</a>
+                    </td>
+                    <td>
+                        <form action="/update_order/{{ order.id }}" method="POST">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                                <input type="text" name="print_price" value="{{ order.print_price }}" placeholder="Price">
+                                <input type="text" name="material_fee" value="{{ order.material_fee }}" placeholder="Fee">
+                            </div>
+                            <input type="datetime-local" name="delivery_time" value="{{ order.delivery_time }}">
+                            
+                            <select name="status">
+                                <option value="{{ order.status }}">{{ order.status }}</option>
+                                <option value="Quote Sent">Quote Sent</option>
+                                <option value="Printing">Printing</option>
+                                <option value="Done">Done</option>
+                                <option value="Delivered">Delivered (Archive)</option>
+                            </select>
+                    </td>
+                    <td>
+                        <button type="submit">Update</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-
-    <div style="width: 100%; max-width: 450px; margin-top: 20px;">
-        <h3>My Orders</h3>
-        <div id="userOrders"></div>
-    </div>
-
-    <script>
-        const BIN_ID = '{{ bin_id }}'; 
-        const API_KEY = '{{ api_key }}';
-        const currentUser = localStorage.getItem('currentUser');
-
-        if(!currentUser) window.location.href = "/";
-        document.getElementById('userTag').innerText = currentUser;
-
-        async function submitOrder() {
-            const link = document.getElementById('orderLink').value;
-            if(!link) return;
-
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
-            const data = await res.json();
-            
-            data.record.orders.push({
-                user: currentUser,
-                link: link,
-                status: 'Awaiting Approval',
-                price: null,
-                eta: 'Pending Review',
-                id: Date.now()
-            });
-
-            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-                body: JSON.stringify(data.record)
-            });
-            location.reload();
-        }
-
-        async function loadMyOrders() {
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
-            const data = await res.json();
-            const myOrders = data.record.orders.filter(o => o.user === currentUser);
-            
-            document.getElementById('userOrders').innerHTML = myOrders.map(o => {
-                let quoteHtml = "";
-                if(o.status === 'Quoted') {
-                    quoteHtml = `
-                        <div style="background: #fff3cd; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                            <p><strong>Quote: Rp${o.price}</strong></p>
-                            <button onclick="respond(${o.id}, 'Confirmed')" style="background:green; width:45%;">Accept</button>
-                            <button onclick="respond(${o.id}, 'Denied')" style="background:red; width:45%;">Deny</button>
-                        </div>
-                    `;
-                }
-
-                return `
-                    <div class="order-card" style="display:block; border-left-color: ${o.status === 'Completed' ? 'green' : 'orange'}">
-                        <strong>Status: ${o.status}</strong><br>
-                        ${o.price ? `<span>Cost: Rp${o.price}</span><br>` : ''}
-                        <span class="eta-text">🕒 ${o.eta}</span>
-                        ${quoteHtml}
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function respond(id, decision) {
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
-            const data = await res.json();
-            const order = data.record.orders.find(o => o.id === id);
-            order.status = decision;
-            order.eta = decision === 'Confirmed' ? 'In Queue' : 'Cancelled';
-            
-            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-                body: JSON.stringify(data.record)
-            });
-            location.reload();
-        }
-
-        function logout() { localStorage.clear(); window.location.href="/"; }
-        loadMyOrders();
-    </script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container" style="max-width: 400px; text-align: center;">
+        <div class="card">
+            <h2>Admin Login</h2>
+            <form method="POST">
+                <input type="password" name="password" placeholder="Enter Password" required autofocus>
+                <button type="submit">Login</button>
+            </form>
+            <br>
+            <a href="/" style="font-size: 14px; color: #64748b;">Return to Home</a>
+        </div>
+    </div>
+</body>
+</html>
