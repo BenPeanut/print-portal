@@ -1,19 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Order Receipt</title>
+    <title>Order Receipt | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --bambu-green: #00ae42;
+            --carbon: #2c2c2c;
+        }
+        .id-container {
+            background: #e6f7ed; 
+            border: 2px dashed var(--bambu-green);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .order-id {
+            font-family: 'Courier New', monospace;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--carbon);
+            display: block;
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+        }
+        .copy-btn {
+            background: var(--carbon);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        .copy-btn:hover { background: #000; transform: scale(1.05); }
+        .copy-btn.success { background: var(--bambu-green); }
+
+        .price-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .price-table td { padding: 10px 0; border-bottom: 1px solid #eee; }
+        .price-table .total { font-weight: bold; font-size: 1.2em; border-bottom: none; }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="box">
-            <h1 style="color: var(--bambu-green); margin-top:0;">{{ order.get('name', 'Unnamed Order') }}</h1>
-            <p style="color: #888;">Order ID: {{ order.id }}</p>
+            <h1 style="color: var(--bambu-green); margin-bottom: 5px; text-align: center;">Order Submitted!</h1>
+            <p style="text-align: center; color: #666; margin-top: 0;">Save your ID below to track your print status later.</p>
             
-            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid var(--bambu-green);">
-                <p><strong>Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
-                <p><strong>Color:</strong> {{ order.color }}</p>
-                <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.get('delivery_time', 'Pending Quote') }}</span></p>
+            <div class="id-container">
+                <span class="order-id" id="orderIdText">{{ order.id }}</span>
+                <button type="button" class="copy-btn" id="copyBtn" onclick="copyId()">Copy Order ID</button>
+            </div>
+
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid var(--bambu-green);">
+                <p><strong>Model Link:</strong> <a href="{{ order.link }}" target="_blank" style="color: var(--bambu-green); text-decoration: none;">View Model 🔗</a></p>
+                <p><strong>Print Profile:</strong> {{ order.profile }}</p>
+                <p><strong>Color(s):</strong> {{ order.color }}</p>
+                <p><strong>Current Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
+                <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.delivery_time }}</span></p>
             </div>
 
             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px;">Price Breakdown</h3>
@@ -26,22 +73,49 @@
                     <td>Materials & Extras</td>
                     <td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td>
                 </tr>
-                <tr class="total" style="border-top: 2px solid var(--carbon);">
+                <tr class="total">
                     <td style="padding-top:15px;">Total Amount</td>
-                    <td align="right" style="padding-top:15px;">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
+                    <td align="right" style="padding-top:15px; color: var(--bambu-green);">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
                 </tr>
             </table>
 
             <div style="margin-top:30px; background: #eee; padding: 15px; border-radius: 8px;">
                 <form action="/name_order/{{ order.id }}" method="POST">
-                    <label style="font-weight:bold; font-size: 0.9em;">Update Order Nickname:</label>
-                    <input type="text" name="order_name" placeholder="e.g. My Cool Toy" required>
-                    <button type="submit" style="margin-top:5px; background: var(--carbon);">Save Nickname</button>
+                    <label style="font-weight:bold; font-size: 0.9em;">Give this order a nickname:</label>
+                    <div style="display: flex; gap: 5px; margin-top: 5px;">
+                        <input type="text" name="order_name" placeholder="e.g. Dragon Model" required style="flex: 1; padding: 8px;">
+                        <button type="submit" style="width: auto; background: var(--carbon); padding: 8px 15px;">Save</button>
+                    </div>
                 </form>
             </div>
+            
             <br>
-            <a href="/" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return Home</a>
+            <div style="text-align: center;">
+                <a href="/" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return to Home</a>
+            </div>
         </div>
     </div>
+
+    <script>
+    function copyId() {
+        // This targets the text inside the order-id span
+        const idText = document.getElementById('orderIdText').innerText;
+        const btn = document.getElementById('copyBtn');
+        
+        navigator.clipboard.writeText(idText).then(() => {
+            // Visual feedback
+            const originalText = btn.innerText;
+            btn.innerText = "✓ Copied!";
+            btn.classList.add('success');
+            
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.classList.remove('success');
+            }, 2000);
+        }).catch(err => {
+            alert("Could not copy text. Please select and copy manually.");
+        });
+    }
+    </script>
 </body>
 </html>

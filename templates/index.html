@@ -1,41 +1,138 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>3D Print Request</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Print Request | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; }
-        input, select, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
-        .box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        :root {
+            --bambu-green: #00ae42;
+            --carbon: #2c2c2c;
+            --bg: #f4f4f4;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background-color: var(--bg); color: var(--carbon); }
+        input, select, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; }
+        
+        .box { background: var(--white); border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; border-top: 5px solid var(--bambu-green); text-align: left; }
+        h1, h3 { text-align: center; margin-top: 0; }
+        h1 { color: var(--bambu-green); }
+
+        .btn-primary { background-color: var(--bambu-green); color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-primary:hover { background-color: #008f36; }
+        
+        .btn-secondary { background: var(--carbon); color: white; border: none; font-size: 12px; padding: 5px 10px; width: auto; cursor: pointer; border-radius: 4px; }
+        
+        .instruction-box { background: #fffbe6; border: 1px solid #ffe58f; padding: 15px; border-radius: 8px; font-size: 0.85em; margin: 10px 0; color: #856404; display: none; }
+        
+        .mapping-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .delete-btn { width: 35px; background: #ff4444; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 6px; }
     </style>
 </head>
 <body>
     <h1>Benaiah's 3D Printing Service</h1>
     
     <div class="box">
-        <h3>Request a Print</h3>
+        <h3>Request a New Print</h3>
         <form action="/submit_order" method="POST">
-            <label>Link to Model (MakerWorld):</label>
+            <label><strong>Link to Model (MakerWorld):</strong></label>
             <input type="url" name="makerworld_link" required placeholder="https://makerworld.com/...">
             
-            <label>Select Color:</label>
-            <select name="color" required>
-                <option value="" disabled selected>Choose a filament...</option>
-                {% for color in filaments %}
-                <option value="{{ color }}">{{ color }}</option>
-                {% endfor %}
-            </select>
+            <div style="margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label><strong>Print Profile / Number:</strong></label>
+                    <button type="button" class="btn-secondary" onclick="toggleInstructions()">How to choose?</button>
+                </div>
+                
+                <div id="profile-instructions" class="instruction-box">
+                    <strong>Instructions:</strong><br>
+                    1. Look at the list of Print Profiles on the MakerWorld page.<br>
+                    2. Type the profile name <strong>OR</strong> its position (1 is the top profile).<br>
+                    3. Use negative numbers to count from the bottom (e.g., -1 is the very last one).<br>
+                    <em>If you leave this blank, Profile 1 will be selected.</em>
+                </div>
+
+                <input type="text" name="print_profile" placeholder="Profile 1 (Default)">
+            </div>
+
+            <label style="margin-top: 15px; display: block;"><strong>How many colors is this model?</strong></label>
+            <div style="display: flex; gap: 20px; margin: 10px 0;">
+                <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleColorMode('single')"> 1 Color</label>
+                <label style="cursor:pointer;"><input type="radio" name="color_mode" value="multi" onclick="toggleColorMode('multi')"> 2 or More Colors</label>
+            </div>
+
+            <div id="single-color-section">
+                <label>Select Filament:</label>
+                <select name="single_filament">
+                    <option value="" disabled selected>Choose a filament...</option>
+                    {% for color in filaments %}
+                    <option value="{{ color }}">{{ color }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
+                
+                <div id="color-mappings">
+                    <div class="mapping-row">
+                        <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
+                        <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                            {% for color in filaments %}
+                            <option value="{{ color }}">{{ color }}</option>
+                            {% endfor %}
+                        </select>
+                        <div style="width: 35px;"></div> </div>
+                </div>
+                
+                <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+            </div>
             
-            <button type="submit" style="background-color: #00ae42; color: white; border: none;">Submit Order</button>
+            <button type="submit" class="btn-primary">Submit Order Request</button>
         </form>
     </div>
 
     <div class="box">
         <h3>Check Order Status</h3>
         <form action="/check_order" method="POST">
-            <input type="text" name="order_id" placeholder="Enter Order ID" required>
-            <button type="submit">Check Status</button>
+            <input type="text" name="order_id" placeholder="Enter your 8-digit Order ID" required>
+            <button type="submit" class="btn-primary" style="background-color: var(--carbon);">Track My Order</button>
         </form>
     </div>
+
+    <script>
+        // Toggle the instruction box for profiles
+        function toggleInstructions() {
+            const inst = document.getElementById('profile-instructions');
+            inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+        }
+
+        // Switch between single and multi-color inputs
+        function toggleColorMode(mode) {
+            document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
+            document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+        }
+
+        // Add a new row for multi-color mapping
+        function addMappingRow() {
+            const container = document.getElementById('color-mappings');
+            const newRow = document.createElement('div');
+            newRow.className = 'mapping-row';
+            
+            // Generate the filament options from the first select box
+            const filamentOptions = document.querySelector('select[name="mapped_filament[]"]').innerHTML;
+            
+            newRow.innerHTML = `
+                <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;">
+                <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                    ${filamentOptions}
+                </select>
+                <button type="button" class="delete-btn" onclick="this.parentElement.remove()">✕</button>
+            `;
+            container.appendChild(newRow);
+        }
+    </script>
 </body>
 </html>
