@@ -4,28 +4,88 @@
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .link-btn {
-            display: inline-block;
-            padding: 6px 12px;
-            background: #2c2c2c; /* Carbon Grey */
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 12px;
-            margin-top: 5px;
+        /* [YOUR ORIGINAL CSS REMAINS EXACTLY THE SAME] */
+        /* 1. ROW POSITIONING */
+        .admin-table tr { position: relative; }
+
+        /* 2. THE FLOATING TRASH CAN */
+        .delete-floating-btn {
+            position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+            background: #ff4d4f; color: white; border: none; width: 35px; height: 35px;
+            border-radius: 50%; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; opacity: 0; transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 99; font-size: 18px;
         }
-        .link-btn:hover { background: #000; }
+        .admin-table tr:hover .delete-floating-btn { opacity: 1; right: 15px; }
+
+        /* 3. RECTANGLE DELETE BUTTON */
+        .btn-delete-box {
+            background: none; color: #d9534f; border: 1px solid #d9534f; padding: 4px; 
+            border-radius: 4px; font-size: 11px; cursor: pointer; width: 100%;
+            margin-top: 8px; display: block; text-align: center; font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        .btn-delete-box:hover { background: #fff5f5; color: #a8322d; border-color: #a8322d; }
+
+        /* 4. PROFESSIONAL PROFILE/LINK STYLING */
+        .profile-container { display: flex; flex-direction: column; gap: 8px; }
+        .profile-badge {
+            font-size: 12px; font-weight: 600; color: #4a5568; background: #f7fafc;
+            border: 1px solid #e2e8f0; padding: 4px 8px; border-radius: 4px;
+            display: inline-flex; align-items: center; width: fit-content;
+        }
+        .makerworld-badge {
+            display: inline-flex; align-items: center; gap: 5px; background: #f0fff4;
+            color: #00ae42; border: 1px solid #c6f6d5; padding: 4px 10px; border-radius: 4px;
+            text-decoration: none; font-size: 10px; font-weight: 800; width: fit-content; transition: 0.2s;
+        }
+        .makerworld-badge:hover { background: #00ae42; color: white; border-color: #00ae42; }
+
+        /* Pill Styles */
+        .pill { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .pill-new      { background: #e9ecef; color: #495057; }
+        .pill-waiting  { background: #fff4e6; color: #d9480f; }
+        .pill-approved { background: #ebfbee; color: #2b8a3e; }
+        .pill-denied   { background: #fff5f5; color: #c92a2a; }
+        .pill-cancelled{ background: #f8f9fa; color: #adb5bd; }
+        .row-dead { opacity: 0.6; background-color: #fafafa !important; }
+
+        /* Table Grid */
+        .admin-table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
+        .admin-table th, .admin-table td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+
+        /* --- NEW MODAL CSS ONLY --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: white; padding: 30px; border-radius: 16px; width: 90%; max-width: 350px;
+            text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-family: sans-serif;
+        }
+        .modal-message { margin: 0 0 25px 0; font-size: 1.1em; color: #333; font-weight: bold; }
+        .modal-buttons { display: flex; gap: 15px; }
+        .modal-btn { flex: 1; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1em; border: none; transition: all 0.2s; }
+        .modal-btn-cancel { background: white; color: #333; border: 1px solid #ccc; }
+        .modal-btn-cancel:hover { background: #f0f0f0; }
+        .modal-btn-confirm { background: #d9534f; color: white; }
+        .modal-btn-confirm:hover { background: #c9302c; }
     </style>
 </head>
 <body>
     <div style="padding: 20px;">
         <h1 style="color: var(--bambu-green);">Order Management</h1>
 
-        <div class="box">
-            <h3>Update Available Colors</h3>
-            <form action="/update_colors" method="POST" style="display:flex; gap:10px;">
-                <input type="text" name="colors_list" value="{{ current_colors }}" style="flex:1;">
-                <button type="submit" style="width: auto; padding: 0 20px;">Update</button>
+        <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
+            <h3 style="margin-top: 0; margin-bottom: 10px;">Update Available Colors</h3>
+            <form action="/update_colors" method="POST" style="display: flex; gap: 10px; align-items: stretch; width: 100%;">
+                <input type="text" name="colors_list" value="{{ current_colors }}" 
+                       style="flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" 
+                       placeholder="Enter colors...">
+                <button type="submit" style="width: 120px; background: var(--bambu-green); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-sizing: border-box;">
+                    Update List
+                </button>
             </form>
         </div>
 
@@ -33,40 +93,66 @@
             <thead>
                 <tr>
                     <th>Order Info</th>
-                    <th>Color</th>
-                    <th>Link</th> <th>Details & Delivery</th>
-                    <th>Action</th>
+                    <th>Color/Link</th>
+                    <th style="text-align: center;">User Status</th>
+                    <th style="text-align: center;">Admin Workflow</th>
+                    <th style="width: 120px;">Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% for order in orders %}
-                <tr>
+                <tr class="{% if order.status in ['Cancelled', 'Price Denied'] %}row-dead{% endif %}">
+                    
+                    <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order?');">
+                        <button type="submit" class="delete-floating-btn" title="Delete Order">🗑️</button>
+                    </form>
+
                     <td>
                         <strong>{{ order.get('name', 'No Name') }}</strong><br>
                         <small style="color:#888;">ID: {{ order.id }}</small>
                     </td>
-                    <td><span class="badge">{{ order.color }}</span></td>
+
                     <td>
-                        <a href="{{ order.link }}" target="_blank" class="link-btn">🔗 Open MakerWorld</a>
+                        <div class="profile-container">
+                            <div class="profile-badge"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.profile }}</div>
+                            <a href="{{ order.link }}" target="_blank" class="makerworld-badge">VIEW ON MAKERWORLD ↗</a>
+                        </div>
                     </td>
+
+                    <td style="text-align: center;">
+                        {% if order.status == 'Pending Quote' %} <span class="pill pill-new">New Request</span>
+                        {% elif order.status == 'Waiting for Approval' %} <span class="pill pill-waiting">Awaiting Approval</span>
+                        {% elif order.status == 'Approved' %} <span class="pill pill-approved">✔ Approved</span>
+                        {% elif order.status == 'Price Denied' %} <span class="pill pill-denied">✖ Denied</span>
+                        {% elif order.status == 'Cancelled' %} <span class="pill pill-cancelled">Cancelled</span>
+                        {% else %} <span class="pill pill-approved">{{ order.status }}</span>
+                        {% endif %}
+                    </td>
+
                     <td>
                         <form action="/update_order/{{ order.id }}" method="POST">
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom: 5px;">
                                 <input type="text" name="print_price" value="{{ order.print_price }}" placeholder="Price">
                                 <input type="text" name="material_fee" value="{{ order.material_fee }}" placeholder="Fee">
                             </div>
-                            <input type="datetime-local" name="delivery_time" value="{{ order.delivery_time }}">
-                            
-                            <select name="status">
-                                <option value="{{ order.status }}">{{ order.status }}</option>
-                                <option value="Quote Sent">Quote Sent</option>
-                                <option value="Printing">Printing</option>
-                                <option value="Done">Done</option>
-                                <option value="Delivered">Delivered (Archive)</option>
+                            <input type="text" name="delivery_time" value="{{ order.delivery_time }}" placeholder="Delivery" style="width: 100%; box-sizing: border-box;">
+                            <select name="status" style="width: 100%; margin-top: 5px;">
+                                <option value="Pending Quote" {% if order.status == 'Pending Quote' %}selected{% endif %}>1. Set to Pending</option>
+                                <option value="Waiting for Approval" {% if order.status == 'Waiting for Approval' %}selected{% endif %}>2. Send Quote to User</option>
+                                <option value="Printing" {% if order.status == 'Printing' or order.status == 'Approved' %}selected{% endif %}>3. Start Printing</option>
+                                <option value="Done" {% if order.status == 'Done' %}selected{% endif %}>4. Mark as Done</option>
+                                <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>5. Delivered/Archive</option>
                             </select>
                     </td>
-                    <td>
-                        <button type="submit">Update</button>
+
+                    <td style="vertical-align: middle; text-align: center;">
+                        <button type="submit" style="background: var(--bambu-green); width: 100%; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                            Update
+                        </button>
+                        </form>
+
+                        <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order?');" style="margin: 0;">
+                            <button type="submit" class="btn-delete-box">Delete Order</button>
                         </form>
                     </td>
                 </tr>
@@ -74,5 +160,34 @@
             </tbody>
         </table>
     </div>
+
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box">
+            <p id="modalMessage" class="modal-message">Are you sure?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn">Yes, Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pendingForm = null;
+
+        function showModal(formElement, message) {
+            pendingForm = formElement;
+            document.getElementById('modalMessage').innerText = message;
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            pendingForm = null;
+            document.getElementById('customModal').style.display = 'none';
+        }
+
+        document.getElementById('modalConfirmBtn').addEventListener('click', function() {
+            if (pendingForm) pendingForm.submit();
+        });
+    </script>
 </body>
 </html>

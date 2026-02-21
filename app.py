@@ -6,14 +6,11 @@ from flask import Flask, render_template, request, redirect, url_for, session
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# This looks for environment variables on Render, but uses the text in quotes on your computer.
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_testing_key')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin') 
 
-# PASTE YOUR REAL BIN ID HERE:
-BIN_ID = os.environ.get('BIN_ID')
-# PASTE YOUR REAL API KEY HERE:
-API_KEY = os.environ.get('API_KEY')
+BIN_ID = os.environ.get('BIN_ID', '699701f0ae596e708f3731e1')
+API_KEY = os.environ.get('API_KEY', '$2a$10$C8m3WYEfsXkmPchVKfSMB.BVTc6L21MB26E.HkR3NhA/DJQU89/Ni')
 
 BASE_URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
 HEADERS = {"X-Master-Key": API_KEY, "Content-Type": "application/json"}
@@ -37,7 +34,6 @@ def save_db(data):
 @app.route('/')
 def index():
     db = get_db()
-    # Pulls filaments for the dropdown/mapping
     filaments = db.get('settings', {}).get('filaments', [])
     return render_template('index.html', filaments=filaments)
 
@@ -46,12 +42,15 @@ def submit_order():
     db = get_db()
     order_id = str(uuid.uuid4())[:8]
     
-    # 1. Get Profile (Default to 1)
+    # Capture the name if the user provided one, otherwise "Unnamed Order"
+    provided_name = request.form.get('name', '').strip()
+    if not provided_name:
+        provided_name = "Unnamed Order"
+
     profile_choice = request.form.get('print_profile', '').strip()
     if not profile_choice:
         profile_choice = "1"
 
-    # 2. Get Color Logic
     mode = request.form.get('color_mode')
     if mode == 'single':
         color_string = request.form.get('single_filament', 'Not Selected')
@@ -63,7 +62,7 @@ def submit_order():
 
     new_order = {
         "id": order_id,
-        "name": "Unnamed Order",
+        "name": provided_name,
         "link": request.form.get('makerworld_link'),
         "profile": profile_choice,
         "color": color_string,
@@ -75,17 +74,53 @@ def submit_order():
     
     db['orders'].append(new_order)
     save_db(db)
-    
-    return render_template('order.html', order=new_order)
+    return redirect(url_for('check_order_by_id', order_id=order_id))
 
-@app.route('/check_order', methods=['POST'])
-def check_order():
-    order_id = request.form.get('order_id', '').strip()
+@app.route('/order/<order_id>')
+def check_order_by_id(order_id):
     db = get_db()
     order = next((o for o in db['orders'] if o['id'] == order_id), None)
     if order:
         return render_template('order.html', order=order)
-    return "Order not found. Please check your ID and try again.", 404
+    return "Order not found", 404
+
+@app.route('/check_order', methods=['POST'])
+def check_order():
+    order_id = request.form.get('order_id', '').strip()
+    return redirect(url_for('check_order_by_id', order_id=order_id))
+
+@app.route('/approve_price/<order_id>', methods=['POST'])
+def approve_price(order_id):
+    db = get_db()
+    for order in db['orders']:
+        if order['id'] == order_id and order['status'] == 'Waiting for Approval':
+            order['status'] = 'Approved'
+            save_db(db)
+            break
+    return redirect(url_for('check_order_by_id', order_id=order_id))
+
+@app.route('/deny_price/<order_id>', methods=['POST'])
+def deny_price(order_id):
+    db = get_db()
+    for order in db['orders']:
+        if order['id'] == order_id and order['status'] == 'Waiting for Approval':
+            order['status'] = 'Price Denied'
+            save_db(db)
+            break
+    return redirect(url_for('check_order_by_id', order_id=order_id))
+
+@app.route('/cancel_order/<order_id>', methods=['POST'])
+def cancel_order(order_id):
+    db = get_db()
+    locked_statuses = ['Printing', 'Done', 'Delivered']
+    for order in db['orders']:
+        if order['id'] == order_id:
+            if order['status'] in locked_statuses:
+                return "This order is already being processed and cannot be cancelled.", 403
+            order['status'] = 'Cancelled'
+            save_db(db)
+            break
+    return redirect(url_for('check_order_by_id', order_id=order_id))
 
 @app.route('/name_order/<order_id>', methods=['POST'])
 def name_order(order_id):
@@ -95,8 +130,8 @@ def name_order(order_id):
         if order['id'] == order_id:
             order['name'] = new_name
             save_db(db)
-            return render_template('order.html', order=order)
-    return "Order not found", 404
+            break
+    return redirect(url_for('check_order_by_id', order_id=order_id))
 
 # --- ADMIN ROUTES ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -111,9 +146,17 @@ def login():
 def dashboard():
     if not session.get('logged_in'): return redirect(url_for('login'))
     db = get_db()
-    active_orders = [o for o in db['orders'] if o.get('status') != 'Delivered']
+    active_orders = db['orders'] 
     current_colors = ", ".join(db.get('settings', {}).get('filaments', []))
     return render_template('dashboard.html', orders=active_orders, current_colors=current_colors)
+
+@app.route('/delete_order/<order_id>', methods=['POST'])
+def delete_order(order_id):
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    db = get_db()
+    db['orders'] = [o for o in db['orders'] if o['id'] != order_id]
+    save_db(db)
+    return redirect(url_for('dashboard'))
 
 @app.route('/update_order/<order_id>', methods=['POST'])
 def update_order(order_id):
@@ -131,25 +174,13 @@ def update_order(order_id):
 
 @app.route('/update_colors', methods=['POST'])
 def update_colors():
-    if not session.get('logged_in'): 
-        return redirect(url_for('login'))
-    
-    # Get the text from the box
+    if not session.get('logged_in'): return redirect(url_for('login'))
     raw_colors = request.form.get('colors_list', '')
-    
-    # Logic: Split by comma, strip whitespace, and ignore empty entries
     color_list = [c.strip() for c in raw_colors.split(',') if c.strip()]
-    
-    # Security check: Only save if we actually have colors
-    if color_list:
-        db = get_db()
-        db['settings']['filaments'] = color_list
-        save_db(db)
-        print(f"Successfully updated colors to: {color_list}")
-    else:
-        print("Warning: Attempted to save an empty color list. Action blocked.")
-
+    db = get_db()
+    db['settings']['filaments'] = color_list
+    save_db(db)
     return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5000)

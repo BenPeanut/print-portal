@@ -4,50 +4,42 @@
     <title>Order Receipt | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        :root {
-            --bambu-green: #00ae42;
-            --carbon: #2c2c2c;
-        }
-        .id-container {
-            background: #e6f7ed; 
-            border: 2px dashed var(--bambu-green);
-            padding: 25px;
-            border-radius: 12px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        .order-id {
-            font-family: 'Courier New', monospace;
-            font-size: 2.5em;
-            font-weight: bold;
-            color: var(--carbon);
-            display: block;
-            margin-bottom: 12px;
-            letter-spacing: 3px;
-        }
-        .copy-btn {
-            background: var(--carbon);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: bold;
-            transition: all 0.2s ease;
-        }
+        /* [YOUR ORIGINAL CSS REMAINS EXACTLY THE SAME] */
+        :root { --bambu-green: #00ae42; --carbon: #2c2c2c; }
+        .id-container { background: #e6f7ed; border: 2px dashed var(--bambu-green); padding: 25px; border-radius: 12px; margin: 20px 0; text-align: center; }
+        .order-id { font-family: 'Courier New', monospace; font-size: 2.5em; font-weight: bold; color: var(--carbon); display: block; margin-bottom: 12px; letter-spacing: 3px; }
+        .copy-btn { background: var(--carbon); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; transition: all 0.2s ease; }
         .copy-btn:hover { background: #000; transform: scale(1.05); }
         .copy-btn.success { background: var(--bambu-green); }
-
         .price-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .price-table td { padding: 10px 0; border-bottom: 1px solid #eee; }
         .price-table .total { font-weight: bold; font-size: 1.2em; border-bottom: none; }
+
+        /* --- NEW MODAL CSS ONLY --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: white; padding: 30px; border-radius: 16px; width: 90%; max-width: 350px;
+            text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-family: sans-serif;
+        }
+        .modal-message { margin: 0 0 25px 0; font-size: 1.1em; color: #333; font-weight: bold; }
+        .modal-buttons { display: flex; gap: 15px; }
+        .modal-btn { flex: 1; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1em; border: none; transition: all 0.2s; }
+        .modal-btn-cancel { background: white; color: #333; border: 1px solid #ccc; }
+        .modal-btn-cancel:hover { background: #f0f0f0; }
+        .modal-btn-confirm { background: #d9534f; color: white; }
+        .modal-btn-confirm:hover { background: #c9302c; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="box">
-            <h1 style="color: var(--bambu-green); margin-bottom: 5px; text-align: center;">Order Submitted!</h1>
+            <h1 style="color: var(--bambu-green); text-align: center; text-transform: capitalize;">
+                {% if order.name and order.name != 'Unnamed Order' %} {{ order.name }} {% else %} Order Submitted {% endif %}
+            </h1>
             <p style="text-align: center; color: #666; margin-top: 0;">Save your ID below to track your print status later.</p>
             
             <div class="id-container">
@@ -65,26 +57,47 @@
 
             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px;">Price Breakdown</h3>
             <table class="price-table">
-                <tr>
-                    <td>Printing Cost</td>
-                    <td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td>
-                </tr>
-                <tr>
-                    <td>Materials & Extras</td>
-                    <td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td>
-                </tr>
+                <tr><td>Printing Cost</td><td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td></tr>
+                <tr><td>Materials & Extras</td><td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td></tr>
                 <tr class="total">
                     <td style="padding-top:15px;">Total Amount</td>
                     <td align="right" style="padding-top:15px; color: var(--bambu-green);">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
                 </tr>
             </table>
 
+            <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
+                {% if order.status == 'Waiting for Approval' %}
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <form action="/approve_price/{{ order.id }}" method="POST" style="flex: 1;">
+                            <button type="submit" style="background-color: var(--bambu-green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">
+                                Approve Price
+                            </button>
+                        </form>
+                        <form action="/deny_price/{{ order.id }}" method="POST" style="flex: 1;">
+                            <button type="submit" style="background-color: #f0ad4e; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">
+                                Deny Price
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+
+                {% set locked = ['Printing', 'Done', 'Delivered', 'Cancelled', 'Price Denied'] %}
+                {% if order.status not in locked %}
+                    
+                    <form action="/cancel_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Are you sure you want to cancel?');">
+                        <button type="submit" style="background-color: transparent; color: #d9534f; border: 1px solid #d9534f; padding: 10px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 0.9em;">
+                            Cancel Order
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+
             <div style="margin-top:30px; background: #eee; padding: 15px; border-radius: 8px;">
                 <form action="/name_order/{{ order.id }}" method="POST">
-                    <label style="font-weight:bold; font-size: 0.9em;">Give this order a nickname:</label>
+                    <label style="font-weight:bold; font-size: 0.9em;">Change Order Nickname:</label>
                     <div style="display: flex; gap: 5px; margin-top: 5px;">
                         <input type="text" name="order_name" placeholder="e.g. Dragon Model" required style="flex: 1; padding: 8px;">
-                        <button type="submit" style="width: auto; background: var(--carbon); padding: 8px 15px;">Save</button>
+                        <button type="submit" style="width: auto; background: var(--carbon); color: white; border: none; padding: 8px 15px; cursor: pointer;">Save</button>
                     </div>
                 </form>
             </div>
@@ -96,26 +109,48 @@
         </div>
     </div>
 
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box">
+            <p id="modalMessage" class="modal-message">Are you sure?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Keep Order</button>
+                <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn">Yes, Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-    function copyId() {
-        // This targets the text inside the order-id span
-        const idText = document.getElementById('orderIdText').innerText;
-        const btn = document.getElementById('copyBtn');
-        
-        navigator.clipboard.writeText(idText).then(() => {
-            // Visual feedback
-            const originalText = btn.innerText;
-            btn.innerText = "✓ Copied!";
-            btn.classList.add('success');
-            
-            setTimeout(() => {
-                btn.innerText = originalText;
-                btn.classList.remove('success');
-            }, 2000);
-        }).catch(err => {
-            alert("Could not copy text. Please select and copy manually.");
+        function copyId() {
+            const idText = document.getElementById('orderIdText').innerText;
+            const btn = document.getElementById('copyBtn');
+            navigator.clipboard.writeText(idText).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = "✓ Copied!";
+                btn.classList.add('success');
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('success');
+                }, 2000);
+            });
+        }
+
+        // --- NEW MODAL LOGIC ---
+        let pendingForm = null;
+
+        function showModal(formElement, message) {
+            pendingForm = formElement;
+            document.getElementById('modalMessage').innerText = message;
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            pendingForm = null;
+            document.getElementById('customModal').style.display = 'none';
+        }
+
+        document.getElementById('modalConfirmBtn').addEventListener('click', function() {
+            if (pendingForm) pendingForm.submit();
         });
-    }
     </script>
 </body>
 </html>
