@@ -4,41 +4,98 @@
     <title>Order Receipt | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        /* [YOUR ORIGINAL CSS REMAINS EXACTLY THE SAME] */
-        :root { --bambu-green: #00ae42; --carbon: #2c2c2c; }
-        .id-container { background: #e6f7ed; border: 2px dashed var(--bambu-green); padding: 25px; border-radius: 12px; margin: 20px 0; text-align: center; }
-        .order-id { font-family: 'Courier New', monospace; font-size: 2.5em; font-weight: bold; color: var(--carbon); display: block; margin-bottom: 12px; letter-spacing: 3px; }
-        .copy-btn { background: var(--carbon); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; transition: all 0.2s ease; }
+        :root {
+            --bambu-green: #00ae42;
+            --carbon: #2c2c2c;
+        }
+        .id-container {
+            background: #e6f7ed; 
+            border: 2px dashed var(--bambu-green);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .order-id {
+            font-family: 'Courier New', monospace;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--carbon);
+            display: block;
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+        }
+        .copy-btn {
+            background: var(--carbon);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
         .copy-btn:hover { background: #000; transform: scale(1.05); }
         .copy-btn.success { background: var(--bambu-green); }
+
         .price-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .price-table td { padding: 10px 0; border-bottom: 1px solid #eee; }
         .price-table .total { font-weight: bold; font-size: 1.2em; border-bottom: none; }
 
-        /* --- NEW MODAL CSS ONLY --- */
+        /* --- CUSTOM MODAL STYLES --- */
         .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); z-index: 9999;
-            align-items: center; justify-content: center;
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4); 
+            backdrop-filter: blur(4px); 
+            z-index: 9999;
+            align-items: center; 
+            justify-content: center;
         }
         .modal-box {
-            background: white; padding: 30px; border-radius: 16px; width: 90%; max-width: 350px;
-            text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-family: sans-serif;
+            background: white; 
+            padding: 30px; 
+            border-radius: 16px; 
+            width: 90%; 
+            max-width: 380px;
+            text-align: center; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            font-family: sans-serif;
         }
-        .modal-message { margin: 0 0 25px 0; font-size: 1.1em; color: #333; font-weight: bold; }
+        .modal-message { margin: 0 0 25px 0; font-size: 1em; color: #555; line-height: 1.5; }
         .modal-buttons { display: flex; gap: 15px; }
-        .modal-btn { flex: 1; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1em; border: none; transition: all 0.2s; }
+        .modal-btn { 
+            flex: 1; 
+            padding: 12px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 1em; 
+            border: none; 
+            transition: all 0.2s; 
+        }
         .modal-btn-cancel { background: white; color: #333; border: 1px solid #ccc; }
         .modal-btn-cancel:hover { background: #f0f0f0; }
-        .modal-btn-confirm { background: #d9534f; color: white; }
-        .modal-btn-confirm:hover { background: #c9302c; }
+        .modal-btn-confirm-red { background: #d9534f; color: white; }
+        .modal-btn-confirm-red:hover { background: #c9302c; }
+        .modal-btn-confirm-green { background: var(--bambu-green); color: white; }
+        .modal-btn-confirm-green:hover { background: #008f35; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="box">
             <h1 style="color: var(--bambu-green); text-align: center; text-transform: capitalize;">
-                {% if order.name and order.name != 'Unnamed Order' %} {{ order.name }} {% else %} Order Submitted {% endif %}
+                {% if order.name and order.name != 'Unnamed Order' %}
+                    {{ order.name }}
+                {% else %}
+                    Order Submitted
+                {% endif %}
             </h1>
             <p style="text-align: center; color: #666; margin-top: 0;">Save your ID below to track your print status later.</p>
             
@@ -57,8 +114,14 @@
 
             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px;">Price Breakdown</h3>
             <table class="price-table">
-                <tr><td>Printing Cost</td><td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td></tr>
-                <tr><td>Materials & Extras</td><td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td></tr>
+                <tr>
+                    <td>Printing Cost</td>
+                    <td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td>
+                </tr>
+                <tr>
+                    <td>Materials & Extras</td>
+                    <td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td>
+                </tr>
                 <tr class="total">
                     <td style="padding-top:15px;">Total Amount</td>
                     <td align="right" style="padding-top:15px; color: var(--bambu-green);">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
@@ -67,15 +130,10 @@
 
             <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
                 {% if order.status == 'Waiting for Approval' %}
-                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                        <form action="/approve_price/{{ order.id }}" method="POST" style="flex: 1;">
-                            <button type="submit" style="background-color: var(--bambu-green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">
-                                Approve Price
-                            </button>
-                        </form>
-                        <form action="/deny_price/{{ order.id }}" method="POST" style="flex: 1;">
-                            <button type="submit" style="background-color: #f0ad4e; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">
-                                Deny Price
+                    <div style="margin-bottom: 10px;">
+                        <form action="/approve_price/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showApproveModal(this);">
+                            <button type="submit" style="background-color: var(--bambu-green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 1em;">
+                                Confirm Order
                             </button>
                         </form>
                     </div>
@@ -83,8 +141,7 @@
 
                 {% set locked = ['Printing', 'Done', 'Delivered', 'Cancelled', 'Price Denied'] %}
                 {% if order.status not in locked %}
-                    
-                    <form action="/cancel_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Are you sure you want to cancel?');">
+                    <form action="/cancel_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showCancelModal(this);">
                         <button type="submit" style="background-color: transparent; color: #d9534f; border: 1px solid #d9534f; padding: 10px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 0.9em;">
                             Cancel Order
                         </button>
@@ -109,17 +166,30 @@
         </div>
     </div>
 
-    <div id="customModal" class="modal-overlay">
+    <div id="cancelModal" class="modal-overlay">
         <div class="modal-box">
-            <p id="modalMessage" class="modal-message">Are you sure?</p>
+            <h3 style="margin-top:0;">Are you sure?</h3>
+            <p class="modal-message">Are you sure you want to cancel this order?</p>
             <div class="modal-buttons">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Keep Order</button>
-                <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn">Yes, Cancel</button>
+                <button class="modal-btn modal-btn-cancel" onclick="closeCancelModal()">No, Keep it</button>
+                <button class="modal-btn modal-btn-confirm-red" id="confirmCancelBtn">Yes, Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="approveModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3 style="margin-top:0;">Confirm Purchase</h3>
+            <p class="modal-message">By confirming this purchase, you agree to pay the full amount, and you will no longer be able to cancel the order after confirming.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="closeApproveModal()">Go Back</button>
+                <button class="modal-btn modal-btn-confirm-green" id="confirmApproveBtn">Confirm & Pay</button>
             </div>
         </div>
     </div>
 
     <script>
+        // Copy Order ID logic
         function copyId() {
             const idText = document.getElementById('orderIdText').innerText;
             const btn = document.getElementById('copyBtn');
@@ -134,23 +204,35 @@
             });
         }
 
-        // --- NEW MODAL LOGIC ---
+        // Modal Logic
         let pendingForm = null;
 
-        function showModal(formElement, message) {
+        // Cancel Modal Functions
+        function showCancelModal(formElement) {
             pendingForm = formElement;
-            document.getElementById('modalMessage').innerText = message;
-            document.getElementById('customModal').style.display = 'flex';
+            document.getElementById('cancelModal').style.display = 'flex';
         }
-
-        function closeModal() {
+        function closeCancelModal() {
             pendingForm = null;
-            document.getElementById('customModal').style.display = 'none';
+            document.getElementById('cancelModal').style.display = 'none';
         }
-
-        document.getElementById('modalConfirmBtn').addEventListener('click', function() {
+        document.getElementById('confirmCancelBtn').onclick = function() {
             if (pendingForm) pendingForm.submit();
-        });
+        };
+
+        // Approve Modal Functions
+        let approveForm = null;
+        function showApproveModal(formElement) {
+            approveForm = formElement;
+            document.getElementById('approveModal').style.display = 'flex';
+        }
+        function closeApproveModal() {
+            approveForm = null;
+            document.getElementById('approveModal').style.display = 'none';
+        }
+        document.getElementById('confirmApproveBtn').onclick = function() {
+            if (approveForm) approveForm.submit();
+        };
     </script>
 </body>
 </html>

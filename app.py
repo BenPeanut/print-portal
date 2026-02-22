@@ -9,8 +9,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_testing_key')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin') 
 
-BIN_ID = os.environ.get('BIN_ID', '699701f0ae596e708f3731e1')
-API_KEY = os.environ.get('API_KEY', '$2a$10$C8m3WYEfsXkmPchVKfSMB.BVTc6L21MB26E.HkR3NhA/DJQU89/Ni')
+BIN_ID = os.environ.get('BIN_ID')
+API_KEY = os.environ.get('API_KEY')
 
 BASE_URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
 HEADERS = {"X-Master-Key": API_KEY, "Content-Type": "application/json"}
