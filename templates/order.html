@@ -4,6 +4,10 @@
     <title>Order Receipt | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
     <style>
         :root {
             --bambu-green: #00ae42;
@@ -80,12 +84,28 @@
             border: none; 
             transition: all 0.2s; 
         }
+        /* color pill style reused from dashboard, slightly larger */
+        .color-pill {
+            background: #f1f1f1;
+            color: #333;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 1.2;
+            display: inline-block;
+            margin: 2px;
+        }
         .modal-btn-cancel { background: white; color: #333; border: 1px solid #ccc; }
         .modal-btn-cancel:hover { background: #f0f0f0; }
         .modal-btn-confirm-red { background: #d9534f; color: white; }
         .modal-btn-confirm-red:hover { background: #c9302c; }
         .modal-btn-confirm-green { background: var(--bambu-green); color: white; }
         .modal-btn-confirm-green:hover { background: #008f35; }
+
+        /* Tutorial Styling to match your theme */
+        .driver-popover-title { color: var(--bambu-green) !important; font-weight: bold !important; }
+        .driver-popover-next-btn { background-color: var(--bambu-green) !important; text-shadow: none !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -100,15 +120,22 @@
             </h1>
             <p style="text-align: center; color: #666; margin-top: 0;">Save your ID below to track your print status later.</p>
             
-            <div class="id-container">
+            <div class="id-container" id="tour-id-box">
                 <span class="order-id" id="orderIdText">{{ order.id }}</span>
                 <button type="button" class="copy-btn" id="copyBtn" onclick="copyId()">Copy Order ID</button>
             </div>
 
-            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid var(--bambu-green);">
+            <div id="tour-details" style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid var(--bambu-green);">
                 <p><strong>Model Link:</strong> <a href="{{ order.link }}" target="_blank" style="color: var(--bambu-green); text-decoration: none;">View Model 🔗</a></p>
                 <p><strong>Print Profile:</strong> {{ order.profile }}</p>
-                <p><strong>Color(s):</strong> {{ order.color }}</p>
+                {% if order.color %}
+                <p><strong>Color(s):</strong>
+                    {% set segments = order.color.split(' | ') %}
+                    {% for seg in segments %}
+                        <span class="color-pill">{{ seg }}</span>
+                    {% endfor %}
+                </p>
+                {% endif %}
                 <p><strong>Current Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
                 <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.delivery_time }}</span></p>
             </div>
@@ -150,7 +177,7 @@
                 {% endif %}
             </div>
 
-            <div style="margin-top:30px; background: #eee; padding: 15px; border-radius: 8px;">
+            <div id="tour-nickname" style="margin-top:30px; background: #eee; padding: 15px; border-radius: 8px;">
                 <form action="/name_order/{{ order.id }}" method="POST">
                     <label style="font-weight:bold; font-size: 0.9em;">Change Order Nickname:</label>
                     <div style="display: flex; gap: 5px; margin-top: 5px;">
@@ -190,6 +217,27 @@
     </div>
 
     <script>
+        // --- TUTORIAL LOGIC ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('seen_receipt_tour')) {
+                const driver = window.driver.js.driver;
+                const tour = driver({
+                    showProgress: true,
+                    allowClose: true,
+                    steps: [
+                        { element: '#tour-id-box', popover: { title: 'Save your ID!', description: 'This 8-digit ID is how you track your order. Copy it and keep it safe!', side: "bottom" }},
+                        { element: '#tour-details', popover: { title: 'Live Status', description: 'Check here to see if your print is currently printing or ready for pickup.', side: "top" }},
+                        { element: '#tour-nickname', popover: { title: 'Personalize It', description: 'Give your order a nickname (like "Desk Dragon") so it\'s easier to find later!', side: "top" }}
+                    ],
+                    onDestroyStarted: () => {
+                        localStorage.setItem('seen_receipt_tour', 'true');
+                        tour.destroy();
+                    }
+                });
+                tour.drive();
+            }
+        });
+
         // Copy Order ID logic
         function copyId() {
             const idText = document.getElementById('orderIdText').innerText;
@@ -207,8 +255,6 @@
 
         // Modal Logic
         let pendingForm = null;
-
-        // Cancel Modal Functions
         function showCancelModal(formElement) {
             pendingForm = formElement;
             document.getElementById('cancelModal').style.display = 'flex';
@@ -221,7 +267,6 @@
             if (pendingForm) pendingForm.submit();
         };
 
-        // Approve Modal Functions
         let approveForm = null;
         function showApproveModal(formElement) {
             approveForm = formElement;

@@ -6,6 +6,10 @@
     <title>3D Print Request | Benaiah's Prints</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
     <style>
         :root {
             --bambu-green: #00ae42;
@@ -30,21 +34,27 @@
         
         .mapping-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
         .delete-btn { width: 35px; background: #ff4444; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 6px; }
+
+        /* Tutorial Styling */
+        .driver-popover-title { color: var(--bambu-green) !important; font-weight: bold !important; }
+        .driver-popover-next-btn { background-color: var(--bambu-green) !important; text-shadow: none !important; color: white !important; }
     </style>
 </head>
 <body>
-    <h1>Benaiah's 3D Printing Service</h1>
+    <h1 id="welcome-header">Benaiah's 3D Printing Service</h1>
     
     <div class="box">
         <h3>Request a New Print</h3>
-        <form action="/submit_order" method="POST">
-            <label><strong>Link to Model (MakerWorld):</strong></label>
-            <input type="url" name="makerworld_link" required placeholder="https://makerworld.com/...">
+        <form id="order-form" action="/submit_order" method="POST">
+            <div id="step-link">
+                <label><strong>Link to Model (MakerWorld):</strong></label>
+                <input type="url" name="makerworld_link" required placeholder="https://makerworld.com/...">
+            </div>
             
-            <div style="margin-top: 15px;">
+            <div style="margin-top: 15px;" id="step-profile-container">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <label><strong>Print Profile / Number:</strong></label>
-                    <button type="button" class="btn-secondary" onclick="toggleInstructions()">How to choose?</button>
+                    <button type="button" id="btn-how-to" class="btn-secondary" onclick="toggleInstructions()">How to choose?</button>
                 </div>
                 
                 <div id="profile-instructions" class="instruction-box">
@@ -58,44 +68,45 @@
                 <input type="text" name="print_profile" placeholder="Profile 1 (Default)">
             </div>
 
-            <label style="margin-top: 15px; display: block;"><strong>How many colors is this model?</strong></label>
-            <div style="display: flex; gap: 20px; margin: 10px 0;">
-                <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleColorMode('single')"> 1 Color</label>
-                <label style="cursor:pointer;"><input type="radio" name="color_mode" value="multi" onclick="toggleColorMode('multi')"> 2 or More Colors</label>
-            </div>
-
-            <div id="single-color-section">
-                <label>Select Filament:</label>
-                <select name="single_filament">
-                    <option value="" disabled selected>Choose a filament...</option>
-                    {% for color in filaments %}
-                    <option value="{{ color }}">{{ color }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
-                <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
-                
-                <div id="color-mappings">
-                    <div class="mapping-row">
-                        <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
-                        <select name="mapped_filament[]" style="flex: 1; margin: 0;">
-                            {% for color in filaments %}
-                            <option value="{{ color }}">{{ color }}</option>
-                            {% endfor %}
-                        </select>
-                        <div style="width: 35px;"></div> </div>
+            <div id="step-color-section">
+                <label style="margin-top: 15px; display: block;"><strong>How many colors is this model?</strong></label>
+                <div style="display: flex; gap: 20px; margin: 10px 0;">
+                    <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleColorMode('single')"> 1 Color</label>
+                    <label style="cursor:pointer;" id="step-multi-radio"><input type="radio" name="color_mode" value="multi" onclick="toggleColorMode('multi')"> 2 or More Colors</label>
                 </div>
-                
-                <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+
+                <div id="single-color-section">
+                    <label>Select Filament:</label>
+                    <select name="single_filament" required>
+                        <option value="" disabled selected>Choose a filament...</option>
+                        {% for color in filaments %}
+                        <option value="{{ color }}">{{ color }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                    <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
+                    <div id="color-mappings">
+                        <div class="mapping-row">
+                            <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
+                            <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                                {% for color in filaments %}
+                                <option value="{{ color }}">{{ color }}</option>
+                                {% endfor %}
+                            </select>
+                            <div style="width: 35px;"></div> 
+                        </div>
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+                </div>
             </div>
             
-            <button type="submit" class="btn-primary">Submit Order Request</button>
+            <button type="submit" id="btn-submit" class="btn-primary" style="margin-top: 20px;">Submit Order Request</button>
         </form>
     </div>
 
-    <div class="box">
+    <div class="box" id="step-track">
         <h3>Check Order Status</h3>
         <form action="/check_order" method="POST">
             <input type="text" name="order_id" placeholder="Enter your 8-digit Order ID" required>
@@ -103,37 +114,95 @@
         </form>
     </div>
 
+    <p style="font-size: 10px; color: #ccc; cursor: pointer;" onclick="localStorage.removeItem('seen_tour'); location.reload();">Reset Tutorial</p>
+
     <script>
-        // Toggle the instruction box for profiles
+        // --- TOUR INITIALIZATION ---
+        const driver = window.driver.js.driver;
+        const tour = driver({
+            showProgress: true,
+            allowClose: false,
+            steps: [
+                { popover: { title: 'Welcome!', description: "Hello and welcome to Benaiah's 3D Printing Website!", side: "center", align: 'center' }},
+                { element: '#step-link', popover: { title: '1. Model Link', description: 'Paste the MakerWorld URL here so I know what to print.', side: "bottom" }},
+                { element: '#btn-how-to', popover: { title: '2. Profile Selection', description: 'Click the "How to choose?" button to see how to select a profile.', side: "bottom" }},
+                { element: '#profile-instructions', popover: { title: 'Profile Help', description: 'This is how you select a profile. You can use numbers or names!', side: "top" }},
+                { element: '#single-color-section', popover: { title: '3. Picking Colors', description: 'For simple prints, just pick your filament here.', side: "top" }},
+                { element: '#step-multi-radio', popover: { title: 'Multi-Color', description: 'Now click "2 or More Colors" to see the advanced options!', side: "top" }},
+                { element: '#multi-color-section', popover: { title: 'Custom Mapping', description: 'Match specific model parts to different filaments here.', side: "top" }},
+                { element: '#btn-submit', popover: { title: 'Submit', description: 'Send your order request when you are ready!', side: "top" }}
+            ],
+            onDestroyStarted: () => {
+                localStorage.setItem('seen_tour', 'true');
+                tour.destroy();
+            }
+        });
+
+        if (!localStorage.getItem('seen_tour')) {
+            tour.drive();
+        }
+
+        // --- ORIGINAL FUNCTIONS WITH TOUR TRIGGERS ---
         function toggleInstructions() {
             const inst = document.getElementById('profile-instructions');
             inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+            // Auto-advance tour if they are on step 2
+            if (tour.isActive() && tour.getActiveIndex() === 2) tour.moveNext();
         }
 
-        // Switch between single and multi-color inputs
         function toggleColorMode(mode) {
             document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
             document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+
+            const singleSelect = document.querySelector('select[name="single_filament"]');
+            singleSelect.required = (mode === 'single');
+
+            document.querySelectorAll('#color-mappings .mapping-row').forEach(row => {
+                row.querySelector('input[name="model_part[]"]').required = (mode === 'multi');
+                row.querySelector('select[name="mapped_filament[]"]').required = (mode === 'multi');
+            });
+
+            // Auto-advance tour if they click multi on step 5
+            if (tour.isActive() && mode === 'multi' && tour.getActiveIndex() === 5) tour.moveNext();
         }
 
-        // Add a new row for multi-color mapping
         function addMappingRow() {
             const container = document.getElementById('color-mappings');
             const newRow = document.createElement('div');
             newRow.className = 'mapping-row';
-            
-            // Generate the filament options from the first select box
             const filamentOptions = document.querySelector('select[name="mapped_filament[]"]').innerHTML;
-            
             newRow.innerHTML = `
-                <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;">
-                <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;" required>
+                <select name="mapped_filament[]" style="flex: 1; margin: 0;" required>
                     ${filamentOptions}
                 </select>
                 <button type="button" class="delete-btn" onclick="this.parentElement.remove()">✕</button>
             `;
             container.appendChild(newRow);
         }
+
+        document.getElementById('order-form').addEventListener('submit', function(evt) {
+            const mode = document.querySelector('input[name="color_mode"]:checked').value;
+            if (mode === 'single') {
+                const sel = document.querySelector('select[name="single_filament"]');
+                if (!sel.value) {
+                    alert('Please choose a filament color.');
+                    sel.focus();
+                    evt.preventDefault();
+                }
+            } else {
+                const rows = document.querySelectorAll('#color-mappings .mapping-row');
+                for (const row of rows) {
+                    const part = row.querySelector('input[name="model_part[]"]');
+                    const fil = row.querySelector('select[name="mapped_filament[]"]');
+                    if (!part.value.trim() || !fil.value) {
+                        alert('Please fill out every part and filament when using multi-color.');
+                        evt.preventDefault();
+                        return;
+                    }
+                }
+            }
+        });
     </script>
 </body>
 </html>

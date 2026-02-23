@@ -51,6 +51,19 @@
         .pill-cancelled{ background: #f8f9fa; color: #adb5bd; }
         .row-dead { opacity: 0.6; background-color: #fafafa !important; }
 
+        /* Color display inside dashboard */
+        .color-container { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .color-pill {
+            background: #f1f1f1;
+            color: #333;
+            padding: 6px 12px;           /* larger for readability */
+            border-radius: 16px;
+            font-size: 12px;            /* bigger text */
+            font-weight: bold;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
         /* Table Grid */
         .admin-table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
         .admin-table th, .admin-table td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
@@ -117,6 +130,16 @@
                         <div class="profile-container">
                             <div class="profile-badge"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.profile }}</div>
                             <a href="{{ order.link }}" target="_blank" class="makerworld-badge">VIEW ON MAKERWORLD ↗</a>
+
+                            {% if order.color %}
+                            <div class="color-container">
+                                <span class="color-pill" style="font-weight:600; background:#e2e8f0; color:#495057;">Color</span>
+                                {# split on the delimiter used by server, fall back to full string #}
+                                {% for segment in order.color.split(' | ') %}
+                                <span class="color-pill">{{ segment }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
                         </div>
                     </td>
 
