@@ -1,7 +1,10 @@
 import os
 import requests
 import uuid
-from flask import Flask, render_template, request, redirect, url_for, session
+from urllib.parse import urlparse, unquote
+import re
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -40,6 +43,21 @@ def index():
 @app.route('/submit_order', methods=['POST'])
 def submit_order():
     db = get_db()
+    filaments = db.get('settings', {}).get('filaments', [])
+    # Server-side: validate that the provided link is from an allowed domain
+    link = request.form.get('makerworld_link', '').strip()
+    if link:
+        parsed = urlparse(link)
+        hostname = parsed.netloc.lower()
+        # If user omitted the scheme, urlparse will put the host in the path — try again with a default scheme
+        if not hostname:
+            parsed = urlparse('http://' + link)
+            hostname = parsed.netloc.lower()
+        if hostname.startswith('www.'):
+            hostname = hostname[4:]
+        allowed = ('makerworld.com', 'printables.com')
+        if not any(hostname == a or hostname.endswith('.' + a) for a in allowed):
+            return render_template('index.html', filaments=filaments, error='Only makerworld.com or printables.com links are accepted.')
     order_id = str(uuid.uuid4())[:8]
     
     # Capture the name if the user provided one, otherwise "Unnamed Order"
@@ -60,9 +78,47 @@ def submit_order():
         mappings = [f"{p}: {f}" for p, f in zip(parts, filaments) if p.strip()]
         color_string = " | ".join(mappings) if mappings else "Multi-color"
 
+    # Try to extract product name for MakerWorld links
+    def extract_product_name(link):
+        try:
+            p = urlparse(link)
+            hostname = p.netloc
+            if not hostname:
+                p = urlparse('http://' + link)
+            path = p.path or ''
+            # Look for any path segment that starts with digits + '-' then slug (e.g. "1646935-collapsing-katana-...")
+            segments = [seg for seg in path.split('/') if seg]
+            candidate = None
+            for seg in segments:
+                if re.match(r'^\d+-[A-Za-z0-9\-]+', seg):
+                    candidate = seg
+                    break
+            # fallback: common '/models/' pattern
+            if not candidate and '/models/' in path:
+                candidate = path.split('/models/')[-1].split('/')[0]
+
+            if candidate:
+                parts = candidate.split('-')
+                if len(parts) >= 2 and parts[0].isdigit():
+                    name_slug = '-'.join(parts[1:])
+                else:
+                    name_slug = candidate
+                name = unquote(name_slug).replace('-', ' ').strip()
+                name = ' '.join(name.split())
+                if name:
+                    return name.title()
+        except Exception:
+            return None
+        return None
+
+    product_name = extract_product_name(link)
+
     new_order = {
         "id": order_id,
         "name": provided_name,
+        "product_name": product_name,
+        "admin_note": "",
+        "messages": [],
         "link": request.form.get('makerworld_link'),
         "profile": profile_choice,
         "color": color_string,
@@ -75,6 +131,33 @@ def submit_order():
     db['orders'].append(new_order)
     save_db(db)
     return redirect(url_for('check_order_by_id', order_id=order_id))
+
+
+@app.route('/order/<order_id>/messages', methods=['GET', 'POST'])
+def order_messages(order_id):
+    db = get_db()
+    order = next((o for o in db['orders'] if o['id'] == order_id), None)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    if request.method == 'GET':
+        return jsonify({'messages': order.get('messages', [])})
+
+    # POST: append a message
+    data = request.get_json() or request.form
+    text = (data.get('text') or '').strip()
+    sender = data.get('sender') or 'user'
+    if not text:
+        return jsonify({'error': 'Empty message'}), 400
+
+    msg = {
+        'sender': sender,
+        'text': text,
+        'ts': datetime.utcnow().isoformat() + 'Z'
+    }
+    order.setdefault('messages', []).append(msg)
+    save_db(db)
+    return jsonify({'messages': order.get('messages', [])})
 
 @app.route('/order/<order_id>')
 def check_order_by_id(order_id):
@@ -168,6 +251,8 @@ def update_order(order_id):
             order['print_price'] = request.form.get('print_price', '0')
             order['material_fee'] = request.form.get('material_fee', '0')
             order['delivery_time'] = request.form.get('delivery_time', 'TBD')
+            # Save admin notes if provided
+            order['admin_note'] = request.form.get('admin_note', order.get('admin_note', ''))
             break
     save_db(db)
     return redirect(url_for('dashboard'))

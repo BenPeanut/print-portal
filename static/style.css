@@ -16,6 +16,25 @@ input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #d
 button { width: 100%; padding: 12px; background: var(--bambu-green); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
 button:hover { background: #008f36; }
 
+/* Chat send buttons use a lighter green to stand out and fill their box */
+#user-chat-send, #admin-chat-send {
+    background: #33cc77;
+    color: white;
+    border: none;
+    width: 72px;
+    height: 72px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    line-height: 1;
+    border-radius: 8px;
+}
+#user-chat-send:hover, #admin-chat-send:hover {
+    background: #29b45e;
+}
+
 /* Price Table Separation */
 .price-table { width: 100%; margin-top: 15px; border-collapse: collapse; }
 .price-table td { padding: 12px 0; border-bottom: 1px solid #eee; }
@@ -25,3 +44,64 @@ button:hover { background: #008f36; }
 .admin-table { width: 100%; border-collapse: collapse; background: white; }
 .admin-table th { background: var(--carbon); color: white; padding: 12px; }
 .admin-table td { padding: 12px; border-bottom: 1px solid #ddd; }
+
+/* Floating chat button and message icon styles */
+#openChatBtn {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    border: none;
+    background: var(--bambu-green);
+    color: white;
+    font-size: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+}
+
+.msg-icon {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+/* Ensure admin message icon is always visible (not hidden by row hover rules) */
+.admin-table .msg-icon {
+    opacity: 1 !important;
+    visibility: visible !important;
+    z-index: 1000;
+}
+
+.chat-icon { line-height: 1; }
+
+.unread-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: #d9534f;
+    color: white;
+    border-radius: 999px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    border: 2px solid white;
+}

@@ -138,23 +138,49 @@
                 {% endif %}
                 <p><strong>Current Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
                 <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.delivery_time }}</span></p>
+                {% if order.admin_note %}
+                <div style="margin-top:12px; padding:12px; background:#fff9e6; border-left:4px solid #ffd966; border-radius:6px; color:#333;">
+                    <strong>Admin Notes:</strong>
+                    <p style="margin:8px 0 0 0; white-space:pre-wrap;">{{ order.admin_note }}</p>
+                </div>
+                {% endif %}
             </div>
 
             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px;">Price Breakdown</h3>
             <table class="price-table">
+                {% set pc = order.print_price|int %}
+                {% set mf = order.material_fee|int %}
                 <tr>
                     <td>Printing Cost</td>
-                    <td align="right">Rp {{ "{:,}".format(order.print_price|int) }}</td>
+                    <td align="right">{% if pc == 0 %}<em>Not yet quoted</em>{% else %}Rp {{ "{:,}".format(pc) }}{% endif %}</td>
                 </tr>
                 <tr>
                     <td>Materials & Extras</td>
-                    <td align="right">Rp {{ "{:,}".format(order.material_fee|int) }}</td>
+                    <td align="right">{% if mf == 0 %}<em>-</em>{% else %}Rp {{ "{:,}".format(mf) }}{% endif %}</td>
                 </tr>
                 <tr class="total">
                     <td style="padding-top:15px;">Total Amount</td>
-                    <td align="right" style="padding-top:15px; color: var(--bambu-green);">Rp {{ "{:,}".format(order.print_price|int + order.material_fee|int) }}</td>
+                    <td align="right" style="padding-top:15px; color: var(--bambu-green);">{% if pc == 0 and mf == 0 %}<em>Not yet quoted</em>{% else %}Rp {{ "{:,}".format(pc + mf) }}{% endif %}</td>
                 </tr>
             </table>
+
+            <!-- Floating chat icon and modal -->
+            <button id="openChatBtn" title="Open chat">
+                <span class="chat-icon">🗪</span>
+                <span id="user-unread-badge" class="unread-badge" style="display:none;">0</span>
+            </button>
+
+            <div id="userChatModal" class="modal-overlay" style="display:none; align-items:center; justify-content:center;" onclick="if(event.target===this) closeUserChatModal();">
+                <div class="modal-box" style="max-width:440px; width:92%; padding:16px;">
+                    <!-- no header or close button; click outside modal to close -->
+                    <div id="user-chat-hint" style="background:#fff9e6; color:#856404; padding:8px; border-radius:6px; margin-top:8px; display:none;">Please wait a moment for messages to load — do not spam send.</div>
+                    <div id="user-chat-messages" style="max-height:300px; overflow:auto; padding:8px; background:#fff; border:1px solid #eee; border-radius:6px; margin-top:8px;"></div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <textarea id="user-chat-input" placeholder="Write a message..." style="flex:1; padding:8px; height:72px;"></textarea>
+                        <button id="user-chat-send" class="btn-primary">⌯⌲</button>
+                    </div>
+                </div>
+            </div>
 
             <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
                 {% if order.status == 'Waiting for Approval' %}
@@ -279,6 +305,121 @@
         document.getElementById('confirmApproveBtn').onclick = function() {
             if (approveForm) approveForm.submit();
         };
+
+        // --- USER CHAT (modal) ---
+        const orderId = '{{ order.id }}';
+        let userChatInterval = null;
+
+        async function loadMessagesIntoContainer(orderId, containerEl) {
+            try {
+                const res = await fetch(`/order/${orderId}/messages`);
+                if (!res.ok) return [];
+                const data = await res.json();
+                const msgs = data.messages || [];
+                containerEl.innerHTML = '';
+                msgs.forEach(m => {
+                    const el = document.createElement('div');
+                    el.style.padding = '8px';
+                    el.style.borderRadius = '6px';
+                    el.style.maxWidth = '80%';
+                    el.style.whiteSpace = 'pre-wrap';
+                    el.style.boxShadow = '0 1px 0 rgba(0,0,0,0.03)';
+                    el.innerHTML = `<small style="color:#666">${m.sender} • ${new Date(m.ts).toLocaleString()}</small><div style="margin-top:6px">${m.text}</div>`;
+                    if (m.sender === 'admin') {
+                        el.style.alignSelf = 'flex-start';
+                        el.style.background = '#f7fff4';
+                    } else {
+                        el.style.alignSelf = 'flex-end';
+                        el.style.background = '#f1f1f1';
+                    }
+                    containerEl.appendChild(el);
+                });
+                containerEl.parentElement.scrollTop = containerEl.parentElement.scrollHeight;
+                return msgs;
+            } catch (e) { console.error(e); }
+            return [];
+        }
+
+        function openUserChatModal() {
+            const modal = document.getElementById('userChatModal');
+            const list = document.getElementById('user-chat-messages');
+            const hint = document.getElementById('user-chat-hint');
+            modal.style.display = 'flex';
+            // show hint only first time
+            const hintKey = 'seen_chat_hint_' + orderId;
+            if (!localStorage.getItem(hintKey)) {
+                hint.style.display = 'block';
+                localStorage.setItem(hintKey, 'true');
+            } else {
+                hint.style.display = 'none';
+            }
+            loadMessagesIntoContainer(orderId, list).then(msgs => {
+                if (msgs && msgs.length) {
+                    const adminMsgs = msgs.filter(m => m.sender === 'admin');
+                    if (adminMsgs.length) {
+                        const last = adminMsgs[adminMsgs.length - 1];
+                        localStorage.setItem('chat_last_seen_' + orderId, last.ts);
+                    }
+                }
+                updateUserUnreadBadge(0);
+            });
+            if (userChatInterval) clearInterval(userChatInterval);
+            userChatInterval = setInterval(() => loadMessagesIntoContainer(orderId, list), 4000);
+            // stop unread polling while open
+            if (window.userUnreadInterval) { clearInterval(window.userUnreadInterval); window.userUnreadInterval = null; }
+        }
+
+        function closeUserChatModal() {
+            const modal = document.getElementById('userChatModal');
+            modal.style.display = 'none';
+            if (userChatInterval) { clearInterval(userChatInterval); userChatInterval = null; }
+            // resume unread polling
+            if (!window.userUnreadInterval) window.userUnreadInterval = setInterval(updateUserUnread, 6000);
+        }
+
+        document.getElementById('openChatBtn').addEventListener('click', openUserChatModal);
+        document.getElementById('user-chat-send').addEventListener('click', async () => {
+            const input = document.getElementById('user-chat-input');
+            const txt = input.value.trim();
+            if (!txt) return;
+            try {
+                const res = await fetch(`/order/${orderId}/messages`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({sender: 'user', text: txt})
+                });
+                if (!res.ok) { alert('Failed to send message'); return; }
+                input.value = '';
+                const msgs = await loadMessagesIntoContainer(orderId, document.getElementById('user-chat-messages'));
+                if (msgs && msgs.length) {
+                    const adminMsgs = msgs.filter(m => m.sender === 'admin');
+                    if (adminMsgs.length) localStorage.setItem('chat_last_seen_' + orderId, adminMsgs[adminMsgs.length-1].ts);
+                }
+            } catch (e) { console.error(e); alert('Failed to send message'); }
+        });
+
+        // Unread badge logic for user
+        async function updateUserUnread() {
+            try {
+                const res = await fetch(`/order/${orderId}/messages`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const msgs = data.messages || [];
+                const lastSeen = localStorage.getItem('chat_last_seen_' + orderId) || 0;
+                const unread = msgs.filter(m => m.sender === 'admin' && new Date(m.ts) > new Date(lastSeen)).length;
+                updateUserUnreadBadge(unread);
+            } catch (e) { console.error(e); }
+        }
+
+        function updateUserUnreadBadge(count) {
+            const el = document.getElementById('user-unread-badge');
+            if (!el) return;
+            if (!count || count <= 0) { el.style.display = 'none'; }
+            else { el.style.display = 'flex'; el.innerText = count > 99 ? '99+' : String(count); }
+        }
+
+        // start unread polling (global so we can clear it while modal is open)
+        if (!window.userUnreadInterval) window.userUnreadInterval = setInterval(updateUserUnread, 6000);
+        updateUserUnread();
     </script>
 </body>
 </html>

@@ -122,7 +122,7 @@
                     </form>
 
                     <td>
-                        <strong>{{ order.get('name', 'No Name') }}</strong><br>
+                        <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong><br>
                         <small style="color:#888;">ID: {{ order.id }}</small>
                     </td>
 
@@ -167,6 +167,14 @@
                                 <option value="Done" {% if order.status == 'Done' %}selected{% endif %}>4. Mark as Done</option>
                                 <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>5. Delivered/Archive</option>
                             </select>
+                            <label style="display:block; margin-top:8px; font-weight:600;">Admin Note</label>
+                            <textarea name="admin_note" placeholder="Add a note for the user or internal info..." style="width:100%; height:72px; padding:8px; box-sizing:border-box; margin-top:6px;">{{ order.get('admin_note','') }}</textarea>
+                            <div style="margin-top:8px;">
+                                <button type="button" class="btn-secondary msg-icon" title="Open chat" onclick="openAdminChatModal('{{ order.id }}')" data-order-id="{{ order.id }}">
+                                    <span class="chat-icon">🗪</span>
+                                    <span id="admin-unread-{{ order.id }}" class="unread-badge" style="display:none;">0</span>
+                                </button>
+                            </div>
                     </td>
 
                     <td style="vertical-align: middle; text-align: center;">
@@ -195,6 +203,17 @@
         </div>
     </div>
 
+    <!-- Admin Chat Modal -->
+    <div id="adminChatModal" class="modal-overlay" onclick="if(event.target===this) closeAdminChatModal();">
+        <div class="modal-box">
+            <div id="admin-chat-messages" style="max-height:300px; overflow:auto; padding:6px; background:#fff; border:1px solid #eee; border-radius:6px;"></div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                <textarea id="admin-chat-input" placeholder="Type a message..." style="flex:1; padding:8px; height:72px;"></textarea>
+                <button id="admin-chat-send" class="btn-primary">⌯⌲</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let pendingForm = null;
 
@@ -212,6 +231,107 @@
         document.getElementById('modalConfirmBtn').addEventListener('click', function() {
             if (pendingForm) pendingForm.submit();
         });
+
+        // Messaging helpers for admin dashboard (modal)
+        let adminChatInterval = null;
+        let currentAdminOrder = null;
+
+        async function loadMessagesInto(orderId, containerEl) {
+            try {
+                const res = await fetch(`/order/${orderId}/messages`);
+                if (!res.ok) return [];
+                const data = await res.json();
+                const msgs = data.messages || [];
+                containerEl.innerHTML = '';
+                msgs.forEach(m => {
+                    const el = document.createElement('div');
+                    el.style.padding = '6px';
+                    el.style.borderRadius = '6px';
+                    el.style.fontSize = '13px';
+                    el.style.whiteSpace = 'pre-wrap';
+                    el.innerHTML = `<small style="color:#666">${m.sender} • ${new Date(m.ts).toLocaleString()}</small><div style="margin-top:4px">${m.text}</div>`;
+                    el.style.background = m.sender === 'admin' ? '#f7fff4' : '#f1f1f1';
+                    containerEl.appendChild(el);
+                });
+                containerEl.parentElement.scrollTop = containerEl.parentElement.scrollHeight;
+                return msgs;
+            } catch (e) { console.error(e); }
+            return [];
+        }
+
+        function openAdminChatModal(orderId) {
+            currentAdminOrder = orderId;
+            const modal = document.getElementById('adminChatModal');
+            const list = document.getElementById('admin-chat-messages');
+            modal.style.display = 'flex';
+            loadMessagesInto(orderId, list).then(msgs => {
+                if (msgs && msgs.length) {
+                    const userMsgs = msgs.filter(m => m.sender === 'user');
+                    if (userMsgs.length) {
+                        const last = userMsgs[userMsgs.length - 1];
+                        localStorage.setItem('admin_chat_last_seen_' + orderId, last.ts);
+                        const badge = document.getElementById('admin-unread-' + orderId);
+                        if (badge) badge.style.display = 'none';
+                    }
+                }
+            });
+            if (adminChatInterval) clearInterval(adminChatInterval);
+            adminChatInterval = setInterval(() => loadMessagesInto(orderId, list), 4000);
+            // pause admin unread polling while modal open
+            if (window.adminUnreadInterval) { clearInterval(window.adminUnreadInterval); window.adminUnreadInterval = null; }
+        }
+
+        function closeAdminChatModal() {
+            const modal = document.getElementById('adminChatModal');
+            modal.style.display = 'none';
+            if (adminChatInterval) { clearInterval(adminChatInterval); adminChatInterval = null; }
+            currentAdminOrder = null;
+        }
+
+        document.getElementById('admin-chat-send').addEventListener('click', function() {
+            const input = document.getElementById('admin-chat-input');
+            const text = input.value.trim();
+            if (!text || !currentAdminOrder) return;
+            fetch(`/order/${currentAdminOrder}/messages`, {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({sender: 'admin', text: text})
+            }).then(res => {
+                if (!res.ok) { alert('Failed to send'); return; }
+                input.value = '';
+                loadMessagesInto(currentAdminOrder, document.getElementById('admin-chat-messages'));
+                // update admin last seen after sending
+                loadMessagesInto(currentAdminOrder, document.getElementById('admin-chat-messages')).then(msgs => {
+                    if (msgs && msgs.length) {
+                        const userMsgs = msgs.filter(m => m.sender === 'user');
+                        if (userMsgs.length) localStorage.setItem('admin_chat_last_seen_' + currentAdminOrder, userMsgs[userMsgs.length-1].ts);
+                    }
+                });
+            }).catch(err => { console.error(err); alert('Failed to send'); });
+        });
+
+        // Admin unread polling - check messages for all orders and update badges
+        async function updateAdminUnreadCounts() {
+            try {
+                const buttons = document.querySelectorAll('.msg-icon[data-order-id]');
+                for (const btn of buttons) {
+                    const oid = btn.getAttribute('data-order-id');
+                    try {
+                        const res = await fetch(`/order/${oid}/messages`);
+                        if (!res.ok) continue;
+                        const data = await res.json();
+                        const msgs = data.messages || [];
+                        const lastSeen = localStorage.getItem('admin_chat_last_seen_' + oid) || 0;
+                        const unread = msgs.filter(m => m.sender === 'user' && new Date(m.ts) > new Date(lastSeen)).length;
+                        const badge = document.getElementById('admin-unread-' + oid);
+                        if (!badge) continue;
+                        if (!unread) badge.style.display = 'none'; else { badge.style.display = 'flex'; badge.innerText = unread > 99 ? '99+' : String(unread); }
+                    } catch (e) { console.error(e); }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        if (!window.adminUnreadInterval) window.adminUnreadInterval = setInterval(updateAdminUnreadCounts, 8000);
+        updateAdminUnreadCounts();
     </script>
 </body>
 </html>
