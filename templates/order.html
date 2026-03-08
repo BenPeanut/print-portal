@@ -112,7 +112,9 @@
     <div class="container">
         <div class="box">
             <h1 style="color: var(--bambu-green); text-align: center; text-transform: capitalize;">
-                {% if order.name and order.name != 'Unnamed Order' %}
+                {% if order.nickname %}
+                    {{ order.nickname }}
+                {% elif order.name and order.name != 'Unnamed Order' %}
                     {{ order.name }}
                 {% else %}
                     Order Submitted
@@ -207,7 +209,7 @@
                 <form action="/name_order/{{ order.id }}" method="POST">
                     <label style="font-weight:bold; font-size: 0.9em;">Change Order Nickname:</label>
                     <div style="display: flex; gap: 5px; margin-top: 5px;">
-                        <input type="text" name="order_name" placeholder="e.g. Dragon Model" required style="flex: 1; padding: 8px;">
+                        <input type="text" name="order_name" placeholder="e.g. Dragon Model" value="{{ order.nickname or '' }}" style="flex: 1; padding: 8px;">
                         <button type="submit" style="width: auto; background: var(--carbon); color: white; border: none; padding: 8px 15px; cursor: pointer;">Save</button>
                     </div>
                 </form>

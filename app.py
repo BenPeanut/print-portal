@@ -4,6 +4,7 @@ import uuid
 from urllib.parse import urlparse, unquote
 import re
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 app = Flask(__name__)
@@ -25,10 +26,14 @@ def get_db():
         data = response.json().get('record', {})
         if 'orders' not in data: data['orders'] = []
         if 'settings' not in data: data['settings'] = {"filaments": []}
+        if 'users' not in data: data['users'] = []
+        if 'featured_prints' not in data: data['featured_prints'] = []
+        # legacy support for older key
+        if 'featured_items' not in data: data['featured_items'] = []
         return data
     except Exception as e:
         print(f"DB Error: {e}")
-        return {"orders": [], "settings": {"filaments": []}}
+        return {"orders": [], "settings": {"filaments": []}, "featured_prints": []}
 
 def save_db(data):
     requests.put(BASE_URL, headers=HEADERS, json=data)
@@ -38,7 +43,161 @@ def save_db(data):
 def index():
     db = get_db()
     filaments = db.get('settings', {}).get('filaments', [])
-    return render_template('index.html', filaments=filaments)
+    # Require user login for using the site
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    user_id = session.get('user_id')
+    # Collect recent orders for this user (most recent first)
+    user_orders = [o for o in db.get('orders', []) if o.get('owner') == user_id]
+    user_orders = sorted(user_orders, key=lambda o: o.get('id'), reverse=True)
+    featured_prints = db.get('featured_prints', [])
+    # only show for this user or for all users
+    featured_items = [
+        f for f in featured_prints
+        if f.get('target_user') == 'ALL' or f.get('target_user') == user_id
+    ]
+
+    # if no featured items configured, show a small placeholder set
+    if not featured_items:
+        featured_items = [
+            {
+                "id": "placeholder-1",
+                "image_url": "https://cdn.example.com/placeholder1.jpg",
+                "title": "Sleek Gear Box",
+                "makerworld_url": "https://makerworld.com/model/1234567-sleek-gear-box",
+                "description": "A compact gearbox perfect for prototyping and robotics projects.",
+                "price": 15000,
+                "suggested_filament": "PLA",
+                "target_user": "ALL"
+            },
+            {
+                "id": "placeholder-2",
+                "image_url": "https://cdn.example.com/placeholder2.jpg",
+                "title": "Modular Phone Stand",
+                "makerworld_url": "https://makerworld.com/model/7654321-modular-phone-stand",
+                "description": "Adjustable phone stand that folds flat for travel.",
+                "price": 12000,
+                "suggested_filament": "PETG",
+                "target_user": "ALL"
+            },
+            {
+                "id": "placeholder-3",
+                "image_url": "https://cdn.example.com/placeholder3.jpg",
+                "title": "Articulated Dragon",
+                "makerworld_url": "https://makerworld.com/model/2345678-articulated-dragon",
+                "description": "A fun, moving model with printed joints for easy assembly.",
+                "price": 20000,
+                "suggested_filament": "PLA",
+                "target_user": "ALL"
+            },
+        ]
+
+    return render_template('index.html', filaments=filaments, user_orders=user_orders, featured_items=featured_items)
+
+
+@app.route('/user_register', methods=['GET', 'POST'])
+def user_register():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        if not username or not password:
+            return render_template('register.html', error='Username and password required')
+        db = get_db()
+        if any(u for u in db['users'] if u.get('username') == username):
+            return render_template('register.html', error='Username already taken')
+        user_id = str(uuid.uuid4())[:8]
+        user = {'id': user_id, 'username': username, 'password_hash': generate_password_hash(password), 'created_at': datetime.utcnow().isoformat()}
+        db['users'].append(user)
+        save_db(db)
+        session['user_id'] = user_id
+        session['username'] = username
+        return redirect(url_for('index'))
+    return render_template('register.html')
+
+
+@app.route('/user_login', methods=['GET', 'POST'])
+def user_login():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        db = get_db()
+        user = next((u for u in db.get('users', []) if u.get('username') == username), None)
+        if user and check_password_hash(user.get('password_hash', ''), password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            return redirect(url_for('index'))
+        return render_template('user_login.html', error='Invalid credentials')
+    return render_template('user_login.html')
+
+
+@app.route('/user_logout')
+def user_logout():
+    session.pop('user_id', None)
+    session.pop('username', None)
+    return redirect(url_for('user_login'))
+
+
+@app.route('/search_orders', methods=['POST'])
+def search_orders():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+    query = request.form.get('q', '').strip().lower()
+    db = get_db()
+    user_id = session.get('user_id')
+    if query:
+        results = [
+            o for o in db.get('orders', [])
+            if o.get('owner') == user_id and (
+                query in o.get('id', '').lower()
+                or query in (o.get('name','') or '').lower()
+                or query in (o.get('nickname','') or '').lower()
+                or query in (o.get('product_name','') or '').lower()
+            )
+        ]
+    else:
+        results = [o for o in db.get('orders', []) if o.get('owner') == user_id]
+    results = sorted(results, key=lambda o: o.get('id'), reverse=True)
+    filaments = db.get('settings', {}).get('filaments', [])
+    featured_prints = db.get('featured_prints', [])
+    featured_items = [
+        f for f in featured_prints
+        if f.get('target_user') == 'ALL' or f.get('target_user') == user_id
+    ]
+    if not featured_items:
+        featured_items = [
+            {
+                "id": "placeholder-1",
+                "image_url": "https://cdn.example.com/placeholder1.jpg",
+                "title": "Sleek Gear Box",
+                "makerworld_url": "https://makerworld.com/model/1234567-sleek-gear-box",
+                "description": "A compact gearbox perfect for prototyping and robotics projects.",
+                "price": 15000,
+                "suggested_filament": "PLA",
+                "target_user": "ALL"
+            },
+            {
+                "id": "placeholder-2",
+                "image_url": "https://cdn.example.com/placeholder2.jpg",
+                "title": "Modular Phone Stand",
+                "makerworld_url": "https://makerworld.com/model/7654321-modular-phone-stand",
+                "description": "Adjustable phone stand that folds flat for travel.",
+                "price": 12000,
+                "suggested_filament": "PETG",
+                "target_user": "ALL"
+            },
+            {
+                "id": "placeholder-3",
+                "image_url": "https://cdn.example.com/placeholder3.jpg",
+                "title": "Articulated Dragon",
+                "makerworld_url": "https://makerworld.com/model/2345678-articulated-dragon",
+                "description": "A fun, moving model with printed joints for easy assembly.",
+                "price": 20000,
+                "suggested_filament": "PLA",
+                "target_user": "ALL"
+            },
+        ]
+    return render_template('index.html', filaments=filaments, user_orders=results, search_query=request.form.get('q',''), featured_items=featured_items)
 
 @app.route('/submit_order', methods=['POST'])
 def submit_order():
@@ -60,10 +219,9 @@ def submit_order():
             return render_template('index.html', filaments=filaments, error='Only makerworld.com or printables.com links are accepted.')
     order_id = str(uuid.uuid4())[:8]
     
-    # Capture the name if the user provided one, otherwise "Unnamed Order"
-    provided_name = request.form.get('name', '').strip()
-    if not provided_name:
-        provided_name = "Unnamed Order"
+    # Capture the name if the user provided one (used as nickname).
+    raw_name = request.form.get('name', '').strip()
+    provided_name = raw_name or "Unnamed Order"
 
     profile_choice = request.form.get('print_profile', '').strip()
     if not profile_choice:
@@ -113,9 +271,18 @@ def submit_order():
 
     product_name = extract_product_name(link)
 
+    # determine canonical name: prefer product name, fall back to provided name or a generic label
+    canonical_name = product_name or provided_name or "Unnamed Order"
+    # nickname only if user supplied something distinct
+    nickname = None
+    if raw_name and raw_name != canonical_name:
+        nickname = raw_name
+
     new_order = {
         "id": order_id,
-        "name": provided_name,
+        "name": canonical_name,
+        "nickname": nickname,
+        "owner": session.get('user_id'),
         "product_name": product_name,
         "admin_note": "",
         "messages": [],
@@ -211,7 +378,8 @@ def name_order(order_id):
     new_name = request.form.get('order_name', '').strip()
     for order in db['orders']:
         if order['id'] == order_id:
-            order['name'] = new_name
+            # store as nickname; clear if empty
+            order['nickname'] = new_name if new_name else None
             save_db(db)
             break
     return redirect(url_for('check_order_by_id', order_id=order_id))
@@ -229,9 +397,23 @@ def login():
 def dashboard():
     if not session.get('logged_in'): return redirect(url_for('login'))
     db = get_db()
-    active_orders = db['orders'] 
+    active_orders = db['orders']
+
+    # build map of user ids to usernames for display
+    user_map = {u['id']: u['username'] for u in db.get('users', [])}
+
+    # Featured prints management
+    featured_prints = db.get('featured_prints', [])
+
     current_colors = ", ".join(db.get('settings', {}).get('filaments', []))
-    return render_template('dashboard.html', orders=active_orders, current_colors=current_colors)
+    return render_template(
+        'dashboard.html',
+        orders=active_orders,
+        current_colors=current_colors,
+        user_map=user_map,
+        users=db.get('users', []),
+        featured_prints=featured_prints
+    )
 
 @app.route('/delete_order/<order_id>', methods=['POST'])
 def delete_order(order_id):
@@ -240,6 +422,87 @@ def delete_order(order_id):
     db['orders'] = [o for o in db['orders'] if o['id'] != order_id]
     save_db(db)
     return redirect(url_for('dashboard'))
+
+@app.route('/dashboard/featured', methods=['POST'])
+def add_featured_print():
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    db = get_db()
+    title = request.form.get('title', '').strip()
+    image_url = request.form.get('image_url', '').strip()
+    makerworld_url = request.form.get('makerworld_url', '').strip()
+    price = request.form.get('price', '').strip()
+    suggested_filament = request.form.get('suggested_filament', '').strip()
+    target_user = request.form.get('target_user', 'ALL')
+
+    if not (title and image_url and makerworld_url and price):
+        return redirect(url_for('dashboard'))
+
+    new_item = {
+        'id': str(uuid.uuid4())[:10],
+        'title': title,
+        'image_url': image_url,
+        'makerworld_url': makerworld_url,
+        'description': request.form.get('description', '').strip(),
+        'price': float(price),
+        'suggested_filament': suggested_filament,
+        'target_user': target_user,
+    }
+
+    db.setdefault('featured_prints', []).append(new_item)
+    save_db(db)
+    return redirect(url_for('dashboard'))
+
+@app.route('/dashboard/featured/delete/<item_id>', methods=['POST'])
+def delete_featured_print(item_id):
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    db = get_db()
+    db['featured_prints'] = [f for f in db.get('featured_prints', []) if f.get('id') != item_id]
+    save_db(db)
+    return redirect(url_for('dashboard'))
+
+@app.route('/create_featured_order', methods=['POST'])
+def create_featured_order():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Not authorized'}), 401
+
+    data = request.get_json() or {}
+    title = (data.get('title') or '').strip()
+    makerworld_link = (data.get('makerworld_link') or '').strip()
+    try:
+        price_val = float(data.get('price', 0))
+    except Exception:
+        price_val = 0
+    filament = (data.get('filament') or '').strip()
+
+    if not title or not makerworld_link or price_val <= 0:
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    order_id = str(uuid.uuid4())[:8]
+    new_order = {
+        'id': order_id,
+        'name': title,
+        'nickname': None,
+        'owner': session.get('user_id'),
+        'product_name': title,
+        'admin_note': '',
+        'messages': [],
+        'link': makerworld_link,
+        'profile': '1',
+        'color': filament,
+        # use the existing “Waiting for Approval” status so user can confirm in the order page
+        'status': 'Waiting for Approval',
+        'print_price': str(int(price_val)),
+        'material_fee': '0',
+        'delivery_time': 'TBD',
+        'fixed_price': True,
+        'suggested_colors': filament,
+    }
+
+    db = get_db()
+    db.setdefault('orders', []).append(new_order)
+    save_db(db)
+
+    return jsonify({'order_id': order_id})
 
 @app.route('/update_order/<order_id>', methods=['POST'])
 def update_order(order_id):

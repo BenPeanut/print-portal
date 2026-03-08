@@ -18,7 +18,7 @@
             --white: #ffffff;
         }
 
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background-color: var(--bg); color: var(--carbon); }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; text-align: center; background-color: var(--bg); color: var(--carbon); }
         input, select, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; }
         
         .box { background: var(--white); border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; border-top: 5px solid var(--bambu-green); text-align: left; }
@@ -29,6 +29,9 @@
         .btn-primary:hover { background-color: #008f36; }
         
         .btn-secondary { background: var(--carbon); color: white; border: none; font-size: 12px; padding: 5px 10px; width: auto; cursor: pointer; border-radius: 4px; }
+        /* search toggle icon */
+        #search-toggle { color: var(--carbon); }
+        #search-container input { border: 1px solid #ccc; }
         
         .instruction-box { background: #fffbe6; border: 1px solid #ffe58f; padding: 15px; border-radius: 8px; font-size: 0.85em; margin: 10px 0; color: #856404; display: none; }
         
@@ -42,7 +45,33 @@
 </head>
 <body>
     <h1 id="welcome-header">Benaiah's 3D Printing Service</h1>
-    
+    <div id="page-data" data-filaments='{{ filaments|tojson|safe }}' style="display:none;"></div>
+
+    <div class="box" id="featured-section">
+        <h3>Hand-Picked Favorites</h3>
+        <div class="hero-container" id="hero-container">
+            <button type="button" class="hero-arrow hero-arrow-left" aria-label="Previous slide">‹</button>
+            <button type="button" class="hero-arrow hero-arrow-right" aria-label="Next slide">›</button>
+            {% for item in featured_items %}
+            <div class="hero-slide" data-index="{{ loop.index0 }}" data-item='{{ item | tojson }}'>
+                <div class="hero-image" style="background-image: url('{{ item.image_url }}');"></div>
+                <div class="hero-overlay"></div>
+                <div class="hero-meta">
+                    <div>
+                        <div class="hero-title">{{ item.title }}</div>
+                        <div class="hero-desc">{{ item.description }}</div>
+                    </div>
+                    <div class="hero-bottom">
+                        <div class="hero-price">Rp{{ "{:,}".format(item.price|int) }}</div>
+                        <button type="button" class="btn-primary featured-order-btn" data-slide-index="{{ loop.index0 }}">Order Now</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            <div class="hero-dots" id="hero-dots"></div>
+        </div>
+    </div>
+
     <div class="box">
         <h3>Request a New Print</h3>
         <form id="order-form" action="/submit_order" method="POST">
@@ -58,6 +87,24 @@
                     title="Only makerworld.com or printables.com URLs are accepted">
             </div>
             
+            <div style="margin-top: 15px;" id="step-weight-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <label><strong>Print Weight (grams):</strong></label>
+                    <button type="button" id="btn-weight-help" class="btn-secondary" onclick="toggleWeightInstructions()">How to find weight?</button>
+                </div>
+                <div id="weight-instructions" class="instruction-box" style="display:none;">
+                    <strong>How to find model weight on MakerWorld</strong><br>
+                    1. On MakerWorld, hover over the model/profile you want to print.<br>
+                    2. A floating panel will pop up — find the <strong>Weight</strong> label (usually in grams).<br>
+                    3. Enter the number (only digits) below.
+                    <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <img src="{{ url_for('static', filename='weight-step1.png') }}" alt="Hover over model to see weight" style="width: 240px; max-width: 100%; border-radius: 12px; border: 1px solid #eee;">
+                        <img src="{{ url_for('static', filename='weight-step2.png') }}" alt="Find weight label" style="width: 240px; max-width: 100%; border-radius: 12px; border: 1px solid #eee;">
+                    </div>
+                </div>
+                <input id="model_weight" type="number" min="0" step="0.1" name="model_weight" placeholder="e.g. 32.5">
+            </div>
+
             <div style="margin-top: 15px;" id="step-profile-container">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <label><strong>Print Profile / Number:</strong></label>
@@ -113,6 +160,50 @@
         </form>
     </div>
 
+    {% if user_orders is defined %}
+    <div class="box" id="my-orders" style="position:relative;">
+        <h3 style="margin-bottom:0;">Your Recent Orders</h3>
+        <button id="orders-search-toggle" class="search-icon" aria-label="Search orders" title="Search orders" style="position:absolute; right:437px; top:12px; background:transparent; border:none; padding:8px;">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M11 4a7 7 0 105.292 11.708l4.5 4.5 1.414-1.414-4.5-4.5A7 7 0 0011 4z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <div id="orders-search-container">
+            <form id="orders-search-form" action="/search_orders" method="POST">
+                <input id="orders-search-input" class="orders-search-input" type="text" name="q" placeholder="Search by Order ID or name" value="{{ search_query|default('') }}" autocomplete="off">
+            </form>
+        </div>
+
+        {% if user_orders and user_orders|length > 0 %}
+            <div class="orders-list">
+                {% for o in user_orders %}
+                <div class="order-card">
+                    <div class="order-info">
+                        <div class="order-title">{{ o.nickname or o.name or o.product_name or 'Unnamed Order' }}</div>
+                        <div class="order-meta">ID: {{ o.id }} • <span class="status {{ (o.status or 'unknown')|lower }}">{{ o.status }}</span></div>
+                    </div>
+                    <div class="order-actions">
+                        <a href="/order/{{ o.id }}" class="btn-link">View</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="order-empty">
+                <div class="empty-illustration">🗂️</div>
+                {% if search_query %}
+                    <h4>No matching orders found</h4>
+                    <p class="muted">Sorry, there is no order with that name or ID.</p>
+                {% else %}
+                    <h4>No orders yet</h4>
+                    <p class="muted">You don't have any active orders.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <p style="margin-top:10px;"><a href="/user_logout" style="color:#64748b;">Log out</a></p>
+    </div>
+    {% else %}
     <div class="box" id="step-track">
         <h3>Check Order Status</h3>
         <form action="/check_order" method="POST">
@@ -120,7 +211,35 @@
             <button type="submit" class="btn-primary" style="background-color: var(--carbon);">Track My Order</button>
         </form>
     </div>
+    {% endif %}
 
+    <div id="price-confirm-modal" class="modal">
+        <div class="modal-backdrop" id="modal-backdrop"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <h3 id="modal-title">Estimated Price</h3>
+            <p id="modal-message">Loading...</p>
+            <div class="modal-actions">
+                <button type="button" id="modal-cancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="modal-confirm" class="btn-primary">Confirm Submission</button>
+            </div>
+        </div>
+    </div>
+    <div id="featured-order-modal" class="modal">
+        <div class="modal-backdrop" id="featured-modal-backdrop"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
+            <h3 id="featured-modal-title">Featured Print</h3>
+            <div id="featured-modal-image" style="height:220px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 14px;"></div>
+            <p id="featured-modal-description" style="margin: 0 0 12px 0; color: #444;"></p>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+                <div id="featured-modal-price" style="font-size: 1.7rem; font-weight: 800; color: var(--bambu-green);"></div>
+                <select id="featured-modal-filament" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; width: 180px;"></select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="featured-modal-cancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Order</button>
+            </div>
+        </div>
+    </div>
     <p style="font-size: 10px; color: #ccc; cursor: pointer;" onclick="localStorage.removeItem('seen_tour'); location.reload();">Reset Tutorial</p>
 
     <script>
@@ -172,6 +291,45 @@
             tour.drive();
         }
 
+        // Toggle search input for orders box
+        // prepare a simple JS flag based on whether the server passed a query
+        // This version uses quotes so the editor doesn't show an error
+        const _hasSearchQuery = "{{ search_query or '' }}" !== "" && "{{ search_query }}" !== "None";
+        let orderSubmitConfirmed = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const ordersToggle = document.getElementById('orders-search-toggle');
+            const ordersContainer = document.getElementById('orders-search-container');
+            const ordersInput = document.getElementById('orders-search-input');
+
+            if (ordersToggle && ordersContainer) {
+                ordersToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = ordersContainer.style.display === 'none' || ordersContainer.style.display === '';
+                    ordersContainer.style.display = isHidden ? 'block' : 'none';
+                    if (isHidden && ordersInput) ordersInput.focus();
+                });
+
+                // clicking outside will close the search box
+                document.addEventListener('click', (e) => {
+                    if (!ordersContainer.contains(e.target) && !ordersToggle.contains(e.target) && ordersContainer.style.display === 'block') {
+                        ordersContainer.style.display = 'none';
+                    }
+                });
+
+                // Escape to close
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && ordersContainer.style.display === 'block') ordersContainer.style.display = 'none';
+                });
+            }
+
+            // if there is a prefilled query, show search box automatically
+            if (_hasSearchQuery && ordersContainer && ordersInput) {
+                ordersContainer.style.display = 'block';
+                ordersInput.focus();
+            }
+        });
+
         // --- ORIGINAL FUNCTIONS WITH TOUR TRIGGERS ---
         function toggleInstructions() {
             const inst = document.getElementById('profile-instructions');
@@ -181,6 +339,105 @@
             if (tour.isActive() && tour.getActiveIndex() === 2) {
                 tour.moveNext();
             }
+        }
+
+        function toggleWeightInstructions() {
+            const inst = document.getElementById('weight-instructions');
+            inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+        }
+
+        let heroIndex = 0;
+        let heroTimer;
+
+        function startHeroRotation() {
+            const slides = document.querySelectorAll('.hero-slide');
+            const dotsContainer = document.getElementById('hero-dots');
+            if (!slides.length) return;
+
+            // Build dot indicators (one per slide) if not already present
+            if (dotsContainer && dotsContainer.children.length !== slides.length) {
+                dotsContainer.innerHTML = '';
+                slides.forEach((slide, i) => {
+                    const dot = document.createElement('button');
+                    dot.type = 'button';
+                    dot.className = 'hero-dot';
+                    dot.setAttribute('aria-label', `Show slide ${i + 1}`);
+                    dot.addEventListener('click', () => goToHeroSlide(i));
+                    dotsContainer.appendChild(dot);
+                });
+            }
+
+            showHeroSlide(heroIndex);
+            resetHeroTimer();
+        }
+
+        function resetHeroTimer() {
+            const slides = document.querySelectorAll('.hero-slide');
+            if (heroTimer) clearInterval(heroTimer);
+            heroTimer = setInterval(() => {
+                heroIndex = (heroIndex + 1) % slides.length;
+                showHeroSlide(heroIndex);
+            }, 5000);
+        }
+
+        function showHeroSlide(index) {
+            const slides = document.querySelectorAll('.hero-slide');
+            const dots = document.querySelectorAll('.hero-dot');
+            slides.forEach((slide, i) => {
+                slide.style.opacity = i === index ? '1' : '0';
+                slide.style.pointerEvents = i === index ? 'auto' : 'none';
+            });
+            if (dots.length) {
+                dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+            }
+        }
+
+        function goToHeroSlide(index) {
+            const slides = document.querySelectorAll('.hero-slide');
+            if (!slides.length) return;
+            const wrapped = ((index % slides.length) + slides.length) % slides.length;
+            heroIndex = wrapped;
+            showHeroSlide(heroIndex);
+            resetHeroTimer();
+        }
+
+        function openFeaturedModal(index, event) {
+            if (event) event.stopPropagation();
+            const slides = document.querySelectorAll('.hero-slide');
+            if (!slides[index]) return;
+            const item = JSON.parse(slides[index].dataset.item);
+            const modal = document.getElementById('featured-order-modal');
+            const img = document.getElementById('featured-modal-image');
+            const desc = document.getElementById('featured-modal-description');
+            const price = document.getElementById('featured-modal-price');
+            const filament = document.getElementById('featured-modal-filament');
+
+            img.style.backgroundImage = `url('${item.image_url}')`;
+            desc.textContent = item.description || '';
+            const priceValue = Number(item.price) || 0;
+            price.textContent = `Rp${priceValue.toLocaleString()}`;
+
+            // populate filament select
+            filament.innerHTML = '';
+            const currentColors = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
+            const recommended = item.suggested_filament || '';
+            currentColors.forEach(color => {
+                const opt = document.createElement('option');
+                opt.value = color;
+                opt.textContent = color;
+                if (recommended && color.toLowerCase() === recommended.toLowerCase()) opt.selected = true;
+                filament.appendChild(opt);
+            });
+
+            modal.dataset.featuredIndex = index;
+            modal.dataset.featuredId = item.id || '';
+            modal.classList.add('open');
+        }
+
+        function closeFeaturedModal() {
+            const modal = document.getElementById('featured-order-modal');
+            if (!modal) return;
+            modal.classList.remove('open');
         }
 
         function toggleColorMode(mode) {
@@ -217,6 +474,12 @@
         }
 
         document.getElementById('order-form').addEventListener('submit', function(evt) {
+            if (orderSubmitConfirmed) {
+                return; // already confirmed via modal
+            }
+
+            evt.preventDefault();
+
             // Client-side: ensure link belongs to allowed domains (scheme optional)
             const linkInput = document.getElementById('makerworld_link');
             const linkVal = linkInput ? linkInput.value.trim() : '';
@@ -224,16 +487,27 @@
             if (!allowedRe.test(linkVal)) {
                 alert('Please enter a makerworld.com or printables.com link (you may omit https://).');
                 if (linkInput) linkInput.focus();
-                evt.preventDefault();
                 return;
             }
+
+            // Verify weight (optional)
+            const weightInput = document.getElementById('model_weight');
+            const weightRaw = weightInput ? weightInput.value.trim() : '';
+            const weightVal = weightRaw ? parseFloat(weightRaw) : NaN;
+            if (weightRaw && (Number.isNaN(weightVal) || weightVal <= 0)) {
+                alert('Please enter a valid model weight (in grams) as shown in the MakerWorld popup.');
+                if (weightInput) weightInput.focus();
+                return;
+            }
+
+            // Validate color selections
             const mode = document.querySelector('input[name="color_mode"]:checked').value;
             if (mode === 'single') {
                 const sel = document.querySelector('select[name="single_filament"]');
                 if (sel && !sel.value) {
                     alert('Please choose a filament color.');
                     sel.focus();
-                    evt.preventDefault();
+                    return;
                 }
             } else {
                 const rows = document.querySelectorAll('#color-mappings .mapping-row');
@@ -242,11 +516,150 @@
                     const fil = row.querySelector('select[name="mapped_filament[]"]');
                     if (!part.value.trim() || !fil.value) {
                         alert('Please fill out every part and filament when using multi-color.');
-                        evt.preventDefault();
                         return;
                     }
                 }
             }
+
+            // If weight is provided, show estimated price confirmation
+            if (weightRaw) {
+                const estimatedRaw = weightVal * 154 * 2.5; // grams * 154 * 2.5
+                const estimated = Math.ceil(estimatedRaw / 5000) * 5000;
+                const formatted = estimated.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+                // Show confirmation modal
+                const modal = document.getElementById('price-confirm-modal');
+                const messageEl = document.getElementById('modal-message');
+                messageEl.innerHTML = `<span class="price-estimate">Rp${formatted}</span>`;
+                modal.classList.add('open');
+
+                const closeModal = () => {
+                    modal.classList.remove('open');
+                };
+
+                const confirmBtn = document.getElementById('modal-confirm');
+                const cancelBtn = document.getElementById('modal-cancel');
+
+                const onConfirm = () => {
+                    orderSubmitConfirmed = true;
+                    closeModal();
+                    document.getElementById('order-form').submit();
+                };
+
+                const onCancel = () => {
+                    closeModal();
+                };
+
+                confirmBtn.addEventListener('click', onConfirm, { once: true });
+                cancelBtn.addEventListener('click', onCancel, { once: true });
+
+                const backdrop = document.getElementById('modal-backdrop');
+                if (backdrop) backdrop.addEventListener('click', onCancel, { once: true });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && modal.style.display === 'block') {
+                        onCancel();
+                    }
+                }, { once: true });
+
+                return;
+            }
+
+            // If no weight provided, just submit directly
+            orderSubmitConfirmed = true;
+            document.getElementById('order-form').submit();
+
+            const closeModal = () => {
+                modal.classList.remove('open');
+            };
+
+            const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
+
+            const onConfirm = () => {
+                orderSubmitConfirmed = true;
+                closeModal();
+                document.getElementById('order-form').submit();
+            };
+
+            const onCancel = () => {
+                closeModal();
+            };
+
+            confirmBtn.addEventListener('click', onConfirm, { once: true });
+            cancelBtn.addEventListener('click', onCancel, { once: true });
+
+            const backdrop = document.getElementById('modal-backdrop');
+            if (backdrop) backdrop.addEventListener('click', onCancel, { once: true });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modal.style.display === 'block') {
+                    onCancel();
+                }
+            }, { once: true });
+        });
+
+        // Featured modal handlers
+        document.getElementById('featured-modal-cancel').addEventListener('click', () => closeFeaturedModal());
+        document.getElementById('featured-modal-backdrop').addEventListener('click', () => closeFeaturedModal());
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeFeaturedModal();
+        });
+
+        document.getElementById('featured-modal-confirm').addEventListener('click', async () => {
+            const modal = document.getElementById('featured-order-modal');
+            const index = parseInt(modal.dataset.featuredIndex, 10);
+            const slides = document.querySelectorAll('.hero-slide');
+            const item = slides[index] ? JSON.parse(slides[index].dataset.item) : null;
+            if (!item) return;
+
+            const filament = document.getElementById('featured-modal-filament').value;
+            const btn = document.getElementById('featured-modal-confirm');
+            const originalText = btn.textContent;
+            btn.textContent = 'Sending...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/create_featured_order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: item.title,
+                        makerworld_link: item.makerworld_url,
+                        price: item.price,
+                        filament: filament,
+                        suggested_colors: filament,
+                        item_id: item.id
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.order_id) {
+                    window.location.href = `/order/${data.order_id}`;
+                } else {
+                    alert(data.error || 'Unable to create order.');
+                }
+            } catch (err) {
+                alert('Failed to create order. Please try again.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // Start hero rotation
+        document.addEventListener('DOMContentLoaded', () => {
+            startHeroRotation();
+            document.querySelector('.hero-arrow-left')?.addEventListener('click', () => goToHeroSlide(heroIndex - 1));
+            document.querySelector('.hero-arrow-right')?.addEventListener('click', () => goToHeroSlide(heroIndex + 1));
+            
+            // Add event listeners to featured order buttons
+            document.querySelectorAll('.featured-order-btn').forEach(btn => {
+                btn.addEventListener('click', (event) => {
+                    const slide = btn.closest('.hero-slide');
+                    const index = parseInt(slide.dataset.index, 10);
+                    openFeaturedModal(index, event);
+                });
+            });
         });
     </script>
 </body>

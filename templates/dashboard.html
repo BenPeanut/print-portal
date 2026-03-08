@@ -103,6 +103,66 @@
             </form>
         </div>
 
+        <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+                <h3 style="margin: 0;">Featured Suggestions</h3>
+                <button type="button" id="openFeaturedModalBtn" style="background: var(--bambu-green); color: white; border: none; border-radius: 4px; cursor: pointer; padding: 10px 16px; font-weight: bold;">Add Suggested Print</button>
+            </div>
+            <p style="margin: 10px 0 8px; color: #555; font-size: 0.95rem;">Use an image URL (from Imgur, a CDN, or any publicly accessible image link) and a MakerWorld link so visitors can click into the print.</p>
+
+            {% if featured_prints %}
+            <div style="margin-top: 12px;">
+                <strong>Active Featured Items:</strong>
+                <ul style="margin: 10px 0 0 16px; padding: 0; list-style: disc;">
+                    {% for item in featured_prints %}
+                    <li style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                        <div style="flex: 1;">
+                            <strong>{{ item.title }}</strong> <span style="color:#666;">(Rp{{ "{:,}".format(item.price|int) }})</span><br>
+                            <small style="color:#666;">{{ item.description }}</small><br>
+                            <small style="color:#666;">Target: {% if item.target_user == 'ALL' %}All users{% else %}{{ user_map.get(item.target_user, 'Unknown user') }}{% endif %}</small>
+                        </div>
+                        <form action="/dashboard/featured/delete/{{ item.id }}" method="POST" style="margin: 0;">
+                            <button type="submit" class="btn-delete-box">Remove</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            <div style="margin-top: 12px; color: #555;">No featured prints yet. Click "Add Suggested Print" to create one.</div>
+            {% endif %}
+        </div>
+
+        <!-- Featured Print Modal -->
+        <div id="featured-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-box" style="max-width: 500px; width: 100%;">
+                <h2 style="margin-top: 0;">Add Featured Print</h2>
+                <p style="margin: 0 0 12px; color:#555;">Fill in the info below and click Save.</p>
+                <form action="/dashboard/featured" method="POST" style="display: grid; gap: 10px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="text" name="title" placeholder="Title" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <input type="text" name="price" placeholder="Price (numbers)" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <input type="text" name="image_url" placeholder="Image URL" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <input type="text" name="makerworld_url" placeholder="MakerWorld URL" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <textarea name="description" placeholder="Short description" rows="2" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="text" name="suggested_filament" placeholder="Suggested Filament" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <select name="target_user" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="ALL">For all users</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">For {{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+                        <button type="button" id="closeFeaturedModalBtn" class="btn-secondary" style="width: auto;">Cancel</button>
+                        <button type="submit" class="btn-primary" style="width: auto;">Save Featured Item</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <table class="admin-table">
             <thead>
                 <tr>
@@ -123,7 +183,8 @@
 
                     <td>
                         <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong><br>
-                        <small style="color:#888;">ID: {{ order.id }}</small>
+                        <small style="color:#888;">ID: {{ order.id }}</small><br>
+                        <small style="color:#888;">User: {{ user_map.get(order.get('owner'), 'unknown') }}</small>
                     </td>
 
                     <td>
@@ -307,6 +368,17 @@
                     }
                 });
             }).catch(err => { console.error(err); alert('Failed to send'); });
+        });
+
+        // Featured modal open/close
+        document.getElementById('openFeaturedModalBtn')?.addEventListener('click', () => {
+            document.getElementById('featured-modal').style.display = 'flex';
+        });
+        document.getElementById('closeFeaturedModalBtn')?.addEventListener('click', () => {
+            document.getElementById('featured-modal').style.display = 'none';
+        });
+        document.getElementById('featured-modal')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
         });
 
         // Admin unread polling - check messages for all orders and update badges
