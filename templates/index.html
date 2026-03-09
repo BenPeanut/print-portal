@@ -230,8 +230,19 @@
             <h3 id="featured-modal-title">Featured Print</h3>
             <div id="featured-modal-image" style="height:220px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 14px;"></div>
             <p id="featured-modal-description" style="margin: 0 0 12px 0; color: #444;"></p>
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
                 <div id="featured-modal-price" style="font-size: 1.7rem; font-weight: 800; color: var(--bambu-green);"></div>
+                <div style="display:flex; flex-direction:column; gap: 6px;">
+                    <label style="font-size: 0.85rem; margin: 0;">Print Profile</label>
+                    <select id="featured-modal-profile" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; width: 180px;"></select>
+                </div>
+            </div>
+            <div id="featured-modal-suggested-colors" style="margin-bottom: 10px; display:none; font-size: 0.9rem;">
+                <strong>Suggested Colors:</strong>
+                <div id="featured-modal-color-pills" style="margin-top: 6px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+            </div>
+            <div id="featured-modal-filament-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+                <div style="font-size: 0.85rem;">Choose Filament</div>
                 <select id="featured-modal-filament" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; width: 180px;"></select>
             </div>
             <div class="modal-actions">
@@ -417,6 +428,27 @@
             const priceValue = Number(item.price) || 0;
             price.textContent = `Rp${priceValue.toLocaleString()}`;
 
+            // populate profile selector
+            const profileSelect = document.getElementById('featured-modal-profile');
+            const suggestedProfile = (item.suggested_profile || item.profile || '1').toString();
+            const rawProfileOptions = item.profile_options || [];
+            let profileOptions = [];
+            if (Array.isArray(rawProfileOptions)) profileOptions = rawProfileOptions;
+            else if (typeof rawProfileOptions === 'string' && rawProfileOptions.trim()) {
+                profileOptions = rawProfileOptions.split(',').map(p => p.trim()).filter(Boolean);
+            }
+            if (!profileOptions.length) profileOptions = [suggestedProfile];
+            if (!profileOptions.includes(suggestedProfile)) profileOptions.unshift(suggestedProfile);
+
+            profileSelect.innerHTML = '';
+            profileOptions.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                if (p === suggestedProfile) opt.selected = true;
+                profileSelect.appendChild(opt);
+            });
+
             // populate filament select
             filament.innerHTML = '';
             const currentColors = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
@@ -428,6 +460,25 @@
                 if (recommended && color.toLowerCase() === recommended.toLowerCase()) opt.selected = true;
                 filament.appendChild(opt);
             });
+
+            // show suggested color pills (multi-color defaults)
+            const suggestedColorsString = (item.suggested_colors || item.suggested_filament || '').toString();
+            const colorsContainer = document.getElementById('featured-modal-suggested-colors');
+            const pillsContainer = document.getElementById('featured-modal-color-pills');
+            if (suggestedColorsString && suggestedColorsString.includes('|')) {
+                colorsContainer.style.display = 'block';
+                pillsContainer.innerHTML = '';
+                suggestedColorsString.split(' | ').map(s => s.trim()).filter(Boolean).forEach(seg => {
+                    const pill = document.createElement('span');
+                    pill.className = 'color-pill';
+                    pill.textContent = seg;
+                    pillsContainer.appendChild(pill);
+                });
+                document.getElementById('featured-modal-filament-row').style.display = 'none';
+            } else {
+                colorsContainer.style.display = 'none';
+                document.getElementById('featured-modal-filament-row').style.display = 'flex';
+            }
 
             modal.dataset.featuredIndex = index;
             modal.dataset.featuredId = item.id || '';
@@ -614,6 +665,10 @@
             if (!item) return;
 
             const filament = document.getElementById('featured-modal-filament').value;
+            const profile = document.getElementById('featured-modal-profile')?.value || '1';
+            const suggestedColorsFromItem = (item.suggested_colors || item.suggested_filament || '').toString();
+            const suggested_colors = suggestedColorsFromItem && suggestedColorsFromItem.includes('|') ? suggestedColorsFromItem : filament;
+
             const btn = document.getElementById('featured-modal-confirm');
             const originalText = btn.textContent;
             btn.textContent = 'Sending...';
@@ -628,7 +683,8 @@
                         makerworld_link: item.makerworld_url,
                         price: item.price,
                         filament: filament,
-                        suggested_colors: filament,
+                        profile: profile,
+                        suggested_colors: suggested_colors,
                         item_id: item.id
                     })
                 });

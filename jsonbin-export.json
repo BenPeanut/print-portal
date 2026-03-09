@@ -1,0 +1,405 @@
+{
+  "orders": [
+    {
+      "id": "312050b5",
+      "name": "Unnamed Order",
+      "link": "https://makerworld.com/en/models/839922-pokeball?from=search#profileId-785849",
+      "profile": "1",
+      "color": "Plate 1: Red PLA | Plate 2: Dark Blue PLA | Plate 3: White PLA",
+      "status": "Waiting for Approval",
+      "print_price": "19000",
+      "material_fee": "1000",
+      "delivery_time": "December 24, 2026",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "Hello",
+          "ts": "2026-02-24T12:41:26.446821Z"
+        },
+        {
+          "sender": "user",
+          "text": "Hello?",
+          "ts": "2026-02-24T12:41:51.367691Z"
+        },
+        {
+          "sender": "user",
+          "text": "Hello?",
+          "ts": "2026-02-24T12:42:03.411478Z"
+        },
+        {
+          "sender": "user",
+          "text": "hello skibidi toilet",
+          "ts": "2026-02-24T12:48:41.430135Z"
+        }
+      ]
+    },
+    {
+      "id": "80dd3af7",
+      "name": "shotgun",
+      "product_name": "Break Action Shotgun Keychain Functional Blaster",
+      "admin_note": "",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "For this, I am not exactly sure how much it will cost yet, because I need to find some of the items required to make it from tokopedia.",
+          "ts": "2026-02-25T04:42:25.776372Z"
+        },
+        {
+          "sender": "user",
+          "text": "ok",
+          "ts": "2026-02-26T03:38:21.509164Z"
+        },
+        {
+          "sender": "user",
+          "text": "ok",
+          "ts": "2026-02-26T03:38:24.919591Z"
+        },
+        {
+          "sender": "user",
+          "text": "ok",
+          "ts": "2026-02-26T03:38:26.917198Z"
+        },
+        {
+          "sender": "user",
+          "text": "ok",
+          "ts": "2026-02-26T03:38:30.104358Z"
+        },
+        {
+          "sender": "user",
+          "text": "ok",
+          "ts": "2026-02-26T03:38:32.868024Z"
+        },
+        {
+          "sender": "admin",
+          "text": "Are you sure you want the entire shotgun to be black?",
+          "ts": "2026-03-02T07:01:53.354091Z"
+        },
+        {
+          "sender": "admin",
+          "text": "Also, would you like me to purchase the keychain for you? Or would you like to purchase that yourself?",
+          "ts": "2026-03-02T07:03:18.061736Z"
+        }
+      ],
+      "link": "https://makerworld.com/en/models/700968-break-action-shotgun-keychain-functional-blaster?from=search#profileId-630414",
+      "profile": "1",
+      "color": "Black PLA (OOS)",
+      "status": "Waiting for Approval",
+      "print_price": "7200",
+      "material_fee": "25000",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "4e54fb8a",
+      "name": "Unnamed Order",
+      "owner": "f5923935",
+      "product_name": "The Batman 2022 Baterang",
+      "admin_note": "",
+      "messages": [
+        {
+          "sender": "admin",
+          "text": "Ok I will start looking into this for the cost. You can expect a quote by around march 3",
+          "ts": "2026-03-02T06:53:35.262788Z"
+        },
+        {
+          "sender": "admin",
+          "text": "Also, it seems like on the original model, the highlights are orange. Are you sure you want them yellow?",
+          "ts": "2026-03-02T06:55:00.820227Z"
+        },
+        {
+          "sender": "user",
+          "text": "yes",
+          "ts": "2026-03-02T06:57:04.869666Z"
+        },
+        {
+          "sender": "admin",
+          "text": "ok 👍",
+          "ts": "2026-03-02T06:58:02.857966Z"
+        },
+        {
+          "sender": "admin",
+          "text": "check the price and tell me if you approve",
+          "ts": "2026-03-02T07:00:24.864057Z"
+        },
+        {
+          "sender": "user",
+          "text": "good",
+          "ts": "2026-03-02T07:00:36.666292Z"
+        },
+        {
+          "sender": "admin",
+          "text": "No, I mean you can press the approve button. That way I am sure that you want me to make it.",
+          "ts": "2026-03-02T07:01:06.370564Z"
+        }
+      ],
+      "link": "https://makerworld.com/en/models/1063933-the-batman-2022-baterang?from=search#profileId-1052639",
+      "profile": "1",
+      "color": "The body: Black PLA (OOS) | Yellow Highlights: Lemon Yellow PLA",
+      "status": "Waiting for Approval",
+      "print_price": "13000",
+      "material_fee": "2000",
+      "delivery_time": "TBD (Vendor does not have black filament yet)"
+    },
+    {
+      "id": "4e6fc71a",
+      "name": "George, can i see what it looks like before you make it :)",
+      "product_name": "Chelsea F C With The Skyline Of London",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/729779-chelsea-f-c-with-the-skyline-of-london?from=search#profileId-770787",
+      "profile": "1",
+      "color": "blue: White PLA",
+      "status": "Waiting for Approval",
+      "print_price": "65000",
+      "material_fee": "0",
+      "delivery_time": "March 13, 2026"
+    },
+    {
+      "id": "0320801b",
+      "name": "Unnamed Order",
+      "owner": "51455ad2",
+      "product_name": "Basketball Wall Mount Board",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/2259034-basketball-wall-mount-board?from=search#profileId-2461103",
+      "profile": "1",
+      "color": "white: White PLA | red lines: Red PLA",
+      "status": "Waiting for Approval",
+      "print_price": "80000",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "c2b6eb93",
+      "name": "Break Action Shotgun Keychain Functional Blaster",
+      "nickname": null,
+      "owner": "a4fcc38b",
+      "product_name": "Break Action Shotgun Keychain Functional Blaster",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/700968-break-action-shotgun-keychain-functional-blaster?from=search#profileId-630414",
+      "profile": "profile 1",
+      "color": "what it looks like in the picture: Olive Green PLA",
+      "status": "Pending Quote",
+      "print_price": "0",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "260e2eaa",
+      "name": "Garage Mini People Figures For 1 64 And Bigger",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "Garage Mini People Figures For 1 64 And Bigger",
+      "admin_note": "I don't think that these would be a very good purchase because they are very very small. But I can print them if you actually want me to.",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/2355227-garage-mini-people-figures-for-1-64-and-bigger?from=search#profileId-2576194",
+      "profile": "1",
+      "color": "White PLA",
+      "status": "Pending Quote",
+      "print_price": "0",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "66fd2ec4",
+      "name": "Car Lift 1 18 Scale Automotive Lift For Diorama",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "Car Lift 1 18 Scale Automotive Lift For Diorama",
+      "admin_note": "This will require putting together, but it should be simple, and I can help you put it together at school.",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/850972-car-lift-1-18-scale-automotive-lift-for-diorama?from=search#profileId-804584",
+      "profile": "1",
+      "color": "Black PLA (OOS)",
+      "status": "Waiting for Approval",
+      "print_price": "5000",
+      "material_fee": "0",
+      "delivery_time": "March 11"
+    },
+    {
+      "id": "1648af47",
+      "name": "Car Lift For 1 64 1 64 Cars Die Cast",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "Car Lift For 1 64 1 64 Cars Die Cast",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/1668183-car-lift-for-1-64-1-64-cars-die-cast?from=search#profileId-1765766",
+      "profile": "1",
+      "color": "Black PLA (OOS)",
+      "status": "Waiting for Approval",
+      "print_price": "10000",
+      "material_fee": "0",
+      "delivery_time": "March 11-12"
+    },
+    {
+      "id": "6bb07f43",
+      "name": "Hot Wheels 1 64 Scale Dyno",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "Hot Wheels 1 64 Scale Dyno",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/1236231-hot-wheels-1-64-scale-dyno?from=search#profileId-1255888",
+      "profile": "1",
+      "color": "Dark Blue PLA",
+      "status": "Pending Quote",
+      "print_price": "0",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "67ea0e9a",
+      "name": "10 Parts For Garage 1 64 Scale Couch Table",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "10 Parts For Garage 1 64 Scale Couch Table",
+      "admin_note": "I can try to match the colors as closely as possible, or you can tell me in G-Chat which you want for each original color.",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/1904175-10-parts-for-garage-1-64-scale-couch-table?from=search#profileId-2041226",
+      "profile": "1",
+      "color": "Olive Green PLA",
+      "status": "Waiting for Approval",
+      "print_price": "10000",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "d95a51bf",
+      "name": "Print In Place Hotwheelauto Transpor 1 64 Trailer",
+      "nickname": null,
+      "owner": "51455ad2",
+      "product_name": "Print In Place Hotwheelauto Transpor 1 64 Trailer",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/553144-print-in-place-hotwheelauto-transpor-1-64-trailer?from=search#profileId-1188417",
+      "profile": "1",
+      "color": "Black PLA (OOS)",
+      "status": "Pending Quote",
+      "print_price": "0",
+      "material_fee": "0",
+      "delivery_time": "TBD"
+    },
+    {
+      "id": "120866f7",
+      "name": "Xbox Series S X Controller Stand",
+      "nickname": null,
+      "owner": "9a8f22eb",
+      "product_name": "Xbox Series S X Controller Stand",
+      "admin_note": "",
+      "messages": [],
+      "link": "https://makerworld.com/en/models/1055921-xbox-series-s-x-controller-stand?from=search#profileId-1043411",
+      "profile": "1",
+      "color": "Black PLA (OOS)",
+      "status": "Printing",
+      "print_price": "15000",
+      "material_fee": "0",
+      "delivery_time": "March 10"
+    }
+  ],
+  "settings": {
+    "filaments": [
+      "Olive Green PLA",
+      "White PLA",
+      "Red PLA",
+      "Orange PLA",
+      "Cyan PLA",
+      "Green & Black Gradient PLA",
+      "Lemon Yellow PLA",
+      "Dark Yellow PLA",
+      "Dark Blue PLA",
+      "Black PLA"
+    ]
+  },
+  "users": [
+    {
+      "id": "768cc933",
+      "username": "Ben",
+      "password_hash": "scrypt:32768:8:1$0f2CUsStLfBuYFv8$3db16c44f435aa28925eefdfebcce104b94596d4feb29474440abaa8bb43e9424cff7735e356adfe9f3d38468478ad1a9999f88457a0ea6df6172e6d673a0210",
+      "created_at": "2026-03-08T05:28:29.366158"
+    },
+    {
+      "id": "7899e198",
+      "username": "heschle",
+      "password_hash": "scrypt:32768:8:1$wNVLNUq8pJf2GGhC$bdeae68c41b665bef2e895a776d63a27a67009220627446d4db5b695042658a6cb87b5a74f56f662a34f0897b77c192cd98c7e0a63c687d3561b94abd599403f",
+      "created_at": "2026-03-08T12:02:03.427921"
+    },
+    {
+      "id": "51455ad2",
+      "username": "David_Oh",
+      "password_hash": "scrypt:32768:8:1$LkAgq7DdXJMI4PEi$f870031d01bd53f7135bc29403b6794d9a07fd5c11b31406cec309aa1d59b5ac60ee7e50b200597228b08b6da7126e6b1b80254505c8fbb5f01db462a11da802",
+      "created_at": "2026-03-09T00:43:23.409607"
+    },
+    {
+      "id": "f5923935",
+      "username": "Elias G",
+      "password_hash": "scrypt:32768:8:1$hoQ2oOMZQipBE8YH$c1f4b6e035d871ab276b894cedab15bb948614e758d5bbd1ddfeb9c445505bb361ff9855dfc875fdb0e774a58738770e2d141e3bdeaa69e6556ec0db7f91833e",
+      "created_at": "2026-03-09T00:43:43.201564"
+    },
+    {
+      "id": "a4fcc38b",
+      "username": "Edgar",
+      "password_hash": "scrypt:32768:8:1$h6ss3I6iMoFIJW0I$12611037d2ea970b5b5730f6540649ddb73d0c9dd1dfa0e356a89de6e5ef09e7d9966f5a5c3754213cb9fe0475825ccda40dd68564b4a0fb213b685744f46226",
+      "created_at": "2026-03-09T04:27:29.911452"
+    },
+    {
+      "id": "9a8f22eb",
+      "username": "nathan s",
+      "password_hash": "scrypt:32768:8:1$GHj5cvKald2pAmp5$9fa1abd6232aeee66061869c2f462caa9bdffd362ff2ff364d30b7ffa4bc68de73bad0746816abc0a06eed4d66fc5c30223b5cfe2901f464c3bf2c2db4e34b14",
+      "created_at": "2026-03-09T08:14:28.213602"
+    }
+  ],
+  "featured_prints": [
+    {
+      "id": "2d71bb54-2",
+      "title": "67 Pencil Topper",
+      "image_url": "https://makerworld.bblmw.com/makerworld/model/US9b31f9cc3a8529/design/2025-05-12_377f878097b68.jpeg?x-oss-process=image/resize,w_1000/format,webp",
+      "makerworld_url": "https://makerworld.com/en/models/1411565-6-7-pencil-topper?from=search#profileId-1465380",
+      "description": "A 67 topper for your pencil",
+      "price": 5000,
+      "suggested_filament": "Orange PLA",
+      "target_user": "ALL"
+    },
+    {
+      "id": "56f9cc41-7",
+      "title": "Spinning Collapsing Katana",
+      "image_url": "https://makerworld.bblmw.com/makerworld/model/USad2ebc5b97e516/design/2025-07-28_f7a4d0a5456f18.gif?x-oss-process=image/resize,w_1000/format,webp",
+      "makerworld_url": "https://makerworld.com/en/models/1646935-collapsing-katana-tian-xuan-celestial-spiral?from=search#profileId-1740708",
+      "description": "A collapsible spinning katana",
+      "price": 55000,
+      "suggested_filament": "Green & Black Gradient PLA",
+      "target_user": "ALL"
+    },
+    {
+      "id": "a24aa596-5",
+      "title": "Trax Fidget",
+      "image_url": "https://makerworld.bblmw.com/makerworld/model/USc4ef574ac7d881/design/d8cefc1aa6130d7a.png?x-oss-process=image/resize,w_1000/format,webp",
+      "makerworld_url": "https://makerworld.com/en/models/2325060-trax-antistress-fidget-toy?from=search#profileId-2539739",
+      "description": "A small, satisfying fidget",
+      "price": 15000,
+      "suggested_filament": "Olive Green PLA",
+      "target_user": "ALL"
+    },
+    {
+      "id": "b0114ec7-7",
+      "title": "Trump Card",
+      "image_url": "https://makerworld.bblmw.com/makerworld/model/US2cb09ea19d2ddc/design/2025-11-21_2fb7e120a3154.jpg?x-oss-process=image/resize,w_1000/format,webp",
+      "makerworld_url": "https://makerworld.com/en/models/2024409-birthday-card-make-birthday-great-again?from=recommend#profileId-2182424",
+      "description": "A Trump birthday card",
+      "price": 20000,
+      "suggested_filament": "white PLA",
+      "target_user": "a4fcc38b"
+    },
+    {
+      "id": "7f5d8395-1",
+      "title": "Xbox Controller Stand",
+      "image_url": "https://makerworld.bblmw.com/makerworld/model/USfd1551fa7bc2/design/2023-08-22_0c275585d7a0b.jpg?x-oss-process=image/resize,w_1000/format,webp",
+      "makerworld_url": "https://makerworld.com/en/models/13620-minimalistic-xbox-controller-stand?from=search#profileId-17983",
+      "description": "An Xbox controller stand",
+      "price": 20000,
+      "suggested_filament": "Black PLA (OOS)",
+      "target_user": "f5923935"
+    }
+  ],
+  "featured_items": []
+}

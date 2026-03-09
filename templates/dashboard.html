@@ -138,7 +138,7 @@
             <div class="modal-box" style="max-width: 500px; width: 100%;">
                 <h2 style="margin-top: 0;">Add Featured Print</h2>
                 <p style="margin: 0 0 12px; color:#555;">Fill in the info below and click Save.</p>
-                <form action="/dashboard/featured" method="POST" style="display: grid; gap: 10px;">
+                <form id="featured-item-form" action="/dashboard/featured" method="POST" style="display: grid; gap: 10px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <input type="text" name="title" placeholder="Title" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                         <input type="text" name="price" placeholder="Price (numbers)" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
@@ -146,15 +146,52 @@
                     <input type="text" name="image_url" placeholder="Image URL" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                     <input type="text" name="makerworld_url" placeholder="MakerWorld URL" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                     <textarea name="description" placeholder="Short description" rows="2" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <input type="text" name="suggested_filament" placeholder="Suggested Filament" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <input type="text" name="suggested_profile" placeholder="Default Profile (e.g. 1)" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <input type="text" name="profile_options" placeholder="Profile options (comma-separated)" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+
+                    <div style="border: 1px solid #ddd; border-radius: 8px; padding: 12px;">
+                        <label style="font-weight: 600; display: block; margin-bottom: 6px;">Suggested Color(s)</label>
+                        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 10px;">
+                            <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleFeaturedColorMode('single')"> Single color</label>
+                            <label style="cursor:pointer;"><input type="radio" name="color_mode" value="multi" onclick="toggleFeaturedColorMode('multi')"> Multi-color (parts)</label>
+                        </div>
+
+                        <div id="featured-single-color" style="margin-bottom: 10px;">
+                            <input id="featured-suggested-filament" type="text" name="suggested_filament" placeholder="Suggested Filament (e.g. PLA)" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                        </div>
+
+                        <div id="featured-multi-color" style="display:none; background: #f9f9f9; padding: 12px; border-radius: 8px;">
+                            <p style="margin: 0 0 10px 0; font-size: 0.85em; color: #555;">Define parts and the filament for each.</p>
+                            <div id="featured-mappings">
+                                <div class="mapping-row" style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+                                    <input type="text" class="part-name" placeholder="Part name (e.g. Body)" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <select class="part-filament" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                        {% for color in filaments %}
+                                        <option value="{{ color }}">{{ color }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn-delete-box" style="width:auto; padding: 8px 10px;" onclick="removeFeaturedMappingRow(this)">✕</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-secondary" style="margin-top: 10px;" onclick="addFeaturedMappingRow()">+ Add Part</button>
+                        </div>
+
+                        <input type="hidden" name="suggested_colors" id="suggested_colors_input">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <select name="target_user" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                             <option value="ALL">For all users</option>
                             {% for u in users %}
                             <option value="{{ u.id }}">For {{ u.username }}</option>
                             {% endfor %}
                         </select>
+                        <div></div>
                     </div>
+
                     <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
                         <button type="button" id="closeFeaturedModalBtn" class="btn-secondary" style="width: auto;">Cancel</button>
                         <button type="submit" class="btn-primary" style="width: auto;">Save Featured Item</button>
@@ -196,8 +233,11 @@
                             <div class="color-container">
                                 <span class="color-pill" style="font-weight:600; background:#e2e8f0; color:#495057;">Color</span>
                                 {# split on the delimiter used by server, fall back to full string #}
-                                {% for segment in order.color.split(' | ') %}
+                                {% for raw in order.color.split('|') %}
+                                {% set segment = raw|trim %}
+                                {% if segment %}
                                 <span class="color-pill">{{ segment }}</span>
+                                {% endif %}
                                 {% endfor %}
                             </div>
                             {% endif %}
@@ -373,6 +413,8 @@
         // Featured modal open/close
         document.getElementById('openFeaturedModalBtn')?.addEventListener('click', () => {
             document.getElementById('featured-modal').style.display = 'flex';
+            // initialize the hidden suggested colors field based on current mode
+            updateFeaturedSuggestedColors();
         });
         document.getElementById('closeFeaturedModalBtn')?.addEventListener('click', () => {
             document.getElementById('featured-modal').style.display = 'none';
@@ -404,6 +446,64 @@
 
         if (!window.adminUnreadInterval) window.adminUnreadInterval = setInterval(updateAdminUnreadCounts, 8000);
         updateAdminUnreadCounts();
+
+        // Featured print helper functions (multi-color + suggested colors)
+        function toggleFeaturedColorMode(mode) {
+            const single = document.getElementById('featured-single-color');
+            const multi = document.getElementById('featured-multi-color');
+            if (!single || !multi) return;
+            single.style.display = mode === 'multi' ? 'none' : 'block';
+            multi.style.display = mode === 'multi' ? 'block' : 'none';
+            updateFeaturedSuggestedColors();
+        }
+
+        function addFeaturedMappingRow() {
+            const container = document.getElementById('featured-mappings');
+            if (!container) return;
+            const row = document.createElement('div');
+            row.className = 'mapping-row';
+            row.style.display = 'flex';
+            row.style.gap = '10px';
+            row.style.alignItems = 'center';
+            row.style.marginBottom = '10px';
+            const templateSelect = document.querySelector('#featured-mappings select.part-filament');
+            const optionsHtml = templateSelect ? Array.from(templateSelect.options).map(o => `<option value="${o.value}">${o.text}</option>`).join('') : '';
+            row.innerHTML = `
+                <input type="text" class="part-name" placeholder="Part name (e.g. Body)" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <select class="part-filament" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">${optionsHtml}</select>
+                <button type="button" class="btn-delete-box" style="width:auto; padding: 8px 10px;" onclick="removeFeaturedMappingRow(this)">✕</button>
+            `;
+            container.appendChild(row);
+            updateFeaturedSuggestedColors();
+        }
+
+        function removeFeaturedMappingRow(button) {
+            const row = button?.closest('.mapping-row');
+            if (row) row.remove();
+            updateFeaturedSuggestedColors();
+        }
+
+        function updateFeaturedSuggestedColors() {
+            const hidden = document.getElementById('suggested_colors_input');
+            if (!hidden) return;
+            const mode = document.querySelector('input[name="color_mode"]:checked')?.value;
+            if (mode === 'multi') {
+                const rows = Array.from(document.querySelectorAll('#featured-mappings .mapping-row'));
+                const parts = rows.map(r => {
+                    const part = r.querySelector('.part-name')?.value.trim();
+                    const filament = r.querySelector('.part-filament')?.value.trim();
+                    return part && filament ? `${part}: ${filament}` : null;
+                }).filter(Boolean);
+                hidden.value = parts.join(' | ');
+            } else {
+                const single = document.getElementById('featured-suggested-filament');
+                hidden.value = single ? single.value.trim() : '';
+            }
+        }
+
+        document.getElementById('featured-item-form')?.addEventListener('input', (e) => {
+            if (e.target.matches('input, select')) updateFeaturedSuggestedColors();
+        });
     </script>
 </body>
 </html>

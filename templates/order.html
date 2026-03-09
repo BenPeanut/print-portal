@@ -132,9 +132,12 @@
                 <p><strong>Print Profile:</strong> {{ order.profile }}</p>
                 {% if order.color %}
                 <p><strong>Color(s):</strong>
-                    {% set segments = order.color.split(' | ') %}
-                    {% for seg in segments %}
+                    {% set segments = order.color.split('|') %}
+                    {% for raw in segments %}
+                        {% set seg = raw|trim %}
+                        {% if seg %}
                         <span class="color-pill">{{ seg }}</span>
+                        {% endif %}
                     {% endfor %}
                 </p>
                 {% endif %}

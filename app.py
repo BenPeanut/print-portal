@@ -1,6 +1,8 @@
+import argparse
 import os
-import requests
+import sqlite3
 import uuid
+import json
 from urllib.parse import urlparse, unquote
 import re
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -11,32 +13,152 @@ app = Flask(__name__)
 
 # --- CONFIGURATION ---
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_testing_key')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin') 
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 
-BIN_ID = os.environ.get('BIN_ID')
-API_KEY = os.environ.get('API_KEY')
-
-BASE_URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
-HEADERS = {"X-Master-Key": API_KEY, "Content-Type": "application/json"}
+# SQLite local database file path
+DB_PATH = os.path.join(os.path.dirname(__file__), 'data.sqlite3')
 
 # --- DATABASE HELPERS ---
+
+def _execute(query, params=(), fetch=False):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute(query, params)
+    if fetch:
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+    conn.commit()
+    conn.close()
+    return None
+
+
+def _init_db():
+    # Create tables if they don't exist
+    _execute(
+        """
+        CREATE TABLE IF NOT EXISTS settings (
+            name TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+    _execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        )
+        """
+    )
+    _execute(
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        )
+        """
+    )
+    _execute(
+        """
+        CREATE TABLE IF NOT EXISTS featured_prints (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _load_all():
+    _init_db()
+
+    settings = {"filaments": []}
+    row = _execute("SELECT value FROM settings WHERE name = ?", ("settings",), fetch=True)
+    if row:
+        try:
+            settings = json.loads(row[0][0])
+        except Exception:
+            pass
+
+    users = []
+    for r in _execute("SELECT json FROM users", fetch=True):
+        try:
+            users.append(json.loads(r[0]))
+        except Exception:
+            pass
+
+    orders = []
+    for r in _execute("SELECT json FROM orders", fetch=True):
+        try:
+            orders.append(json.loads(r[0]))
+        except Exception:
+            pass
+
+    featured_prints = []
+    for r in _execute("SELECT json FROM featured_prints", fetch=True):
+        try:
+            featured_prints.append(json.loads(r[0]))
+        except Exception:
+            pass
+
+    return {
+        "settings": settings,
+        "users": users,
+        "orders": orders,
+        "featured_prints": featured_prints,
+    }
+
+
 def get_db():
-    try:
-        response = requests.get(BASE_URL, headers=HEADERS)
-        data = response.json().get('record', {})
-        if 'orders' not in data: data['orders'] = []
-        if 'settings' not in data: data['settings'] = {"filaments": []}
-        if 'users' not in data: data['users'] = []
-        if 'featured_prints' not in data: data['featured_prints'] = []
-        # legacy support for older key
-        if 'featured_items' not in data: data['featured_items'] = []
-        return data
-    except Exception as e:
-        print(f"DB Error: {e}")
-        return {"orders": [], "settings": {"filaments": []}, "featured_prints": []}
+    return _load_all()
+
 
 def save_db(data):
-    requests.put(BASE_URL, headers=HEADERS, json=data)
+    _init_db()
+
+    # Settings
+    try:
+        _execute("DELETE FROM settings")
+        _execute(
+            "INSERT OR REPLACE INTO settings (name, value) VALUES (?, ?)",
+            ("settings", json.dumps(data.get("settings", {"filaments": []})))
+        )
+    except Exception as e:
+        print(f"Failed to save settings: {e}")
+
+    # Users
+    try:
+        _execute("DELETE FROM users")
+        for user in data.get("users", []):
+            _execute(
+                "INSERT OR REPLACE INTO users (id, json) VALUES (?, ?)",
+                (user.get('id'), json.dumps(user))
+            )
+    except Exception as e:
+        print(f"Failed to save users: {e}")
+
+    # Orders
+    try:
+        _execute("DELETE FROM orders")
+        for order in data.get("orders", []):
+            _execute(
+                "INSERT OR REPLACE INTO orders (id, json) VALUES (?, ?)",
+                (order.get('id'), json.dumps(order))
+            )
+    except Exception as e:
+        print(f"Failed to save orders: {e}")
+
+    # Featured prints
+    try:
+        _execute("DELETE FROM featured_prints")
+        for item in data.get("featured_prints", []):
+            _execute(
+                "INSERT OR REPLACE INTO featured_prints (id, json) VALUES (?, ?)",
+                (item.get('id'), json.dumps(item))
+            )
+    except Exception as e:
+        print(f"Failed to save featured prints: {e}")
 
 # --- USER ROUTES ---
 @app.route('/')
@@ -406,10 +528,12 @@ def dashboard():
     featured_prints = db.get('featured_prints', [])
 
     current_colors = ", ".join(db.get('settings', {}).get('filaments', []))
+    filaments = db.get('settings', {}).get('filaments', [])
     return render_template(
         'dashboard.html',
         orders=active_orders,
         current_colors=current_colors,
+        filaments=filaments,
         user_map=user_map,
         users=db.get('users', []),
         featured_prints=featured_prints
@@ -432,6 +556,10 @@ def add_featured_print():
     makerworld_url = request.form.get('makerworld_url', '').strip()
     price = request.form.get('price', '').strip()
     suggested_filament = request.form.get('suggested_filament', '').strip()
+    suggested_colors = request.form.get('suggested_colors', '').strip() or suggested_filament
+    suggested_profile = request.form.get('suggested_profile', '').strip() or ''
+    profile_options_raw = request.form.get('profile_options', '').strip() or ''
+    profile_options = [p.strip() for p in profile_options_raw.split(',') if p.strip()]
     target_user = request.form.get('target_user', 'ALL')
 
     if not (title and image_url and makerworld_url and price):
@@ -445,6 +573,9 @@ def add_featured_print():
         'description': request.form.get('description', '').strip(),
         'price': float(price),
         'suggested_filament': suggested_filament,
+        'suggested_colors': suggested_colors,
+        'suggested_profile': suggested_profile,
+        'profile_options': profile_options,
         'target_user': target_user,
     }
 
@@ -472,7 +603,10 @@ def create_featured_order():
         price_val = float(data.get('price', 0))
     except Exception:
         price_val = 0
-    filament = (data.get('filament') or '').strip()
+
+    # allow featured items to suggest a specific profile and/or multi-color mapping
+    profile_choice = (data.get('profile') or data.get('suggested_profile') or '1').strip() or '1'
+    suggested_colors = (data.get('suggested_colors') or data.get('filament') or '').strip()
 
     if not title or not makerworld_link or price_val <= 0:
         return jsonify({'error': 'Missing required fields'}), 400
@@ -487,15 +621,16 @@ def create_featured_order():
         'admin_note': '',
         'messages': [],
         'link': makerworld_link,
-        'profile': '1',
-        'color': filament,
+        'profile': profile_choice,
+        'color': suggested_colors,
         # use the existing “Waiting for Approval” status so user can confirm in the order page
         'status': 'Waiting for Approval',
         'print_price': str(int(price_val)),
         'material_fee': '0',
         'delivery_time': 'TBD',
         'fixed_price': True,
-        'suggested_colors': filament,
+        'suggested_colors': suggested_colors,
+        'suggested_profile': profile_choice,
     }
 
     db = get_db()
@@ -530,5 +665,34 @@ def update_colors():
     save_db(db)
     return redirect(url_for('dashboard'))
 
+def import_jsonbin_dump(path):
+    """Import a JSON dump (as-exported from JSONBin) into the local SQLite database."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"Failed to read JSON file: {e}")
+        return
+
+    if isinstance(data, dict) and 'record' in data and isinstance(data['record'], dict):
+        data = data['record']
+
+    data.setdefault('settings', {'filaments': []})
+    data.setdefault('users', [])
+    data.setdefault('orders', [])
+    data.setdefault('featured_prints', [])
+
+    save_db(data)
+    print(f"Imported JSON data from {path} into local database.")
+
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    parser = argparse.ArgumentParser(description='Run the 3D print orders app.')
+    parser.add_argument('--import', dest='import_path', help='Import JSONBin dump (exported JSON) into local DB')
+    parser.add_argument('--port', type=int, default=5000, help='Port to run the Flask server on')
+    args = parser.parse_args()
+
+    if args.import_path:
+        import_jsonbin_dump(args.import_path)
+    else:
+        app.run(debug=True, port=args.port)
