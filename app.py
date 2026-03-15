@@ -848,15 +848,24 @@ def _build_user_portal_context(user_id, search_query=''):
     user = next((u for u in db.get('users', []) if u.get('id') == user_id), None)
     control_settings = _load_control_center_settings()
     completed_statuses = {'completed', 'done', 'delivered'}
-    inactive_statuses = completed_statuses | {'cancelled', 'declined', 'price denied'}
+    inactive_statuses = completed_statuses | {'cancelled', 'declined', 'price denied', 'in cart'}
 
-    user_orders = [o for o in db.get('orders', []) if o.get('owner') == user_id]
-    user_orders = sorted(
-        user_orders,
+    owned_orders = [o for o in db.get('orders', []) if o.get('owner') == user_id]
+    owned_orders = sorted(
+        owned_orders,
         key=lambda o: _order_last_modified(o) or datetime.min,
         reverse=True,
     )
-    user_orders = _decorate_orders_with_pending_delete_date(user_orders)
+    owned_orders = _decorate_orders_with_pending_delete_date(owned_orders)
+
+    cart_orders = [
+        o for o in owned_orders
+        if str(o.get('status') or '').strip().lower() == 'in cart'
+    ]
+    user_orders = [
+        o for o in owned_orders
+        if str(o.get('status') or '').strip().lower() != 'in cart'
+    ]
 
     normalized_query = (search_query or '').strip().lower()
     if normalized_query:
@@ -915,6 +924,8 @@ def _build_user_portal_context(user_id, search_query=''):
         'recent_orders': user_orders[:3],
         'all_orders': user_orders,
         'filtered_orders': filtered_orders,
+        'cart_orders': cart_orders,
+        'cart_count': len(cart_orders),
         'latest_order': user_orders[0] if user_orders else None,
         'spotlight_filament': spotlight_filament,
         'print_of_month': featured_items[0] if featured_items else None,
@@ -949,6 +960,14 @@ def order_page():
         prefill_link=prefill_link,
         **context,
     )
+
+
+@app.route('/cart')
+def user_cart():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+    context = _build_user_portal_context(session.get('user_id'))
+    return render_template('user_cart.html', active_tab='cart', **context)
 
 
 @app.route('/history')
@@ -1075,6 +1094,7 @@ def submit_order():
                 **context,
             )
     order_id = str(uuid.uuid4())[:8]
+    order_intent = (request.form.get('order_intent') or 'purchase_now').strip().lower()
     
     # Capture the name if the user provided one (used as nickname).
     raw_name = request.form.get('name', '').strip()
@@ -1149,7 +1169,7 @@ def submit_order():
         "print_weight_g": max(0.0, _to_float(request.form.get('model_weight') or 0)),
         "profile": profile_choice,
         "color": color_string,
-        "status": "Pending Quote",
+        "status": "In Cart" if order_intent == 'add_to_cart' else "Pending Quote",
         "print_price": "0",
         "material_fee": "0",
         "delivery_time": "TBD",
@@ -1158,7 +1178,34 @@ def submit_order():
     
     db['orders'].append(new_order)
     save_db(db)
+    if order_intent == 'add_to_cart':
+        return redirect(url_for('user_cart'))
     return redirect(url_for('check_order_by_id', order_id=order_id))
+
+
+@app.route('/cart/remove/<order_id>', methods=['POST'])
+def remove_cart_item(order_id):
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    db = get_db()
+    remaining_orders = []
+    removed = False
+    for order in db.get('orders', []):
+        if (
+            order.get('id') == order_id
+            and order.get('owner') == session.get('user_id')
+            and str(order.get('status') or '').strip().lower() == 'in cart'
+        ):
+            removed = True
+            continue
+        remaining_orders.append(order)
+
+    if removed:
+        db['orders'] = remaining_orders
+        save_db(db)
+
+    return redirect(url_for('user_cart'))
 
 
 @app.route('/order/<order_id>/messages', methods=['GET', 'POST'])
@@ -1315,7 +1362,41 @@ def dashboard():
     filaments, filaments_changed = _normalize_filaments(settings)
     if filaments_changed or purged_soft_deleted_orders:
         save_db(db)
-    active_orders = db['orders']
+    status_priority = {
+        'in cart': 0,
+        'pending quote': 1,
+        'waiting for approval': 2,
+        'approved': 3,
+        'printing': 3,
+        'completed': 4,
+        'done': 4,
+        'delivered': 4,
+        'price denied': 5,
+        'cancelled': 5,
+        'declined': 5,
+    }
+
+    def _dashboard_order_sort_key(order):
+        status_key = str(order.get('status') or '').strip().lower()
+        priority = status_priority.get(status_key, 4)
+        if order.get('deleted_at'):
+            priority = max(priority, 6)
+        last_modified = _order_last_modified(order) or datetime.min
+        return (priority, -last_modified.timestamp())
+
+    active_orders = sorted(db['orders'], key=_dashboard_order_sort_key)
+
+    now_utc = datetime.utcnow()
+    fresh_cutoff = now_utc - timedelta(hours=24)
+    fresh_order_ids = {
+        o.get('id')
+        for o in active_orders
+        if (
+            o.get('id')
+            and not o.get('deleted_at')
+            and ((_order_last_modified(o) or datetime.min) >= fresh_cutoff)
+        )
+    }
 
     # build map of user ids to usernames for display
     user_map = {u['id']: u['username'] for u in payload['users']}
@@ -1351,6 +1432,7 @@ def dashboard():
         users=payload['users'],
         user_credit_map=user_credit_map,
         featured_prints=featured_prints,
+        fresh_order_ids=fresh_order_ids,
         control_settings=control_settings,
         supabase_connected=_is_database_connected(),
         lifetime_profit=lifetime_profit,

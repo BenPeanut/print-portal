@@ -142,7 +142,9 @@
                 </p>
                 {% endif %}
                 <p><strong>Current Status:</strong>
-                    {% if order.status == 'Declined' %}
+                    {% if order.status == 'In Cart' %}
+                        <span style="color:#0f6a38; font-weight:bold;">Saved In Cart</span>
+                    {% elif order.status == 'Declined' %}
                         <span style="color:#d9534f; font-weight:bold;">Declined</span>
                     {% elif order.status in ['Cancelled', 'Price Denied'] %}
                         <span style="color:#d9534f; font-weight:bold;">{{ order.status }}</span>
@@ -201,6 +203,11 @@
             </div>
 
             <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
+                {% if order.status == 'In Cart' %}
+                    <div style="margin-bottom:12px; padding:12px; background:#eef9f2; border:1px solid #cfe7d8; border-radius:8px; color:#21563f;">
+                        This item is saved in your cart and visible to the admin for pricing. Once a quote is ready, it will move to Waiting for Approval.
+                    </div>
+                {% endif %}
                 {% if order.status == 'Waiting for Approval' %}
                     <div style="margin-bottom: 10px;">
                         <form action="/approve_price/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showApproveModal(this);">
@@ -233,7 +240,7 @@
             
             <br>
             <div style="text-align: center;">
-                <a href="/" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return to Home</a>
+                <a href="{% if order.status == 'In Cart' %}/cart{% else %}/{% endif %}" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return to {% if order.status == 'In Cart' %}Cart{% else %}Home{% endif %}</a>
             </div>
         </div>
     </div>

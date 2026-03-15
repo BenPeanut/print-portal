@@ -1,0 +1,167 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Cart | Client Portal' %}
+
+{% block content %}
+<style>
+    .cart-shell {
+        display: grid;
+        gap: 14px;
+    }
+
+    .cart-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+    }
+
+    .cart-grid {
+        display: grid;
+        gap: 12px;
+    }
+
+    .cart-item {
+        border: 1px solid #dbe8e1;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+    }
+
+    .cart-item h3 {
+        margin: 0 0 6px;
+        font-size: 1.04rem;
+    }
+
+    .cart-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        color: #587065;
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+    }
+
+    .cart-note {
+        margin: 8px 0 0;
+        color: #5d7267;
+        font-size: 0.9rem;
+        line-height: 1.45;
+    }
+
+    .cart-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid #cfe4d8;
+        background: #eff9f3;
+        color: #0d6a37;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 0.76rem;
+        font-weight: 800;
+    }
+
+    .cart-actions {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+        min-width: 150px;
+    }
+
+    .cart-btn,
+    .cart-remove {
+        text-decoration: none;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-weight: 800;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    .cart-btn {
+        border: 1px solid #cfe4d8;
+        background: #f8fcfa;
+        color: #1a5a3e;
+    }
+
+    .cart-remove {
+        border: 1px solid #f2c7c7;
+        background: #fff6f6;
+        color: #b42323;
+    }
+
+    .cart-empty {
+        border: 1px dashed #cfe0d7;
+        border-radius: 16px;
+        background: #f8fcfa;
+        padding: 28px;
+        text-align: center;
+        color: #5e7268;
+    }
+
+    @media (max-width: 860px) {
+        .cart-item {
+            grid-template-columns: 1fr;
+        }
+
+        .cart-actions {
+            min-width: 0;
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+</style>
+
+<section class="card">
+    <div class="card-body cart-shell">
+        <div class="cart-head">
+            <div>
+                <h2 class="section-title">My Cart</h2>
+                <p class="section-copy">Items saved here are visible to the admin for pricing, but they will stay in your cart until a quote is ready.</p>
+            </div>
+            <a href="/order" class="cart-btn">Add Another Model</a>
+        </div>
+
+        {% if cart_orders %}
+        <div class="cart-grid">
+            {% for order in cart_orders %}
+            <article class="cart-item">
+                <div>
+                    <h3>{{ order.name or order.product_name or 'Unnamed Model' }}</h3>
+                    <div class="cart-meta">
+                        <span>#{{ order.id }}</span>
+                        <span>{{ '%.1f'|format(order.get('print_weight_g', 0)|float) }} g</span>
+                        <span>Profile {{ order.profile or 'Not set' }}</span>
+                        <span class="cart-pill">{{ order.status or 'In Cart' }}</span>
+                    </div>
+                    {% if order.color %}
+                    <p class="cart-note"><strong>Color setup:</strong> {{ order.color }}</p>
+                    {% endif %}
+                    {% if order.admin_note %}
+                    <p class="cart-note"><strong>Admin note:</strong> {{ order.admin_note }}</p>
+                    {% else %}
+                    <p class="cart-note">The admin can already see this cart item and prepare a quote when ready.</p>
+                    {% endif %}
+                </div>
+                <div class="cart-actions">
+                    <a class="cart-btn" href="/order/{{ order.id }}">Open</a>
+                    <form action="/cart/remove/{{ order.id }}" method="POST" style="margin:0;">
+                        <button type="submit" class="cart-remove">Remove</button>
+                    </form>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="cart-empty">
+            <h3 style="margin-top:0; color:#174d33;">Your cart is empty</h3>
+            <p style="margin-bottom:16px;">Add models to your cart so the admin can review and quote them before you confirm.</p>
+            <a href="/order" class="cart-btn">Start a New Cart Item</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

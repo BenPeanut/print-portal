@@ -74,6 +74,26 @@
             background: linear-gradient(135deg, var(--emerald), var(--emerald-dark));
         }
 
+        .nav-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 6px;
+            margin-left: 6px;
+            border-radius: 999px;
+            background: rgba(0, 174, 66, 0.12);
+            color: #0f6a38;
+            font-size: 0.74rem;
+            font-weight: 900;
+        }
+
+        .links a.active .nav-count {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
         .top-actions {
             display: flex;
             align-items: center;
@@ -285,6 +305,7 @@
             <div class="links">
                 <a href="/" class="{% if active_tab == 'home' %}active{% endif %}">Home</a>
                 <a href="/order" class="{% if active_tab == 'order' %}active{% endif %}">Order</a>
+                <a href="/cart" class="{% if active_tab == 'cart' %}active{% endif %}">Cart{% if cart_count %}<span class="nav-count">{{ cart_count }}</span>{% endif %}</a>
                 <a href="/history" class="{% if active_tab == 'history' %}active{% endif %}">My History</a>
                 <a href="/materials" class="{% if active_tab == 'materials' %}active{% endif %}">Materials</a>
                 <a href="/help" class="{% if active_tab == 'help' %}active{% endif %}">Help</a>

@@ -48,6 +48,19 @@
 
     .btn-primary:hover { background-color: #008f36; }
 
+    .btn-outline {
+        background: #ffffff;
+        color: #00ae42;
+        border: 2px solid #00ae42;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+
+    .btn-outline:hover {
+        background: #f3fff7;
+    }
+
     .btn-secondary {
         background: #2c2c2c;
         color: white;
@@ -188,6 +201,13 @@
         margin-top: 10px;
     }
 
+    .submit-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
     @media (max-width: 760px) {
         .box {
             padding: 18px;
@@ -206,6 +226,10 @@
         .mapping-row .delete-btn {
             width: 100%;
         }
+
+        .submit-row {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
@@ -213,6 +237,7 @@
     <div class="box">
         <h3>Request a New Print</h3>
         <form id="order-form" action="/submit_order" method="POST">
+            <input type="hidden" id="order-intent" name="order_intent" value="purchase_now">
             {% if announcement_message %}
             <div class="instruction-box" style="display:block; background:#e8f7ee; border:1px solid #bde7cb; color:#1f5c33;">
                 <strong>Announcement:</strong> {{ announcement_message }}
@@ -313,9 +338,14 @@
                     </div>
                 </div>
 
-                <button type="submit" id="btn-submit" class="btn-primary" {% if not shop_open %}disabled{% endif %} style="margin-top: 20px;">
-                    {% if shop_open %}Request Quote{% else %}Shop Closed{% endif %}
-                </button>
+                <div class="submit-row">
+                    <button type="submit" id="btn-add-cart" class="btn-primary" data-intent="add_to_cart" {% if not shop_open %}disabled{% endif %}>
+                        {% if shop_open %}Add To Cart{% else %}Shop Closed{% endif %}
+                    </button>
+                    <button type="submit" id="btn-submit" class="btn-outline" data-intent="purchase_now" {% if not shop_open %}disabled{% endif %}>
+                        {% if shop_open %}Purchase Now{% else %}Shop Closed{% endif %}
+                    </button>
+                </div>
             </fieldset>
         </form>
     </div>
@@ -336,6 +366,7 @@
 <script>
 (function() {
     let orderSubmitConfirmed = false;
+    let pendingOrderIntent = 'purchase_now';
 
     window.toggleInstructions = function () {
         const inst = document.getElementById('profile-instructions');
@@ -378,6 +409,14 @@
         `;
         container.appendChild(newRow);
     };
+
+    document.querySelectorAll('#order-form button[type="submit"][data-intent]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            pendingOrderIntent = button.getAttribute('data-intent') || 'purchase_now';
+            const intentInput = document.getElementById('order-intent');
+            if (intentInput) intentInput.value = pendingOrderIntent;
+        });
+    });
 
     document.getElementById('order-form')?.addEventListener('submit', function(evt) {
         if (orderSubmitConfirmed) {
@@ -445,6 +484,8 @@
 
             const onConfirm = function() {
                 orderSubmitConfirmed = true;
+                const intentInput = document.getElementById('order-intent');
+                if (intentInput) intentInput.value = pendingOrderIntent;
                 cleanup();
                 closeModal();
                 document.getElementById('order-form').submit();
@@ -474,6 +515,8 @@
         }
 
         orderSubmitConfirmed = true;
+        const intentInput = document.getElementById('order-intent');
+        if (intentInput) intentInput.value = pendingOrderIntent;
         document.getElementById('order-form').submit();
     });
 

@@ -1268,6 +1268,8 @@
 
         .pill { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
         .pill-new      { background: #e9ecef; color: #495057; }
+        .pill-cart     { background: #ecfdf5; color: #0f6a38; }
+        .pill-fresh    { background: #fff3bf; color: #8f5b00; margin-left: 8px; }
         .pill-waiting  { background: #fff4e6; color: #d9480f; }
         .pill-approved { background: #ebfbee; color: #2b8a3e; }
         .pill-denied   { background: #fff5f5; color: #c92a2a; }
@@ -1514,6 +1516,34 @@
         }
 
         .admin-table tr { position: relative; }
+        .order-expand-btn {
+            width: 100%;
+            border: 1px solid #c8d7ce;
+            background: #f5faf7;
+            color: #244436;
+            border-radius: 10px;
+            padding: 7px 10px;
+            font-size: 0.76rem;
+            font-weight: 800;
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .order-expand-btn:hover { background: #edf6f1; border-color: #abc8b7; }
+        .admin-table tr.order-row:not(.expanded) .detail-only { display: none !important; }
+        .admin-table tr.order-row:not(.expanded) .delete-floating-btn { display: none !important; }
+        .admin-table tr.order-row:not(.expanded) .workflow-grid {
+            display: block;
+        }
+        .admin-table tr.order-row:not(.expanded) .workflow-grid > *:not(.price-only) {
+            display: none !important;
+        }
+        .admin-table tr.order-row:not(.expanded) .workflow-form {
+            padding: 8px;
+        }
+        .admin-table tr.order-row:not(.expanded) .workflow-form input[name="print_price"] {
+            font-weight: 700;
+        }
         .delete-floating-btn {
             position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
             background: #ff4d4f; color: white; border: none; width: 35px; height: 35px;
@@ -1963,6 +1993,7 @@
     </div>
 
     {% set printing_orders = orders | selectattr('status', 'equalto', 'Printing') | list %}
+    {% set cart_requests = orders | selectattr('status', 'equalto', 'In Cart') | rejectattr('deleted_at') | list %}
     {% set new_requests = orders | selectattr('status', 'equalto', 'Pending Quote') | rejectattr('deleted_at') | list %}
     {% set pending_approvals = orders | selectattr('status', 'equalto', 'Waiting for Approval') | list %}
     {% set completed = orders | selectattr('status', 'in', ['Completed', 'Done', 'Delivered']) | list %}
@@ -2024,6 +2055,10 @@
                         <h2 class="card-title">Quick Alerts</h2>
                     </header>
                     <div class="card-body alert-list">
+                        <div class="alert-item">
+                            <h4>Cart Queue</h4>
+                            <p>{{ cart_requests|length }} item(s) are saved in customer carts and ready for admin pricing.</p>
+                        </div>
                         <div class="alert-item">
                             <h4>Pending Price Approvals</h4>
                             <p>{{ pending_approvals|length }} order(s) are waiting for user approval.</p>
@@ -2119,8 +2154,12 @@
             <section class="view-section" id="orders-section">
                 <div class="orders-view">
                     <div class="orders-top-bar">
-                        <h1 style="margin:0;">Order Management</h1>
+                        <div>
+                            <h1 style="margin:0;">Order Management</h1>
+                            <small style="display:block; color:#5f7a69; margin-top:4px;">Sorted by urgency first, then most recent activity.</small>
+                        </div>
                         <div class="orders-filter-tabs">
+                            <button class="filter-tab" data-filter="cart">Cart</button>
                             <button class="filter-tab active" data-filter="needs-action">Needs Action</button>
                             <button class="filter-tab" data-filter="printing">Active / Printing</button>
                             <button class="filter-tab" data-filter="completed">Completed</button>
@@ -2140,7 +2179,8 @@
                         </thead>
                         <tbody>
                             {% for order in orders %}
-                            <tr class="{% if order.status in ['Cancelled', 'Price Denied'] %}row-dead{% endif %}{% if order.get('deleted_at') %} row-pending-delete{% endif %}"
+                            <tr class="order-row {% if order.status in ['Cancelled', 'Price Denied'] %}row-dead{% endif %}{% if order.get('deleted_at') %} row-pending-delete{% endif %}"
+                                data-order-row="true"
                                 data-order-status="{{ order.status }}"
                                 data-deleted="{{ 'true' if order.get('deleted_at') else 'false' }}">
                                 <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order?');">
@@ -2148,15 +2188,15 @@
                                 </form>
 
                                 <td>
-                                    <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong><br>
-                                    <small style="color:#888;">ID: {{ order.id }}</small><br>
-                                    <small style="color:#888;">User: {{ user_map.get(order.get('owner'), 'unknown') }}</small>
+                                    <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong>{% if order.id in fresh_order_ids %}<span class="pill pill-fresh">New 24h</span>{% endif %}<br>
+                                    <small style="color:#888;" class="detail-only">ID: {{ order.id }}</small><br class="detail-only">
+                                    <small style="color:#888;" class="detail-only">User: {{ user_map.get(order.get('owner'), 'unknown') }}</small>
                                 </td>
 
                                 <td>
                                     <div class="profile-container">
-                                        <div class="profile-badge"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.profile }}</div>
-                                        <a href="{{ order.link }}" target="_blank" class="makerworld-badge">VIEW ON MAKERWORLD ↗</a>
+                                        <div class="profile-badge detail-only"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.profile }}</div>
+                                        <a href="{{ order.link }}" target="_blank" class="makerworld-badge detail-only">VIEW ON MAKERWORLD ↗</a>
 
                                         {% if order.color %}
                                         <div class="color-container">
@@ -2173,7 +2213,8 @@
                                 </td>
 
                                 <td style="text-align: center;">
-                                    {% if order.status == 'Pending Quote' %} <span class="pill pill-new">New Request</span>
+                                    {% if order.status == 'In Cart' %} <span class="pill pill-cart">In Cart</span>
+                                    {% elif order.status == 'Pending Quote' %} <span class="pill pill-new">New Request</span>
                                     {% elif order.status == 'Waiting for Approval' %} <span class="pill pill-waiting">Awaiting Approval</span>
                                     {% elif order.status == 'Approved' %} <span class="pill pill-approved">✔ Approved</span>
                                     {% elif order.status == 'Price Denied' %} <span class="pill pill-denied">✖ Denied</span>
@@ -2185,23 +2226,24 @@
                                 <td>
                                     <form action="/update_order/{{ order.id }}" method="POST" class="workflow-form">
                                         <div class="workflow-grid">
-                                            <input type="text" name="print_price" value="{{ order.print_price }}" placeholder="Price">
-                                            <input type="text" name="material_fee" value="{{ order.material_fee }}" placeholder="Fee">
-                                            <input type="number" step="0.1" min="0" name="print_weight_g" value="{{ order.get('print_weight_g', '') }}" placeholder="Weight (g)" data-weight-input>
-                                            <input type="number" step="0.1" min="0" name="estimated_print_hours" value="{{ order.get('estimated_print_hours', '') }}" placeholder="Estimated Print Time (hrs)" data-hours-input>
-                                            <input type="text" value="" placeholder="Suggested Price (Rp)" readonly data-suggested-price>
+                                            <input type="text" name="print_price" value="{{ order.print_price }}" placeholder="Price" class="price-only">
+                                            <input type="text" name="material_fee" value="{{ order.material_fee }}" placeholder="Fee" class="detail-only">
+                                            <input type="number" step="0.1" min="0" name="print_weight_g" value="{{ order.get('print_weight_g', '') }}" placeholder="Weight (g)" data-weight-input class="detail-only">
+                                            <input type="number" step="0.1" min="0" name="estimated_print_hours" value="{{ order.get('estimated_print_hours', '') }}" placeholder="Estimated Print Time (hrs)" data-hours-input class="detail-only">
+                                            <input type="text" value="" placeholder="Suggested Price (Rp)" readonly data-suggested-price class="detail-only">
                                         </div>
-                                        <input type="text" name="delivery_time" value="{{ order.delivery_time }}" placeholder="Estimated delivery">
-                                        <select name="status">
+                                        <input type="text" name="delivery_time" value="{{ order.delivery_time }}" placeholder="Estimated delivery" class="detail-only">
+                                        <select name="status" class="detail-only">
+                                            <option value="In Cart" {% if order.status == 'In Cart' %}selected{% endif %}>0. Keep in Cart</option>
                                             <option value="Pending Quote" {% if order.status == 'Pending Quote' %}selected{% endif %}>1. Set to Pending</option>
                                             <option value="Waiting for Approval" {% if order.status == 'Waiting for Approval' %}selected{% endif %}>2. Send Quote to User</option>
                                             <option value="Printing" {% if order.status == 'Printing' or order.status == 'Approved' %}selected{% endif %}>3. Start Printing</option>
                                             <option value="Completed" {% if order.status == 'Completed' or order.status == 'Done' %}selected{% endif %}>4. Mark as Completed</option>
                                             <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>5. Delivered/Archive</option>
                                         </select>
-                                        <label style="display:block; font-weight:600;">Admin Note</label>
-                                        <textarea name="admin_note" placeholder="Add a note for the user or internal info...">{{ order.get('admin_note','') }}</textarea>
-                                        <div>
+                                        <label style="display:block; font-weight:600;" class="detail-only">Admin Note</label>
+                                        <textarea name="admin_note" placeholder="Add a note for the user or internal info..." class="detail-only">{{ order.get('admin_note','') }}</textarea>
+                                        <div class="detail-only">
                                             <button type="button" class="btn-secondary msg-icon" title="Open chat" onclick="openAdminChatModal('{{ order.id }}')" data-order-id="{{ order.id }}">
                                                 <span class="chat-icon">🗪</span>
                                                 <span id="admin-unread-{{ order.id }}" class="unread-badge" style="display:none;">0</span>
@@ -2210,15 +2252,16 @@
                                 </td>
 
                                 <td style="vertical-align: middle; text-align: center;">
+                                    <button type="button" class="order-expand-btn" data-expand-order="{{ order.id }}" aria-expanded="false">Expand ▼</button>
                                     <button type="submit" style="background: var(--accent); width: 100%; color: white; border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: bold;">
                                         Update
                                     </button>
                                     </form>
 
-                                    <form action="/decline_order/{{ order.id }}" method="POST" style="margin: 4px 0 0;">
+                                    <form action="/decline_order/{{ order.id }}" method="POST" style="margin: 4px 0 0;" class="detail-only">
                                         <button type="submit" class="btn-action-orange">Decline</button>
                                     </form>
-                                    <form action="/archive_order/{{ order.id }}" method="POST" style="margin: 0;">
+                                    <form action="/archive_order/{{ order.id }}" method="POST" style="margin: 0;" class="detail-only">
                                         <button type="submit" class="btn-action-blue">Archive</button>
                                     </form>
                                     <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order for deletion? It will be removed in 3 days.');" style="margin: 0;">
@@ -3365,6 +3408,20 @@
     </script>
 
     <script>
+        (function () {
+            document.querySelectorAll('[data-expand-order]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var row = btn.closest('tr[data-order-row="true"]');
+                    if (!row) return;
+                    var expanded = row.classList.toggle('expanded');
+                    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    btn.textContent = expanded ? 'Collapse ▲' : 'Expand ▼';
+                });
+            });
+        })();
+    </script>
+
+    <script>
         // Order filter tabs
         (function () {
             var tabs = Array.from(document.querySelectorAll('.filter-tab'));
@@ -3374,14 +3431,16 @@
                     tabs.forEach(function (t) { t.classList.remove('active'); });
                     tab.classList.add('active');
                     var filter = tab.dataset.filter;
-                    document.querySelectorAll('.admin-table tbody tr').forEach(function (row) {
+                    document.querySelectorAll('.admin-table tbody tr[data-order-row="true"]').forEach(function (row) {
                         var status = (row.dataset.orderStatus || '').toLowerCase();
                         var isDeleted = row.dataset.deleted === 'true';
                         var show = false;
                         if (filter === 'all') {
                             show = true;
+                        } else if (filter === 'cart') {
+                            show = !isDeleted && status === 'in cart';
                         } else if (filter === 'needs-action') {
-                            show = !isDeleted && (status === 'pending quote' || status === 'waiting for approval');
+                            show = !isDeleted && (status === 'in cart' || status === 'pending quote' || status === 'waiting for approval');
                         } else if (filter === 'printing') {
                             show = !isDeleted && (status === 'printing' || status === 'approved');
                         } else if (filter === 'completed') {
