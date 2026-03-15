@@ -18,8 +18,15 @@ from datetime import date, datetime, timedelta
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_testing_key')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
+def _required_env(name):
+    value = (os.environ.get(name) or '').strip()
+    if not value:
+        raise RuntimeError(f'Missing required environment variable: {name}')
+    return value
+
+
+app.secret_key = _required_env('SECRET_KEY')
+ADMIN_PASSWORD = _required_env('ADMIN_PASSWORD')
 DB_POOL_MIN = int(os.environ.get('DB_POOL_MIN', '1'))
 DB_POOL_MAX = int(os.environ.get('DB_POOL_MAX', '10'))
 
@@ -42,23 +49,10 @@ _SCHEMA_READY = False
 # --- DATABASE HELPERS ---
 
 def _create_db_pool():
-    db_url = os.environ.get('DATABASE_URL', '')
-    if db_url:
-        if db_url.startswith('postgres://'):
-            db_url = 'postgresql://' + db_url[len('postgres://'):]
-        return ThreadedConnectionPool(DB_POOL_MIN, DB_POOL_MAX, dsn=db_url)
-
-    # Default: Supabase connection pooler (port 6543, IPv4-friendly).
-    return ThreadedConnectionPool(
-        DB_POOL_MIN,
-        DB_POOL_MAX,
-        host='aws-1-ap-southeast-1.pooler.supabase.com',
-        port=6543,
-        dbname='postgres',
-        user='postgres.rhxlqztaybxucaxjgmph',
-        password='M#ZBvdKyah!TPpg#en69',
-        sslmode='require',
-    )
+    db_url = _required_env('DATABASE_URL')
+    if db_url.startswith('postgres://'):
+        db_url = 'postgresql://' + db_url[len('postgres://'):]
+    return ThreadedConnectionPool(DB_POOL_MIN, DB_POOL_MAX, dsn=db_url)
 
 
 def _get_pooled_connection():
