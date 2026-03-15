@@ -75,11 +75,22 @@
     <div class="box">
         <h3>Request a New Print</h3>
         <form id="order-form" action="/submit_order" method="POST">
+            {% if announcement_message %}
+            <div class="instruction-box" style="display:block; background:#e8f7ee; border:1px solid #bde7cb; color:#1f5c33;">
+                <strong>Announcement:</strong> {{ announcement_message }}
+            </div>
+            {% endif %}
+            {% if not shop_open %}
+            <div class="instruction-box" style="display:block; background:#fff3cd; border:1px solid #ffe69c; color:#7a5a00;">
+                <strong>{{ capacity_message or 'We are currently at capacity!' }}</strong>
+            </div>
+            {% endif %}
             {% if error %}
             <div class="instruction-box" style="display:block; background:#ffe6e6; border:1px solid #ffb3b3; color:#661010;">
                 <strong>Error:</strong> {{ error }}
             </div>
             {% endif %}
+            <fieldset {% if not shop_open %}disabled{% endif %} style="border:0; padding:0; margin:0;">
             <div id="step-link">
                 <label><strong>Link to Model (MakerWorld or Printables):</strong></label>
                 <input id="makerworld_link" type="text" name="makerworld_link" required placeholder="makerworld.com/... or printables.com/..."
@@ -156,7 +167,8 @@
                 </div>
             </div>
             
-            <button type="submit" id="btn-submit" class="btn-primary" style="margin-top: 20px;">Submit Order Request</button>
+            <button type="submit" id="btn-submit" class="btn-primary" {% if not shop_open %}disabled{% endif %} style="margin-top: 20px;">{% if shop_open %}Request Quote{% else %}Shop Closed{% endif %}</button>
+            </fieldset>
         </form>
     </div>
 
@@ -180,7 +192,21 @@
                 <div class="order-card">
                     <div class="order-info">
                         <div class="order-title">{{ o.nickname or o.name or o.product_name or 'Unnamed Order' }}</div>
-                        <div class="order-meta">ID: {{ o.id }} • <span class="status {{ (o.status or 'unknown')|lower }}">{{ o.status }}</span></div>
+                        <div class="order-meta">
+                            ID: {{ o.id }} •
+                            <span class="status {{ (o.status or 'unknown')|lower }}">
+                                {% if o.get('deleted_at') %}
+                                    Pending Deletion
+                                {% else %}
+                                    {{ o.status }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% if o.get('deleted_at') %}
+                        <div class="order-meta" style="margin-top:4px; color:#9a3412;">
+                            Scheduled removal: {{ o.pending_delete_on or 'in 3 days' }}
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="order-actions">
                         <a href="/order/{{ o.id }}" class="btn-link">View</a>

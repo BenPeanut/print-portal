@@ -1,0 +1,185 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'My History | Client Portal' %}
+
+{% block content %}
+<style>
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .search-form {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .search-form input {
+        min-width: 280px;
+        border: 1px solid #d8e6de;
+        border-radius: 10px;
+        padding: 9px 11px;
+        font-size: 0.95rem;
+        background: #fff;
+    }
+
+    .search-form button {
+        border: none;
+        background: #00ae42;
+        color: #fff;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .table-wrap {
+        overflow: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 760px;
+    }
+
+    th, td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid #e4eee8;
+        font-size: 0.92rem;
+    }
+
+    th {
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #5f746a;
+    }
+
+    .status-pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        border: 1px solid #d1d5db;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.5;
+        background: #fff;
+    }
+
+    .status-pill.waiting-for-approval {
+        color: #92400e;
+        border-color: #f59e0b;
+        background: #fff7ed;
+    }
+
+    .status-pill.approved {
+        color: #065f46;
+        border-color: #00ae42;
+        background: #ecfdf5;
+    }
+
+    .status-pill.printing {
+        color: #1d4ed8;
+        border-color: #60a5fa;
+        background: #eff6ff;
+    }
+
+    .status-pill.completed,
+    .status-pill.delivered,
+    .status-pill.done {
+        color: #166534;
+        border-color: #34d399;
+        background: #ecfdf5;
+    }
+
+    .status-pill.cancelled,
+    .status-pill.declined,
+    .status-pill.price-denied {
+        color: #991b1b;
+        border-color: #f87171;
+        background: #fef2f2;
+    }
+
+    tr.waiting-row {
+        background: #fffbeb;
+        box-shadow: inset 3px 0 0 #f59e0b;
+    }
+
+    .invoice-btn, .view-btn {
+        text-decoration: none;
+        border: 1px solid #d8e6de;
+        border-radius: 9px;
+        padding: 6px 9px;
+        color: #235746;
+        background: #fbfefd;
+        font-weight: 700;
+        margin-right: 4px;
+        display: inline-block;
+    }
+</style>
+
+<section class="card">
+    <div class="card-body">
+        <div class="toolbar">
+            <div>
+                <h2 class="section-title">My History</h2>
+                <p class="section-copy">Every order you have submitted, with invoice downloads.</p>
+            </div>
+            <form class="search-form" action="/history" method="GET">
+                <input type="text" name="q" value="{{ search_query or '' }}" placeholder="Search by order ID, name, or status">
+                <button type="submit">Search</button>
+            </form>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Weight</th>
+                        <th>Est. Hours</th>
+                        <th>Total</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in filtered_orders %}
+                    {% set print_price = order.print_price|int %}
+                    {% set material_fee = order.material_fee|int %}
+                    {% set status_text = order.status or 'Unknown' %}
+                    {% set status_key = status_text|lower|replace(' ', '-') %}
+                    <tr class="{% if status_key == 'waiting-for-approval' %}waiting-row{% endif %}">
+                        <td>
+                            <strong>{{ order.name or order.product_name or 'Unnamed Order' }}</strong><br>
+                            <small>#{{ order.id }}</small>
+                            {% if order.admin_note %}
+                            <br><small style="color:#0f5132;"><strong>Admin note:</strong> {{ order.admin_note }}</small>
+                            {% endif %}
+                        </td>
+                        <td><span class="status-pill {{ status_key }}">{{ status_text }}</span></td>
+                        <td>{{ '%.1f'|format(order.get('print_weight_g', 0)|float) }} g</td>
+                        <td>{{ '%.1f'|format(order.get('estimated_print_hours', 0)|float) }} h</td>
+                        <td>Rp {{ '{:,}'.format(print_price + material_fee) }}</td>
+                        <td>
+                            <a class="view-btn" href="/order/{{ order.id }}">View</a>
+                            <a class="invoice-btn" href="/order/{{ order.id }}/invoice">Download Invoice</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">No orders found for this search.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

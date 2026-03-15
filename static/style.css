@@ -189,6 +189,8 @@ button:hover { background: #008f36; }
 .status.completed { background: #e6ffef; color: #007a3a; }
 .status.pending { background: #fff7e6; color: #7a5900; }
 .status.cancelled { background: #ffe6e6; color: #7a1a1a; }
+.status.declined { background: #ffd5d5; color: #8b0000; font-weight: 700; }
+.status.archived { background: #e8eeff; color: #2c4498; }
 
 /* Top search icon and expanded input */
 .header-row { position: relative; display: flex; align-items: center; justify-content: center; }

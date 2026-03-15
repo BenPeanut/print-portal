@@ -141,12 +141,25 @@
                     {% endfor %}
                 </p>
                 {% endif %}
-                <p><strong>Current Status:</strong> <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span></p>
+                <p><strong>Current Status:</strong>
+                    {% if order.status == 'Declined' %}
+                        <span style="color:#d9534f; font-weight:bold;">Declined</span>
+                    {% elif order.status in ['Cancelled', 'Price Denied'] %}
+                        <span style="color:#d9534f; font-weight:bold;">{{ order.status }}</span>
+                    {% else %}
+                        <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span>
+                    {% endif %}
+                </p>
                 <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.delivery_time }}</span></p>
                 {% if order.admin_note %}
                 <div style="margin-top:12px; padding:12px; background:#fff9e6; border-left:4px solid #ffd966; border-radius:6px; color:#333;">
                     <strong>Admin Notes:</strong>
                     <p style="margin:8px 0 0 0; white-space:pre-wrap;">{{ order.admin_note }}</p>
+                </div>
+                {% endif %}
+                {% if order.get('deleted_at') %}
+                <div style="margin-top:12px; padding:12px; background:#fff4ec; border:1px solid #f5c49e; border-radius:6px; color:#7a3b00;">
+                    <strong>⏳ Pending Deletion</strong> &mdash; This order will be permanently removed within 3 days.
                 </div>
                 {% endif %}
             </div>
@@ -198,7 +211,7 @@
                     </div>
                 {% endif %}
 
-                {% set locked = ['Printing', 'Done', 'Delivered', 'Cancelled', 'Price Denied'] %}
+                {% set locked = ['Printing', 'Completed', 'Done', 'Delivered', 'Cancelled', 'Price Denied'] %}
                 {% if order.status not in locked %}
                     <form action="/cancel_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showCancelModal(this);">
                         <button type="submit" style="background-color: transparent; color: #d9534f; border: 1px solid #d9534f; padding: 10px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 0.9em;">
@@ -242,10 +255,31 @@
             <p class="modal-message">By confirming this purchase, you agree to pay the full amount, and you will no longer be able to cancel the order after confirming.</p>
             <div class="modal-buttons">
                 <button class="modal-btn modal-btn-cancel" onclick="closeApproveModal()">Go Back</button>
-                <button class="modal-btn modal-btn-confirm-green" id="confirmApproveBtn">Confirm & Pay</button>
+                <button class="modal-btn modal-btn-confirm-green" id="confirmApproveBtn">Confirm &amp; Pay</button>
             </div>
         </div>
     </div>
+
+    <div id="declinedModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none';">
+        <div class="modal-box">
+            <h3 style="margin-top:0; color:#d9534f;">Order Declined</h3>
+            <p class="modal-message">This order has been declined by the admin. Would you like to delete this order from your history?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('declinedModal').style.display='none'">No, keep it</button>
+                <form action="/soft_delete_order/{{ order.id }}" method="POST" style="flex:1; margin:0;">
+                    <button type="submit" class="modal-btn modal-btn-confirm-red" style="width:100%;">Yes, delete it</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% if order.status == 'Declined' %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('declinedModal').style.display = 'flex';
+        });
+    </script>
+    {% endif %}
 
     <script>
         // --- TUTORIAL LOGIC ---

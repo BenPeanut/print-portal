@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title or 'Client Portal' }}</title>
+    <style>
+        :root {
+            --bg: #f4f8f6;
+            --card: #ffffff;
+            --line: #d9e6df;
+            --text: #183027;
+            --muted: #60766b;
+            --emerald: #00ae42;
+            --emerald-dark: #008f36;
+            --danger: #dc2626;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at top left, #ffffff 0%, #f2f8f5 45%, #e9f2ed 100%);
+        }
+
+        .shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 18px;
+        }
+
+        .top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: #ffffff;
+            padding: 10px 14px;
+            box-shadow: 0 10px 28px rgba(16, 56, 41, 0.08);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            font-weight: 900;
+            letter-spacing: 0.05em;
+            color: #0f5132;
+            font-size: 0.92rem;
+        }
+
+        .links {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .links a {
+            text-decoration: none;
+            color: #225646;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .links a.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--emerald), var(--emerald-dark));
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .logout {
+            text-decoration: none;
+            border: 1px solid #f5c6cb;
+            color: #b22222;
+            background: #fff7f7;
+            padding: 7px 10px;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+
+        .announcement {
+            border: 1px solid #cce7dc;
+            background: #edfbf4;
+            color: #18573f;
+            border-radius: 14px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 0.93rem;
+        }
+
+        .maintenance {
+            border: 1px solid #fed7d7;
+            background: #fff5f5;
+            color: #9b1c1c;
+            border-radius: 14px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 0.93rem;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--card);
+            box-shadow: 0 14px 30px rgba(14, 42, 32, 0.08);
+        }
+
+        .card-body { padding: 18px; }
+
+        .credit-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1200;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .credit-modal.open { display: flex; }
+
+        .credit-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.52);
+        }
+
+        .credit-card {
+            position: relative;
+            width: min(620px, 95%);
+            border-radius: 22px;
+            border: 1px solid #cdeed9;
+            background: linear-gradient(180deg, #ffffff 0%, #f5fcf8 100%);
+            box-shadow: 0 24px 70px rgba(9, 35, 24, 0.35);
+            overflow: hidden;
+            transform: translateY(14px) scale(0.97);
+            opacity: 0;
+            transition: transform 0.28s ease, opacity 0.28s ease;
+        }
+
+        .credit-modal.open .credit-card {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+        }
+
+        .credit-card::before {
+            content: "";
+            position: absolute;
+            top: -90px;
+            right: -80px;
+            width: 240px;
+            height: 240px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(0, 174, 66, 0.22) 0%, rgba(0, 174, 66, 0) 68%);
+            pointer-events: none;
+        }
+
+        .credit-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, var(--emerald) 0%, var(--emerald-dark) 55%, #06652f 100%);
+            color: #fff;
+            padding: 16px 20px;
+            font-size: 1.08rem;
+            font-weight: 900;
+            letter-spacing: 0.01em;
+        }
+
+        .credit-head-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+            font-size: 1rem;
+        }
+
+        .credit-body {
+            padding: 20px 20px 8px;
+            color: #1f4335;
+            line-height: 1.5;
+            font-size: 0.98rem;
+        }
+
+        .credit-body strong { color: #0f5132; }
+
+        .credit-metric-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 0 20px 16px;
+        }
+
+        .credit-metric {
+            border: 1px solid #d4ebdc;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 10px 12px;
+        }
+
+        .credit-metric-label {
+            display: block;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #678276;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+
+        .credit-metric-value {
+            font-size: 1rem;
+            font-weight: 900;
+            color: #114c31;
+        }
+
+        .credit-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 0 20px 20px;
+        }
+
+        .credit-actions button {
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--emerald), var(--emerald-dark));
+            color: #fff;
+            padding: 11px 16px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(0, 174, 66, 0.28);
+        }
+
+        .credit-actions button:hover {
+            filter: brightness(0.97);
+        }
+
+        @media (max-width: 640px) {
+            .credit-metric-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section-title {
+            margin: 0 0 8px;
+            font-size: 1.15rem;
+            font-weight: 850;
+        }
+
+        .section-copy {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.45;
+        }
+
+        @media (max-width: 920px) {
+            .shell { padding: 12px; }
+            .top-nav { padding: 10px; }
+            .links a { padding: 7px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <nav class="top-nav" aria-label="Client Navigation">
+            <div class="brand">USER PORTAL</div>
+            <div class="links">
+                <a href="/" class="{% if active_tab == 'home' %}active{% endif %}">Home</a>
+                <a href="/order" class="{% if active_tab == 'order' %}active{% endif %}">Order</a>
+                <a href="/history" class="{% if active_tab == 'history' %}active{% endif %}">My History</a>
+                <a href="/materials" class="{% if active_tab == 'materials' %}active{% endif %}">Materials</a>
+                <a href="/help" class="{% if active_tab == 'help' %}active{% endif %}">Help</a>
+            </div>
+            <div class="top-actions">
+                <span>{{ session.get('username', 'Member') }}</span>
+                <a class="logout" href="/user_logout">Log Out</a>
+            </div>
+        </nav>
+
+        {% if announcement_message %}
+        <div class="announcement">{{ announcement_message }}</div>
+        {% endif %}
+
+        {% if not shop_open %}
+        <div class="maintenance">Maintenance Mode: {{ capacity_message }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <div id="credit-milestone-modal" class="credit-modal" aria-hidden="true" data-current-credits="{{ material_credits|default(0) }}" data-user-id="{{ session.get('user_id', 'guest') }}">
+        <div class="credit-backdrop" id="credit-milestone-backdrop"></div>
+        <div class="credit-card" role="dialog" aria-modal="true" aria-labelledby="credit-milestone-title">
+            <div class="credit-head" id="credit-milestone-title">
+                <span class="credit-head-badge" aria-hidden="true">*</span>
+                <span>Material Credit Milestone Unlocked</span>
+            </div>
+            <div class="credit-body" id="credit-milestone-message"></div>
+            <div class="credit-metric-row">
+                <div class="credit-metric">
+                    <span class="credit-metric-label">Total Material Credits</span>
+                    <span class="credit-metric-value" id="credit-milestone-total">0</span>
+                </div>
+                <div class="credit-metric">
+                    <span class="credit-metric-label">Unlocked Free Prints</span>
+                    <span class="credit-metric-value" id="credit-milestone-freeprints">0</span>
+                </div>
+            </div>
+            <div class="credit-actions">
+                <button type="button" id="credit-milestone-ok">Awesome</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        const modal = document.getElementById('credit-milestone-modal');
+        if (!modal) return;
+
+        const currentCredits = Number(modal.getAttribute('data-current-credits') || 0);
+        if (!Number.isFinite(currentCredits) || currentCredits < 500) return;
+
+        const userId = modal.getAttribute('data-user-id') || 'guest';
+        if (!userId || userId === 'guest') return;
+
+        const storageKey = `materialCreditsSeen:${userId}`;
+        const seenCredits = Number(localStorage.getItem(storageKey) || 0);
+        if (currentCredits <= seenCredits) return;
+
+        const msg = document.getElementById('credit-milestone-message');
+        const okBtn = document.getElementById('credit-milestone-ok');
+        const backdrop = document.getElementById('credit-milestone-backdrop');
+        const totalEl = document.getElementById('credit-milestone-total');
+        const freePrintEl = document.getElementById('credit-milestone-freeprints');
+        if (!modal || !msg || !okBtn || !backdrop || !totalEl || !freePrintEl) return;
+
+        const unlockedFreePrints = Math.floor(currentCredits / 500);
+        totalEl.textContent = String(currentCredits);
+        freePrintEl.textContent = String(unlockedFreePrints);
+        if (currentCredits === 500) {
+            msg.innerHTML = 'You have just reached <strong>500 material credits</strong> and earned <strong>one free print under 150 grams</strong>.';
+        } else {
+            msg.innerHTML = `You have reached <strong>${currentCredits} material credits</strong>. You now have <strong>${unlockedFreePrints} free print credits</strong> for prints under 150 grams.`;
+        }
+
+        function closeModal() {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+            localStorage.setItem(storageKey, String(currentCredits));
+        }
+
+        okBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+    })();
+    </script>
+</body>
+</html>

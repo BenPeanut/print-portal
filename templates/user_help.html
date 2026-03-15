@@ -1,0 +1,114 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Help | Client Portal' %}
+
+{% block content %}
+<style>
+    .help-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .help-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px;
+    }
+
+    .help-card h3 {
+        margin: 0 0 8px;
+        font-size: 1.02rem;
+    }
+
+    .help-card p,
+    .help-card li {
+        color: #5f746a;
+        line-height: 1.5;
+        font-size: 0.92rem;
+    }
+
+    .help-card ul { margin: 0; padding-left: 18px; }
+
+    .guide-visuals {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .guide-shot {
+        border: 1px solid #dbe9e1;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f8fcfa;
+    }
+
+    .guide-shot img {
+        display: block;
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        background: #eef5f1;
+    }
+
+    .guide-shot figcaption {
+        padding: 8px 10px;
+        font-size: 0.82rem;
+        color: #436054;
+        line-height: 1.4;
+    }
+
+    @media (max-width: 980px) {
+        .help-grid { grid-template-columns: 1fr; }
+        .guide-visuals { grid-template-columns: 1fr; }
+    }
+</style>
+
+<section class="card">
+    <div class="card-body">
+        <h2 class="section-title">Help & Guides</h2>
+        <p class="section-copy">Quick references for preparing clean print requests and estimating accurate pricing.</p>
+
+        <div class="help-grid" style="margin-top:12px;">
+            <article class="help-card">
+                <h3>How to find model weight</h3>
+                <ul>
+                    <li>Open the model page on MakerWorld or Printables.</li>
+                    <li>Copy the specs area that includes weight and estimated print time.</li>
+                    <li>Use the Auto-Fill Assist on the Order page to populate fields quickly.</li>
+                </ul>
+                <div class="guide-visuals" aria-label="Weight guide screenshots">
+                    <figure class="guide-shot" style="margin:0;">
+                        <img src="{{ url_for('static', filename='weight-step1.png') }}" alt="Model page showing where the print weight appears in the specifications panel.">
+                        <figcaption>Step 1: Find the model's specification area.</figcaption>
+                    </figure>
+                    <figure class="guide-shot" style="margin:0;">
+                        <img src="{{ url_for('static', filename='weight-step2.png') }}" alt="Example of weight and print-time values to copy into the order form.">
+                        <figcaption>Step 2: Copy weight and time into your order request.</figcaption>
+                    </figure>
+                </div>
+            </article>
+
+            <article class="help-card">
+                <h3>Choosing filament colors</h3>
+                <ul>
+                    <li>Visit the Materials tab to preview available colors.</li>
+                    <li>If your first choice is unavailable, select the nearest backup color.</li>
+                    <li>For multi-color jobs, mention extra details in your project name.</li>
+                </ul>
+            </article>
+
+            <article class="help-card">
+                <h3>Order lifecycle</h3>
+                <p>Orders move through: Pending Quote, Approved, Printing, Quality Check, then Delivered. You can monitor progress from Home and My History.</p>
+            </article>
+
+            <article class="help-card">
+                <h3>Need support?</h3>
+                <p>Open any order and use the built-in message thread for revisions, clarifications, or timeline updates.</p>
+            </article>
+        </div>
+    </div>
+</section>
+{% endblock %}

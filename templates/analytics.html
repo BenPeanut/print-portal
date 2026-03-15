@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #f3f5f4;
+            --card: #ffffff;
+            --line: #dfe4e1;
+            --text: #26312c;
+            --muted: #6c7a72;
+            --emerald: #10b981;
+            --emerald-soft: #ecfdf5;
+            --red-soft: #fff5f5;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at top left, #ffffff 0%, #f2f5f3 45%, #e8efeb 100%);
+        }
+
+        .shell {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .topbar a {
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .eyebrow {
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 6px;
+        }
+
+        h1 { margin: 0; font-size: 2rem; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: 0 18px 40px rgba(27, 45, 36, 0.08);
+            overflow: hidden;
+        }
+
+        .card-body { padding: 22px; }
+
+        /* Full-width chart card */
+        .chart-card { width: 100%; margin-bottom: 18px; }
+
+        .chart-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+
+        .period-total {
+            margin: 4px 0 0;
+            font-size: 2.2rem;
+            line-height: 1;
+        }
+
+        .chart-controls { display: flex; align-items: center; gap: 10px; }
+
+        .chart-controls label {
+            font-size: 0.82rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .chart-controls select {
+            border: 1px solid #d7e3dc;
+            border-radius: 14px;
+            background: #fbfefd;
+            padding: 10px 14px;
+            font-size: 0.95rem;
+        }
+
+        .chart-wrap { height: 460px; margin-top: 18px; }
+
+        .empty-note {
+            margin-top: 14px;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        /* Bottom two-column grid */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .mini-stat {
+            border: 1px solid #d6eee5;
+            background: var(--emerald-soft);
+            border-radius: 16px;
+            padding: 16px;
+        }
+
+        .mini-stat p { margin: 0; }
+
+        .mini-label {
+            color: #3a6d5c;
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .mini-value {
+            margin-top: 8px;
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #0f5132;
+        }
+
+        /* Entry form */
+        .entry-form-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin: 0 0 4px;
+        }
+
+        .entry-form-sub {
+            color: var(--muted);
+            font-size: 0.88rem;
+            margin: 0 0 16px;
+        }
+
+        .entry-form { display: grid; gap: 12px; }
+
+        .entry-type-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .type-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid var(--line);
+            border-radius: 12px;
+            background: #fbfefd;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, color 0.15s;
+        }
+
+        .type-btn.profit.selected {
+            border-color: #10b981;
+            background: var(--emerald-soft);
+            color: #0f5132;
+        }
+
+        .type-btn.loss.selected {
+            border-color: #ef4444;
+            background: var(--red-soft);
+            color: #7f1d1d;
+        }
+
+        .entry-field label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 5px;
+        }
+
+        .entry-field input {
+            width: 100%;
+            border: 1px solid #d7e3dc;
+            border-radius: 12px;
+            background: #fbfefd;
+            padding: 11px 14px;
+            font-size: 0.95rem;
+        }
+
+        .entry-field input:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .submit-btn {
+            padding: 13px;
+            border: none;
+            border-radius: 14px;
+            background: #10b981;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .submit-btn:hover { background: #0ea472; }
+
+        .reset-btn {
+            display: block;
+            width: 100%;
+            margin-top: 14px;
+            padding: 11px;
+            border: 1.5px solid #ef4444;
+            border-radius: 14px;
+            background: transparent;
+            color: #ef4444;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .reset-btn:hover { background: #fef2f2; }
+
+        /* Confirm dialog overlay */
+        .confirm-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirm-overlay.open { display: flex; }
+
+        .confirm-box {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px 24px;
+            max-width: 380px;
+            width: 92%;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+        }
+
+        .confirm-box h3 { margin: 0 0 8px; font-size: 1.2rem; }
+
+        .confirm-box p { margin: 0 0 20px; color: var(--muted); font-size: 0.93rem; line-height: 1.5; }
+
+        .confirm-actions { display: flex; gap: 10px; }
+
+        .confirm-cancel {
+            flex: 1;
+            padding: 11px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fbfefd;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .confirm-danger {
+            flex: 1;
+            padding: 11px;
+            border: none;
+            border-radius: 12px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .confirm-danger:hover { background: #dc2626; }
+
+        .entry-feedback {
+            font-size: 0.9rem;
+            font-weight: 600;
+            min-height: 1.2em;
+        }
+
+        .entry-feedback.ok { color: #0f5132; }
+        .entry-feedback.err { color: #991b1b; }
+
+        @media (max-width: 900px) {
+            .shell { padding: 16px; }
+            .bottom-grid { grid-template-columns: 1fr; }
+            .chart-wrap { height: 320px; }
+            .period-total { font-size: 1.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="topbar">
+            <div>
+                <p class="eyebrow">Business Analytics</p>
+                <h1>Revenue Trends</h1>
+            </div>
+            <a href="/dashboard">← Back to Dashboard</a>
+        </div>
+
+        <!-- Full-width chart -->
+        <section class="card chart-card">
+            <div class="card-body">
+                <div class="chart-header">
+                    <div>
+                        <p class="eyebrow" id="chart-eyebrow">Past 30 Days</p>
+                        <h2 class="period-total" id="period-total">Rp0</h2>
+                    </div>
+                    <div class="chart-controls">
+                        <label for="timeframeFilter">Range</label>
+                        <select id="timeframeFilter" name="timeframe">
+                            <option value="week">7 Days</option>
+                            <option value="month" selected>30 Days</option>
+                            <option value="year">1 Year</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="profitChart"></canvas>
+                </div>
+                <p class="empty-note" id="chart-empty-note" style="display:none;">No entries exist for this period yet.</p>
+            </div>
+        </section>
+
+        <!-- Bottom row: lifetime stat + entry form -->
+        <div class="bottom-grid">
+            <div class="card">
+                <div class="card-body">
+                    <p class="entry-form-title">Lifetime Balance</p>
+                    <p class="entry-form-sub">Running total of all logged profits and losses.</p>
+                    <div class="mini-stat">
+                        <p class="mini-label">Lifetime Profit / Loss</p>
+                        <p class="mini-value" id="lifetime-display">Rp{{ '{:,.0f}'.format(lifetime_profit) }}</p>
+                    </div>
+                    <button class="reset-btn" id="reset-btn">Reset all financial data to zero</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <p class="entry-form-title">Log an Entry</p>
+                    <p class="entry-form-sub">Record income (e.g. completed order) or an expense (e.g. filament purchase).</p>
+
+                    <div class="entry-form">
+                        <div class="entry-type-row">
+                            <button type="button" class="type-btn profit selected" id="btn-profit">+ Profit</button>
+                            <button type="button" class="type-btn loss" id="btn-loss">− Loss / Expense</button>
+                        </div>
+
+                        <div class="entry-field">
+                            <label for="entry-amount">Amount (Rp)</label>
+                            <input type="number" id="entry-amount" placeholder="e.g. 50000" min="1" step="1">
+                        </div>
+
+                        <div class="entry-field">
+                            <label for="entry-date">Date</label>
+                            <input type="date" id="entry-date">
+                        </div>
+
+                        <button type="button" class="submit-btn" id="entry-submit">Save Entry</button>
+                        <p class="entry-feedback" id="entry-feedback"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset confirmation dialog -->
+    <div class="confirm-overlay" id="confirm-overlay">
+        <div class="confirm-box">
+            <h3>Reset all financial data?</h3>
+            <p>This will permanently delete every chart data point and set the lifetime balance back to Rp0. This cannot be undone.</p>
+            <div class="confirm-actions">
+                <button class="confirm-cancel" id="confirm-cancel">Cancel</button>
+                <button class="confirm-danger" id="confirm-reset">Yes, reset everything</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- chart ---
+        const timeframeFilter = document.getElementById('timeframeFilter');
+        const chartEyebrow = document.getElementById('chart-eyebrow');
+        const periodTotal = document.getElementById('period-total');
+        const emptyNote = document.getElementById('chart-empty-note');
+        const periodLabels = { week: 'Past 7 Days', month: 'Past 30 Days', year: 'Past 12 Months' };
+        let profitChart = null;
+
+        function formatCurrency(value) {
+            return 'Rp' + Number(value || 0).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+
+        function buildProfitGradient(context) {
+            const chart = context.chart;
+            const chartArea = chart.chartArea;
+            if (!chartArea) {
+                return 'rgba(16, 185, 129, 0.22)';
+            }
+
+            const gradient = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.36)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            return gradient;
+        }
+
+        async function renderProfitChart(timeframe) {
+            const response = await fetch(`/api/chart-data?timeframe=${encodeURIComponent(timeframe)}`);
+            if (!response.ok) throw new Error('Failed to load chart data');
+            const payload = await response.json();
+            const labels = payload.labels || [];
+            const data = payload.data || [];
+            const total = data.length ? Number(data[data.length - 1] || 0) : 0;
+            chartEyebrow.textContent = periodLabels[timeframe] || 'Past 30 Days';
+            periodTotal.textContent = formatCurrency(total);
+            emptyNote.style.display = labels.length ? 'none' : 'block';
+            if (profitChart) profitChart.destroy();
+            profitChart = new Chart(document.getElementById('profitChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Cumulative Profit',
+                        data,
+                        backgroundColor: buildProfitGradient,
+                        borderColor: '#10b981',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: '#10b981',
+                        pointHoverBorderColor: '#ffffff',
+                        pointHoverBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => formatCurrency(ctx.parsed.y || 0)
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: v => formatCurrency(v) },
+                            grid: { color: 'rgba(108, 122, 114, 0.12)' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 0,
+                                minRotation: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        timeframeFilter.addEventListener('change', () => renderProfitChart(timeframeFilter.value).catch(console.error));
+        renderProfitChart(timeframeFilter.value).catch(console.error);
+
+        // --- entry form ---
+        const btnProfit = document.getElementById('btn-profit');
+        const btnLoss = document.getElementById('btn-loss');
+        const entryAmount = document.getElementById('entry-amount');
+        const entryDate = document.getElementById('entry-date');
+        const entrySubmit = document.getElementById('entry-submit');
+        const entryFeedback = document.getElementById('entry-feedback');
+        const lifetimeDisplay = document.getElementById('lifetime-display');
+
+        // Default date to today
+        entryDate.value = new Date().toISOString().slice(0, 10);
+
+        let entryType = 'profit';
+
+        btnProfit.addEventListener('click', () => {
+            entryType = 'profit';
+            btnProfit.classList.add('selected');
+            btnLoss.classList.remove('selected');
+        });
+
+        btnLoss.addEventListener('click', () => {
+            entryType = 'loss';
+            btnLoss.classList.add('selected');
+            btnProfit.classList.remove('selected');
+        });
+
+        entrySubmit.addEventListener('click', async () => {
+            const rawAmount = parseFloat(entryAmount.value);
+            if (!rawAmount || rawAmount <= 0) {
+                entryFeedback.textContent = 'Please enter a positive amount.';
+                entryFeedback.className = 'entry-feedback err';
+                return;
+            }
+
+            const amount = entryType === 'loss' ? -rawAmount : rawAmount;
+            const dateVal = entryDate.value;
+
+            entrySubmit.disabled = true;
+            entryFeedback.textContent = '';
+
+            try {
+                const res = await fetch('/api/record-entry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount, date: dateVal })
+                });
+                const json = await res.json();
+                if (!res.ok || json.error) {
+                    entryFeedback.textContent = json.error || 'Something went wrong.';
+                    entryFeedback.className = 'entry-feedback err';
+                } else {
+                    entryFeedback.textContent = `Saved! Lifetime balance: ${formatCurrency(json.lifetime_profit)}`;
+                    entryFeedback.className = 'entry-feedback ok';
+                    lifetimeDisplay.textContent = formatCurrency(json.lifetime_profit);
+                    entryAmount.value = '';
+                    renderProfitChart(timeframeFilter.value).catch(console.error);
+                }
+            } catch (e) {
+                entryFeedback.textContent = 'Network error, please try again.';
+                entryFeedback.className = 'entry-feedback err';
+            } finally {
+                entrySubmit.disabled = false;
+            }
+        });
+
+        // --- reset ---
+        const resetBtn = document.getElementById('reset-btn');
+        const confirmOverlay = document.getElementById('confirm-overlay');
+        const confirmCancel = document.getElementById('confirm-cancel');
+        const confirmReset = document.getElementById('confirm-reset');
+
+        resetBtn.addEventListener('click', () => confirmOverlay.classList.add('open'));
+        confirmCancel.addEventListener('click', () => confirmOverlay.classList.remove('open'));
+        confirmOverlay.addEventListener('click', e => { if (e.target === confirmOverlay) confirmOverlay.classList.remove('open'); });
+
+        confirmReset.addEventListener('click', async () => {
+            confirmReset.disabled = true;
+            try {
+                const res = await fetch('/api/reset-financials', { method: 'POST' });
+                const json = await res.json();
+                if (res.ok && json.ok) {
+                    lifetimeDisplay.textContent = formatCurrency(0);
+                    confirmOverlay.classList.remove('open');
+                    renderProfitChart(timeframeFilter.value).catch(console.error);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                confirmReset.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

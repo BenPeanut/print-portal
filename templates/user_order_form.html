@@ -1,0 +1,483 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'New Order | Client Portal' %}
+
+{% block content %}
+<style>
+    .order-shell {
+        max-width: 1120px;
+        margin: 0 auto;
+    }
+
+    .box {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 28px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+        margin-bottom: 18px;
+        border-top: 5px solid #00ae42;
+        text-align: left;
+        min-height: 720px;
+    }
+
+    .box h3 {
+        text-align: center;
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+
+    input,
+    select,
+    button {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        box-sizing: border-box;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        font-size: 16px;
+    }
+
+    .btn-primary {
+        background-color: #00ae42;
+        color: white;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+
+    .btn-primary:hover { background-color: #008f36; }
+
+    .btn-secondary {
+        background: #2c2c2c;
+        color: white;
+        border: none;
+        font-size: 12px;
+        padding: 5px 10px;
+        width: auto;
+        cursor: pointer;
+        border-radius: 4px;
+        margin: 0;
+    }
+
+    .instruction-box {
+        background: #fffbe6;
+        border: 1px solid #ffe58f;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 0.85em;
+        margin: 10px 0;
+        color: #856404;
+        display: none;
+        line-height: 1.45;
+    }
+
+    .instruction-box img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        border: 1px solid #eee;
+    }
+
+    .weight-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .weight-preview {
+        border: 1px solid #f3d47d;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .weight-preview img {
+        width: 100%;
+        height: 180px;
+        object-fit: contain;
+        object-position: center;
+        background: #fffdf2;
+        display: block;
+    }
+
+    .weight-preview small {
+        display: block;
+        padding: 6px 8px;
+        color: #6f5a16;
+        line-height: 1.35;
+    }
+
+    .mapping-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+
+    .delete-btn {
+        width: 35px;
+        background: #ff4444;
+        color: white;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        border-radius: 6px;
+        margin: 0;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal.open { display: flex; }
+
+    .modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+
+    .modal-content {
+        position: relative;
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 22px 24px;
+        width: min(480px, 90%);
+        box-shadow: 0 16px 36px rgba(0,0,0,0.25);
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    #modal-cancel {
+        background: rgba(255,255,255,0.9);
+        border: 2px solid #d23a3a;
+        color: #d23a3a;
+        border-radius: 8px;
+        width: auto;
+        margin: 0;
+        padding: 10px 12px;
+    }
+
+    #modal-confirm {
+        width: auto;
+        margin: 0;
+        padding: 10px 14px;
+    }
+
+    #modal-cancel:hover { background: rgba(210, 58, 58, 0.12); }
+
+    .price-estimate {
+        display: inline-block;
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #00ae42;
+        margin-top: 10px;
+    }
+
+    @media (max-width: 760px) {
+        .box {
+            padding: 18px;
+            min-height: auto;
+        }
+
+        .weight-preview-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .mapping-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .mapping-row .delete-btn {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="order-shell">
+    <div class="box">
+        <h3>Request a New Print</h3>
+        <form id="order-form" action="/submit_order" method="POST">
+            {% if announcement_message %}
+            <div class="instruction-box" style="display:block; background:#e8f7ee; border:1px solid #bde7cb; color:#1f5c33;">
+                <strong>Announcement:</strong> {{ announcement_message }}
+            </div>
+            {% endif %}
+            {% if not shop_open %}
+            <div class="instruction-box" style="display:block; background:#fff3cd; border:1px solid #ffe69c; color:#7a5a00;">
+                <strong>{{ capacity_message or 'We are currently at capacity!' }}</strong>
+            </div>
+            {% endif %}
+            {% if error %}
+            <div class="instruction-box" style="display:block; background:#ffe6e6; border:1px solid #ffb3b3; color:#661010;">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            {% endif %}
+
+            <fieldset {% if not shop_open %}disabled{% endif %} style="border:0; padding:0; margin:0;">
+                <div id="step-link">
+                    <label><strong>Link to Model (MakerWorld or Printables):</strong></label>
+                    <input id="makerworld_link" type="text" name="makerworld_link" required placeholder="makerworld.com/... or printables.com/..."
+                        value="{{ prefill_link or '' }}"
+                        pattern="^(https?:\/\/)?(www\.)?(makerworld\.com|printables\.com)(\/.*)?$"
+                        title="Only makerworld.com or printables.com URLs are accepted">
+                </div>
+
+                <div style="margin-top: 15px;" id="step-weight-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                        <label><strong>Print Weight (grams):</strong></label>
+                        <button type="button" id="btn-weight-help" class="btn-secondary" onclick="toggleWeightInstructions()">How to find weight?</button>
+                    </div>
+                    <div id="weight-instructions" class="instruction-box" style="display:none;">
+                        <strong>How to find model weight on MakerWorld</strong><br>
+                        1. On MakerWorld, hover over the model/profile you want to print.<br>
+                        2. A floating panel will pop up — find the <strong>Weight</strong> label (usually in grams).<br>
+                        3. Enter the number (only digits) below.
+                        <div class="weight-preview-grid">
+                            <div class="weight-preview">
+                                <img src="{{ url_for('static', filename='weight-step1.png') }}" alt="MakerWorld model page showing where to locate weight.">
+                                <small>Step 1: Open the model page and find the specs panel.</small>
+                            </div>
+                            <div class="weight-preview">
+                                <img src="{{ url_for('static', filename='weight-step2.png') }}" alt="Example spec panel with weight and print time values.">
+                                <small>Step 2: Copy the weight value into Print Weight.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <input id="model_weight" type="number" min="0" step="0.1" name="model_weight" placeholder="e.g. 32.5">
+                </div>
+
+                <div style="margin-top: 15px;" id="step-profile-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                        <label><strong>Print Profile / Number:</strong></label>
+                        <button type="button" id="btn-how-to" class="btn-secondary" onclick="toggleInstructions()">How to choose?</button>
+                    </div>
+
+                    <div id="profile-instructions" class="instruction-box">
+                        <strong>Instructions:</strong><br>
+                        1. Look at the list of Print Profiles on the MakerWorld page.<br>
+                        2. Type the profile name <strong>OR</strong> its position (1 is the top profile).<br>
+                        3. Use negative numbers to count from the bottom (e.g., -1 is the very last one).<br>
+                        <em>If you leave this blank, Profile 1 will be selected.</em>
+                    </div>
+
+                    <input type="text" name="print_profile" placeholder="Profile 1 (Default)">
+                </div>
+
+                <div id="step-color-section">
+                    <label style="margin-top: 15px; display: block;"><strong>How many colors is this model?</strong></label>
+                    <div style="display: flex; gap: 20px; margin: 10px 0; flex-wrap: wrap;">
+                        <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleColorMode('single')"> 1 Color</label>
+                        <label style="cursor:pointer;"><input type="radio" name="color_mode" value="multi" onclick="toggleColorMode('multi')"> 2 or More Colors</label>
+                    </div>
+
+                    <div id="single-color-section">
+                        <label>Select Filament:</label>
+                        <select name="single_filament" required>
+                            <option value="" disabled selected>Choose a filament...</option>
+                            {% for f in filaments %}
+                            <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                        <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
+                        <div id="color-mappings">
+                            <div class="mapping-row">
+                                <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
+                                <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                                    {% for f in filaments %}
+                                    <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                <div style="width: 35px;"></div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+                    </div>
+                </div>
+
+                <button type="submit" id="btn-submit" class="btn-primary" {% if not shop_open %}disabled{% endif %} style="margin-top: 20px;">
+                    {% if shop_open %}Request Quote{% else %}Shop Closed{% endif %}
+                </button>
+            </fieldset>
+        </form>
+    </div>
+</div>
+
+<div id="price-confirm-modal" class="modal">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h3 id="modal-title">Estimated Price</h3>
+        <p id="modal-message">Loading...</p>
+        <div class="modal-actions">
+            <button type="button" id="modal-cancel" class="btn-secondary">Cancel</button>
+            <button type="button" id="modal-confirm" class="btn-primary">Confirm Submission</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    let orderSubmitConfirmed = false;
+
+    window.toggleInstructions = function () {
+        const inst = document.getElementById('profile-instructions');
+        inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+    };
+
+    window.toggleWeightInstructions = function () {
+        const inst = document.getElementById('weight-instructions');
+        inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+    };
+
+    window.toggleColorMode = function (mode) {
+        document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
+        document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+
+        const singleSelect = document.querySelector('select[name="single_filament"]');
+        if (singleSelect) singleSelect.required = (mode === 'single');
+
+        document.querySelectorAll('#color-mappings .mapping-row').forEach(function (row) {
+            const part = row.querySelector('input[name="model_part[]"]');
+            const fil = row.querySelector('select[name="mapped_filament[]"]');
+            if (part) part.required = (mode === 'multi');
+            if (fil) fil.required = (mode === 'multi');
+        });
+    };
+
+    window.addMappingRow = function () {
+        const container = document.getElementById('color-mappings');
+        const firstSelect = document.querySelector('select[name="mapped_filament[]"]');
+        const filamentOptions = firstSelect ? firstSelect.innerHTML : '';
+
+        const newRow = document.createElement('div');
+        newRow.className = 'mapping-row';
+        newRow.innerHTML = `
+            <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;" required>
+            <select name="mapped_filament[]" style="flex: 1; margin: 0;" required>
+                ${filamentOptions}
+            </select>
+            <button type="button" class="delete-btn" onclick="this.parentElement.remove()">✕</button>
+        `;
+        container.appendChild(newRow);
+    };
+
+    document.getElementById('order-form')?.addEventListener('submit', function(evt) {
+        if (orderSubmitConfirmed) {
+            return;
+        }
+
+        evt.preventDefault();
+
+        const linkInput = document.getElementById('makerworld_link');
+        const linkVal = linkInput ? linkInput.value.trim() : '';
+        const allowedRe = /^(?:https?:\/\/)?(?:www\.)?(?:makerworld\.com|printables\.com)(?:[\/\:\?#]|$)/i;
+        if (!allowedRe.test(linkVal)) {
+            alert('Please enter a makerworld.com or printables.com link (you may omit https://).');
+            if (linkInput) linkInput.focus();
+            return;
+        }
+
+        const weightInput = document.getElementById('model_weight');
+        const weightRaw = weightInput ? weightInput.value.trim() : '';
+        const weightVal = weightRaw ? parseFloat(weightRaw) : NaN;
+        if (weightRaw && (Number.isNaN(weightVal) || weightVal <= 0)) {
+            alert('Please enter a valid model weight (in grams) as shown in the MakerWorld popup.');
+            if (weightInput) weightInput.focus();
+            return;
+        }
+
+        const modeEl = document.querySelector('input[name="color_mode"]:checked');
+        const mode = modeEl ? modeEl.value : 'single';
+        if (mode === 'single') {
+            const sel = document.querySelector('select[name="single_filament"]');
+            if (sel && !sel.value) {
+                alert('Please choose a filament color.');
+                sel.focus();
+                return;
+            }
+        } else {
+            const rows = document.querySelectorAll('#color-mappings .mapping-row');
+            for (const row of rows) {
+                const part = row.querySelector('input[name="model_part[]"]');
+                const fil = row.querySelector('select[name="mapped_filament[]"]');
+                if (!part.value.trim() || !fil.value) {
+                    alert('Please fill out every part and filament when using multi-color.');
+                    return;
+                }
+            }
+        }
+
+        if (weightRaw) {
+            const estimatedRaw = weightVal * 154 * 2.5;
+            const estimated = Math.ceil(estimatedRaw / 5000) * 5000;
+            const formatted = estimated.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+            const modal = document.getElementById('price-confirm-modal');
+            const messageEl = document.getElementById('modal-message');
+            messageEl.innerHTML = `<span class="price-estimate">Rp${formatted}</span>`;
+            modal.classList.add('open');
+
+            const closeModal = function() {
+                modal.classList.remove('open');
+            };
+
+            const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
+            const backdrop = document.getElementById('modal-backdrop');
+
+            const onConfirm = function() {
+                orderSubmitConfirmed = true;
+                cleanup();
+                closeModal();
+                document.getElementById('order-form').submit();
+            };
+
+            const onCancel = function() {
+                cleanup();
+                closeModal();
+            };
+
+            const onKey = function(e) {
+                if (e.key === 'Escape') onCancel();
+            };
+
+            function cleanup() {
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                backdrop.removeEventListener('click', onCancel);
+                document.removeEventListener('keydown', onKey);
+            }
+
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            backdrop.addEventListener('click', onCancel);
+            document.addEventListener('keydown', onKey);
+            return;
+        }
+
+        orderSubmitConfirmed = true;
+        document.getElementById('order-form').submit();
+    });
+
+    toggleColorMode('single');
+})();
+</script>
+{% endblock %}

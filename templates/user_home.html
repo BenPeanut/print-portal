@@ -1,0 +1,815 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Home | Client Portal' %}
+
+{% block content %}
+<style>
+    .hero-container {
+        position: relative;
+        overflow: hidden;
+        border-radius: 20px;
+        height: 540px;
+        margin-bottom: 16px;
+        border: 1px solid #dbe8e1;
+        box-shadow: 0 12px 28px rgba(14, 42, 32, 0.12);
+    }
+
+    .hero-slide {
+        position: absolute;
+        inset: 0;
+        transition: opacity 0.8s ease;
+        opacity: 0;
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-start;
+        pointer-events: none;
+    }
+
+    .hero-slide.active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .hero-image {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        filter: brightness(0.92);
+    }
+
+    .hero-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.78), rgba(0,0,0,0.1));
+        pointer-events: none;
+    }
+
+    .hero-meta {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 26px 22px;
+    }
+
+    .hero-title {
+        font-size: 2.05rem;
+        font-weight: 900;
+        color: #ffffff;
+        margin: 0 0 8px;
+        line-height: 1.1;
+    }
+
+    .hero-desc {
+        font-size: 1rem;
+        color: rgba(255,255,255,0.92);
+        margin: 0 0 16px;
+        max-width: 64%;
+        line-height: 1.45;
+    }
+
+    .hero-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .hero-price {
+        font-size: 2rem;
+        font-weight: 900;
+        color: #00ae42;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.35);
+    }
+
+    .btn-primary {
+        display: inline-block;
+        text-decoration: none;
+        background-color: #00ae42;
+        color: #fff;
+        border: none;
+        font-weight: 800;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .btn-primary:hover { background-color: #008f36; }
+
+    .hero-order-btn {
+        min-width: 156px;
+        text-align: center;
+    }
+
+    .hero-dots {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        z-index: 30;
+    }
+
+    .hero-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255,255,255,0.55);
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .hero-dot.active { background: rgba(255,255,255,1); }
+
+    .hero-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0,0,0,0.35);
+        color: #fff;
+        font-size: 22px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s ease, background 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+    }
+
+    .hero-arrow:hover { background: rgba(0,0,0,0.55); }
+    .hero-container:hover .hero-arrow { opacity: 1; }
+    .hero-arrow-left { left: 12px; }
+    .hero-arrow-right { right: 12px; }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .stat-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px;
+    }
+
+    .stat-label {
+        margin: 0;
+        font-size: 0.8rem;
+        letter-spacing: 0.06em;
+        color: #5f746a;
+        text-transform: uppercase;
+        font-weight: 800;
+    }
+
+    .stat-value {
+        margin: 8px 0 0;
+        font-size: 1.75rem;
+        font-weight: 900;
+        color: #0f5132;
+    }
+
+    .stat-sub {
+        margin: 6px 0 0;
+        color: #5f746a;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    .main-grid {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 12px;
+    }
+
+    .order-list { list-style: none; margin: 0; padding: 0; }
+
+    .order-item {
+        border: 1px solid #e1ece6;
+        border-radius: 14px;
+        padding: 10px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .order-meta strong { display: block; }
+    .order-meta small { color: #60766b; }
+
+    .order-item.waiting {
+        border-color: #facc15;
+        background: linear-gradient(180deg, #fffbeb, #ffffff);
+        box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.25);
+    }
+
+    .status-pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        border: 1px solid #d1d5db;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.5;
+        background: #fff;
+    }
+
+    .status-pill.waiting-approval {
+        color: #92400e;
+        border-color: #f59e0b;
+        background: #fff7ed;
+    }
+
+    .status-pill.approved {
+        color: #065f46;
+        border-color: #00ae42;
+        background: #ecfdf5;
+    }
+
+    .status-pill.printing {
+        color: #1d4ed8;
+        border-color: #60a5fa;
+        background: #eff6ff;
+    }
+
+    .status-pill.completed,
+    .status-pill.delivered,
+    .status-pill.done {
+        color: #166534;
+        border-color: #34d399;
+        background: #ecfdf5;
+    }
+
+    .status-pill.cancelled,
+    .status-pill.declined,
+    .status-pill.price-denied {
+        color: #991b1b;
+        border-color: #f87171;
+        background: #fef2f2;
+    }
+
+    .approval-flag {
+        border: 1px solid #f59e0b;
+        background: linear-gradient(135deg, #fff7ed, #fffef5);
+        border-radius: 14px;
+        padding: 11px 12px;
+        margin: 8px 0 12px;
+    }
+
+    .approval-flag strong { color: #9a3412; }
+
+    .approval-flag a {
+        color: #b45309;
+        font-weight: 800;
+        text-decoration: none;
+    }
+
+    .order-link {
+        text-decoration: none;
+        color: #008f36;
+        font-weight: 700;
+    }
+
+    .timeline {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .timeline-step {
+        text-align: center;
+        border: 1px solid #d9e6df;
+        border-radius: 12px;
+        padding: 8px 6px;
+        font-size: 0.78rem;
+        color: #6b7f74;
+        font-weight: 700;
+        background: #f8fbf9;
+    }
+
+    .timeline-step.done {
+        background: #e8f8f0;
+        color: #115e41;
+        border-color: #bde8d5;
+    }
+
+    .spotlight {
+        display: grid;
+        gap: 10px;
+    }
+
+    .chip {
+        display: inline-block;
+        border: 1px solid #dbe8e1;
+        background: #f3faf6;
+        color: #215844;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+    .filament-color {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 2px solid rgba(0,0,0,0.1);
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+
+    .mini-card { margin-top: 12px; }
+
+    .muted-btn {
+        border: 1px solid #d8e6de;
+        background: #fbfefd;
+        color: #345f50;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-weight: 700;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+    }
+
+    .modal.open { display: flex; }
+
+    .modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+
+    .modal-content {
+        position: relative;
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 22px 24px;
+        width: min(560px, 92%);
+        box-shadow: 0 16px 36px rgba(0,0,0,0.25);
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .modal-select {
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        width: 180px;
+    }
+
+    .color-pill {
+        background: #f1f1f1;
+        color: #333;
+        padding: 6px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 980px) {
+        .stats-grid { grid-template-columns: 1fr; }
+        .main-grid { grid-template-columns: 1fr; }
+        .hero-container { height: 420px; }
+        .hero-title { font-size: 1.55rem; }
+        .hero-desc { max-width: 100%; font-size: 0.95rem; }
+        .hero-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
+        .hero-price { font-size: 1.6rem; }
+        .timeline { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div id="page-data" data-filaments='{{ filaments|tojson|safe }}' style="display:none;"></div>
+
+<section class="hero-container" id="hero-container">
+    <button type="button" class="hero-arrow hero-arrow-left" aria-label="Previous slide">‹</button>
+    <button type="button" class="hero-arrow hero-arrow-right" aria-label="Next slide">›</button>
+    {% for item in featured_items %}
+    <article class="hero-slide {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}" data-item='{{ item | tojson }}'>
+        <div class="hero-image" style="background-image:url('{{ item.image_url }}');"></div>
+        <div class="hero-overlay"></div>
+        <div class="hero-meta">
+            <div>
+                <div class="hero-title">{{ item.title }}</div>
+                <div class="hero-desc">{{ item.description or 'Featured print from our workshop.' }}</div>
+            </div>
+            <div class="hero-bottom">
+                <div class="hero-price">Rp{{ "{:,}".format((item.price or 0)|int) }}</div>
+                <button type="button" class="btn-primary hero-order-btn featured-order-btn" data-slide-index="{{ loop.index0 }}">Order Now</button>
+            </div>
+        </div>
+    </article>
+    {% endfor %}
+    <div class="hero-dots" id="hero-dots"></div>
+</section>
+
+<div id="featured-order-modal" class="modal">
+    <div class="modal-backdrop" id="featured-modal-backdrop"></div>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
+        <h3 id="featured-modal-title">Featured Print</h3>
+        <div id="featured-modal-image" style="height:220px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 14px;"></div>
+        <p id="featured-modal-description" style="margin: 0 0 12px 0; color: #444;"></p>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+            <div id="featured-modal-price" style="font-size: 1.7rem; font-weight: 800; color: #00ae42;"></div>
+            <div id="featured-modal-profile-wrap" style="display:flex; flex-direction:column; gap: 6px;">
+                <label style="font-size: 0.85rem; margin: 0;">Print Profile</label>
+                <select id="featured-modal-profile" class="modal-select"></select>
+            </div>
+        </div>
+        <div id="featured-modal-suggested-colors" style="margin-bottom: 10px; display:none; font-size: 0.9rem;">
+            <strong>Suggested Colors:</strong>
+            <div id="featured-modal-color-pills" style="margin-top: 6px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+        </div>
+        <div id="featured-modal-filament-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+            <div style="font-size: 0.85rem;">Choose Filament</div>
+            <select id="featured-modal-filament" class="modal-select"></select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="featured-modal-cancel" class="muted-btn">Cancel</button>
+            <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Order</button>
+        </div>
+    </div>
+</div>
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <p class="stat-label">Active Prints</p>
+        <p class="stat-value">{{ active_orders_count }}</p>
+    </article>
+    <article class="stat-card">
+        <p class="stat-label">Prints Delivered</p>
+        <p class="stat-value">{{ total_prints_completed }}</p>
+    </article>
+    <article class="stat-card">
+        <p class="stat-label">Material Credits</p>
+        <p class="stat-value">{{ material_credits }}</p>
+        <p class="stat-sub">Member Since {{ member_since }}</p>
+    </article>
+</section>
+
+<section class="main-grid">
+    <article class="card">
+        <div class="card-body">
+            <h3 class="section-title">Recent Orders</h3>
+            <p class="section-copy">Your latest 3 requests and live production status.</p>
+
+            {% if waiting_approval_orders and waiting_approval_orders|length > 0 %}
+            {% set highlighted = waiting_approval_orders[0] %}
+            <div class="approval-flag">
+                <strong>Price Ready For Approval</strong><br>
+                Order <a href="/order/{{ highlighted.id }}">#{{ highlighted.id }}</a> is waiting for your confirmation.
+            </div>
+            {% endif %}
+
+            <ul class="order-list">
+                {% for order in recent_orders %}
+                {% set status_text = (order.status or 'Unknown') %}
+                {% set status_key = status_text|lower|replace(' ', '-') %}
+                <li class="order-item {% if status_key == 'waiting-for-approval' %}waiting{% endif %}">
+                    <div class="order-meta">
+                        <strong>{{ order.name or order.product_name or 'Unnamed Order' }}</strong>
+                        <small>#{{ order.id }} · <span class="status-pill {{ status_key }}">{{ status_text }}</span></small>
+                        {% if order.admin_note %}
+                        <small style="display:block; margin-top:4px; color:#0f5132;"><strong>Admin note:</strong> {{ order.admin_note }}</small>
+                        {% endif %}
+                    </div>
+                    <a class="order-link" href="/order/{{ order.id }}">Open</a>
+                </li>
+                {% else %}
+                <li class="order-item"><div class="order-meta"><strong>No recent orders</strong><small>Start by submitting your first print request.</small></div></li>
+                {% endfor %}
+            </ul>
+
+            <div class="mini-card">
+                <h4 class="section-title" style="font-size:1rem;">Most Recent Progress</h4>
+                {% set status = (latest_order.status if latest_order else '')|lower %}
+                {% if status in ['delivered', 'done', 'completed'] %}
+                    {% set step_idx = 4 %}
+                {% elif status in ['quality check'] %}
+                    {% set step_idx = 3 %}
+                {% elif status in ['printing'] %}
+                    {% set step_idx = 2 %}
+                {% elif status in ['approved', 'waiting for approval'] %}
+                    {% set step_idx = 1 %}
+                {% else %}
+                    {% set step_idx = 0 %}
+                {% endif %}
+                <div class="timeline">
+                    <div class="timeline-step {% if step_idx >= 0 %}done{% endif %}">Order Received</div>
+                    <div class="timeline-step {% if step_idx >= 1 %}done{% endif %}">Slicing</div>
+                    <div class="timeline-step {% if step_idx >= 2 %}done{% endif %}">Printing</div>
+                    <div class="timeline-step {% if step_idx >= 3 %}done{% endif %}">Quality Check</div>
+                    <div class="timeline-step {% if step_idx >= 4 %}done{% endif %}">Ready</div>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <aside class="spotlight">
+        <article class="card">
+            <div class="card-body">
+                <h3 class="section-title">Material Spotlight</h3>
+                {% if spotlight_filament %}
+                <p class="section-copy"><span class="filament-color" data-color="{{ spotlight_filament.hex or '#8b8b8b' }}"></span>{{ spotlight_filament.name }}</p>
+                <p class="section-copy">{{ spotlight_filament.material }} · {{ spotlight_filament.brand }}</p>
+                <p class="chip">{{ spotlight_filament.remaining_g }}g in stock</p>
+                {% else %}
+                <p class="section-copy">No in-stock material right now. Check back after restock.</p>
+                {% endif %}
+            </div>
+        </article>
+
+        <article class="card">
+            <div class="card-body">
+                <h3 class="section-title">Print of the Month</h3>
+                {% if print_of_month %}
+                <p class="section-copy"><strong>{{ print_of_month.title }}</strong></p>
+                <p class="section-copy">{{ print_of_month.description or 'Highlighted by our team this month.' }}</p>
+                {% else %}
+                <p class="section-copy">No feature set yet. New showcase will appear here.</p>
+                {% endif %}
+            </div>
+        </article>
+
+        <article class="card">
+            <div class="card-body">
+                <h3 class="section-title">Profile</h3>
+                <p class="section-copy">{{ session.get('username', 'Member') }}</p>
+                <p class="section-copy">Joined {{ member_since }}</p>
+                <a class="muted-btn" href="/history" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin-top:6px;">View Order History</a>
+            </div>
+        </article>
+    </aside>
+</section>
+
+<script>
+(function () {
+    const slides = Array.from(document.querySelectorAll('#hero-container .hero-slide'));
+    const dotsContainer = document.getElementById('hero-dots');
+    const prevBtn = document.querySelector('.hero-arrow-left');
+    const nextBtn = document.querySelector('.hero-arrow-right');
+    if (!slides.length) return;
+
+    let idx = 0;
+    let timer = null;
+
+    function renderDots() {
+        if (!dotsContainer) return;
+        dotsContainer.innerHTML = '';
+        slides.forEach(function (_, i) {
+            const dot = document.createElement('button');
+            dot.type = 'button';
+            dot.className = 'hero-dot';
+            dot.setAttribute('aria-label', `Show slide ${i + 1}`);
+            dot.addEventListener('click', function () {
+                idx = i;
+                showSlide(idx);
+                resetTimer();
+            });
+            dotsContainer.appendChild(dot);
+        });
+    }
+
+    function showSlide(target) {
+        slides.forEach(function (slide, i) {
+            slide.classList.toggle('active', i === target);
+        });
+        const dots = Array.from(document.querySelectorAll('.hero-dot'));
+        dots.forEach(function (dot, i) {
+            dot.classList.toggle('active', i === target);
+        });
+    }
+
+    function resetTimer() {
+        if (timer) clearInterval(timer);
+        timer = setInterval(function () {
+            idx = (idx + 1) % slides.length;
+            showSlide(idx);
+        }, 5000);
+    }
+
+    prevBtn?.addEventListener('click', function () {
+        idx = (idx - 1 + slides.length) % slides.length;
+        showSlide(idx);
+        resetTimer();
+    });
+
+    nextBtn?.addEventListener('click', function () {
+        idx = (idx + 1) % slides.length;
+        showSlide(idx);
+        resetTimer();
+    });
+
+    renderDots();
+    showSlide(idx);
+    resetTimer();
+})();
+
+(function () {
+    function openFeaturedModal(index) {
+        const slides = document.querySelectorAll('#hero-container .hero-slide');
+        if (!slides[index]) return;
+        let item = {};
+        try {
+            item = JSON.parse(slides[index].dataset.item || '{}');
+        } catch (error) {
+            item = {};
+        }
+        if (!item || !item.title) return;
+
+        const modal = document.getElementById('featured-order-modal');
+        const img = document.getElementById('featured-modal-image');
+        const desc = document.getElementById('featured-modal-description');
+        const price = document.getElementById('featured-modal-price');
+        const filament = document.getElementById('featured-modal-filament');
+        const profileSelect = document.getElementById('featured-modal-profile');
+        const profileWrap = document.getElementById('featured-modal-profile-wrap');
+        const colorsContainer = document.getElementById('featured-modal-suggested-colors');
+        const pillsContainer = document.getElementById('featured-modal-color-pills');
+        const filamentRow = document.getElementById('featured-modal-filament-row');
+
+        img.style.backgroundImage = `url('${item.image_url || ''}')`;
+        desc.textContent = item.description || '';
+        price.textContent = `Rp${(Number(item.price) || 0).toLocaleString()}`;
+
+        const rawProfileOptions = item.profile_options || [];
+        let profileOptions = [];
+        if (Array.isArray(rawProfileOptions)) profileOptions = rawProfileOptions.map(function (p) { return String(p || '').trim(); }).filter(Boolean);
+        else if (typeof rawProfileOptions === 'string' && rawProfileOptions.trim()) {
+            profileOptions = rawProfileOptions.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+        }
+
+        profileSelect.innerHTML = '';
+        if (profileOptions.length) {
+            profileOptions.forEach(function (p, idx) {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                if (idx === 0) opt.selected = true;
+                profileSelect.appendChild(opt);
+            });
+            profileWrap.style.display = 'flex';
+        } else {
+            profileWrap.style.display = 'none';
+        }
+
+        filament.innerHTML = '';
+        let currentFilaments = [];
+        try {
+            currentFilaments = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
+        } catch (error) {
+            currentFilaments = [];
+        }
+        const recommended = (item.suggested_filament || '').toString().trim().toLowerCase();
+        currentFilaments.forEach(function (f) {
+            const name = typeof f === 'string' ? f : (f && f.name ? String(f.name) : '');
+            if (!name) return;
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            if (recommended && name.toLowerCase() === recommended) opt.selected = true;
+            filament.appendChild(opt);
+        });
+
+        const suggestedColorsString = (item.suggested_colors || item.suggested_filament || '').toString();
+        if (suggestedColorsString && suggestedColorsString.includes('|')) {
+            colorsContainer.style.display = 'block';
+            pillsContainer.innerHTML = '';
+            suggestedColorsString.split('|').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (seg) {
+                const pill = document.createElement('span');
+                pill.className = 'color-pill';
+                pill.textContent = seg;
+                pillsContainer.appendChild(pill);
+            });
+            filamentRow.style.display = 'none';
+        } else {
+            colorsContainer.style.display = 'none';
+            filamentRow.style.display = 'flex';
+        }
+
+        modal.dataset.featuredIndex = String(index);
+        modal.dataset.featuredId = item.id || '';
+        modal.classList.add('open');
+    }
+
+    function closeFeaturedModal() {
+        const modal = document.getElementById('featured-order-modal');
+        if (!modal) return;
+        modal.classList.remove('open');
+    }
+
+    document.querySelectorAll('.featured-order-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            const slide = btn.closest('.hero-slide');
+            const index = slide ? parseInt(slide.dataset.index || '0', 10) : 0;
+            openFeaturedModal(index);
+        });
+    });
+
+    document.getElementById('featured-modal-cancel')?.addEventListener('click', function () {
+        closeFeaturedModal();
+    });
+    document.getElementById('featured-modal-backdrop')?.addEventListener('click', function () {
+        closeFeaturedModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeFeaturedModal();
+    });
+
+    document.getElementById('featured-modal-confirm')?.addEventListener('click', async function () {
+        const modal = document.getElementById('featured-order-modal');
+        const index = parseInt(modal?.dataset?.featuredIndex || '-1', 10);
+        const slides = document.querySelectorAll('#hero-container .hero-slide');
+        if (index < 0 || !slides[index]) return;
+
+        let item = {};
+        try {
+            item = JSON.parse(slides[index].dataset.item || '{}');
+        } catch (error) {
+            item = {};
+        }
+        if (!item || !item.title) return;
+
+        const filament = document.getElementById('featured-modal-filament')?.value || '';
+        const profile = document.getElementById('featured-modal-profile-wrap')?.style.display === 'none'
+            ? ''
+            : (document.getElementById('featured-modal-profile')?.value || '');
+        const suggestedColorsFromItem = (item.suggested_colors || item.suggested_filament || '').toString();
+        const suggestedColors = suggestedColorsFromItem && suggestedColorsFromItem.includes('|')
+            ? suggestedColorsFromItem
+            : filament;
+
+        const btn = document.getElementById('featured-modal-confirm');
+        const originalText = btn.textContent;
+        btn.textContent = 'Sending...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/create_featured_order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: item.title,
+                    makerworld_link: item.makerworld_url,
+                    price: item.price,
+                    filament: filament,
+                    profile: profile,
+                    suggested_colors: suggestedColors,
+                    item_id: item.id,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.order_id) {
+                window.location.href = `/order/${data.order_id}`;
+            } else {
+                alert(data.error || 'Unable to create order.');
+            }
+        } catch (error) {
+            alert('Failed to create order. Please try again.');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    });
+})();
+
+(function () {
+    document.querySelectorAll('[data-color]').forEach(function (el) {
+        const color = (el.getAttribute('data-color') || '#8b8b8b').trim();
+        el.style.background = color;
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --bambu-green: #00ae42;
+            --bg-color: #f4f5f7;
+            --text-main: #2c2c2c;
+            --text-muted: #8b95a1;
+        }
+
+        body {
+            background: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            color: var(--text-main);
+        }
+
+        /* --- Navigation Bar --- */
+        .nav-bar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            background: #fff;
+            padding: 15px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .nav-bar a {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-bar a:hover {
+            background: #f0f0f0;
+            color: var(--text-main);
+        }
+
+        .nav-bar a.active {
+            background: var(--bambu-green);
+            color: #fff;
+        }
+
+        /* --- Dashboard Grid Setup --- */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, minmax(250px, auto));
+            gap: 20px; /* This handles the spacing perfectly, no margins needed */
+        }
+
+        /* --- Universal Box Style --- */
+        .dash-card {
+            background: #fff;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            border-top: 5px solid var(--bambu-green);
+            padding: 25px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dash-card h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            color: var(--text-main);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        /* --- Box 1: Double Wide --- */
+        .double-wide {
+            grid-column: span 2;
+        }
+
+        /* --- Suggested Gallery --- */
+        .suggested-gallery {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        /* Custom scrollbar for a neat look */
+        .suggested-gallery::-webkit-scrollbar { height: 8px; }
+        .suggested-gallery::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+
+        .suggested-item {
+            flex: 0 0 150px;
+            background: var(--bg-color);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #eaeaea;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .suggested-item img {
+            width: 100%;
+            height: 110px;
+            object-fit: cover;
+        }
+
+        .suggested-info {
+            padding: 10px;
+            text-align: center;
+        }
+
+        .suggested-info p {
+            margin: 0 0 5px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .suggested-info small {
+            color: var(--bambu-green);
+            font-weight: bold;
+            font-size: 0.75rem;
+            display: block;
+        }
+
+        /* --- Live User Feed --- */
+        .user-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: #fafafa;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            font-weight: 500;
+        }
+
+        /* Logic styling for order counts */
+        .user-item.dimmed {
+            opacity: 0.5;
+        }
+
+        .user-item.highlighted .order-count {
+            color: var(--bambu-green);
+            font-weight: bold;
+            background: #e6f7ed;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        /* --- Empty State Content --- */
+        .empty-state {
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 0.95rem;
+            text-align: center;
+            margin: auto; /* Centers text perfectly inside the box */
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="/admin_home" class="active">Home</a>
+        <a href="/orders">Orders</a>
+        <a href="/filaments">Filaments</a>
+        <a href="/suggested">Suggested Orders</a>
+        <a href="/archive">Archived Orders</a>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="dashboard-grid">
+            
+            <div class="dash-card double-wide">
+                <h2>All Suggested Orders</h2>
+                <div class="suggested-gallery">
+                    {% if featured_prints %}
+                        {% for item in featured_prints %}
+                        <div class="suggested-item">
+                            <img src="{{ item.image_url }}" alt="{{ item.title }}">
+                            <div class="suggested-info">
+                                <p title="{{ item.title }}">{{ item.title }}</p>
+                                <small>For: {{ item.target_user }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="empty-state">No featured prints currently uploaded.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <h2>Filament Management</h2>
+                <p class="empty-state">No filaments added yet.</p>
+            </div>
+
+            <div class="dash-card">
+                <h2>Live User Feed</h2>
+                <ul class="user-list">
+                    {% if users %}
+                        {% for user in users %}
+                            {% set count = user.order_count | default(0) | int %}
+                            <li class="user-item {% if count == 0 %}dimmed{% elif count > 3 %}highlighted{% endif %}">
+                                <span class="username">{{ user.username }}</span>
+                                <span class="order-count">{{ count }} orders</span>
+                            </li>
+                        {% endfor %}
+                    {% else %}
+                        <p class="empty-state">No active users.</p>
+                    {% endif %}
+                </ul>
+            </div>
+
+            <div class="dash-card">
+                <h2>Active Orders Overview</h2>
+                <p class="empty-state">Awaiting orders.</p>
+            </div>
+
+            <div class="dash-card">
+                <h2>Archives</h2>
+                <p class="empty-state">Archive is empty.</p>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>
