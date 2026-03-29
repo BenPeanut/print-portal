@@ -25,15 +25,24 @@
         margin-bottom: 10px;
     }
 
-    input,
-    select,
-    button {
+    .box input,
+    .box select {
         width: 100%;
         padding: 12px;
         margin: 10px 0;
         box-sizing: border-box;
         border-radius: 8px;
         border: 1px solid #ddd;
+        font-size: 16px;
+    }
+
+    .submit-row .btn-primary,
+    .submit-row .btn-outline {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        box-sizing: border-box;
+        border-radius: 8px;
         font-size: 16px;
     }
 
@@ -123,10 +132,47 @@
     }
 
     .mapping-row {
-        display: flex;
-        gap: 10px;
+        display: grid;
+        grid-template-columns: 1.2fr 1fr auto;
+        gap: 8px;
         margin-bottom: 10px;
         align-items: center;
+    }
+
+    .mapping-header {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr auto;
+        gap: 8px;
+        margin-bottom: 8px;
+        color: #4e6358;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .multi-guide {
+        background: #f4fbf7;
+        border: 1px solid #cfe9da;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+        color: #21563f;
+        font-size: 0.86rem;
+        line-height: 1.45;
+    }
+
+    .multi-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+
+    .multi-count-input {
+        max-width: 130px;
+        margin: 0;
     }
 
     .delete-btn {
@@ -208,10 +254,24 @@
         margin-top: 20px;
     }
 
+    .preferred-date-hint {
+        margin-top: 6px;
+        font-size: 0.82rem;
+        color: #51665c;
+    }
+
     @media (max-width: 760px) {
         .box {
             padding: 18px;
             min-height: auto;
+        }
+
+        .box input,
+        .box select,
+        .submit-row .btn-primary,
+        .submit-row .btn-outline {
+            min-height: 46px;
+            font-size: 16px;
         }
 
         .weight-preview-grid {
@@ -233,11 +293,87 @@
     }
 </style>
 
+    <style>
+        .swatch-row-card {
+            background: #f7faf9;
+            border: 1px solid #d0e8db;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .swatch-row-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .swatch-row-header input[type="text"] {
+            flex: 1;
+            margin: 0;
+            min-height: 0;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+        }
+
+        .swatch-row-header .delete-btn {
+            width: 36px;
+            height: 36px;
+            min-height: 0;
+            padding: 0;
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+        .order-swatch-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 6px 0;
+        }
+
+        .order-swatch-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            flex-shrink: 0;
+            padding: 0;
+            margin: 0;
+            min-height: 0;
+            width: 36px;
+        }
+
+        .order-swatch-btn:hover {
+            border-color: rgba(0, 0, 0, 0.3);
+        }
+
+        .order-swatch-btn.active {
+            border-color: #00ae42;
+            box-shadow: 0 0 0 3px rgba(0, 174, 66, 0.25);
+        }
+
+        .order-swatch-name {
+            font-size: 0.78rem;
+            color: #4e6358;
+            min-height: 1.1em;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .mapping-header {
+            display: none;
+        }
+    </style>
+
 <div class="order-shell">
     <div class="box">
         <h3>Request a New Print</h3>
         <form id="order-form" action="/submit_order" method="POST">
-            <input type="hidden" id="order-intent" name="order_intent" value="purchase_now">
             {% if announcement_message %}
             <div class="instruction-box" style="display:block; background:#e8f7ee; border:1px solid #bde7cb; color:#1f5c33;">
                 <strong>Announcement:</strong> {{ announcement_message }}
@@ -312,38 +448,47 @@
                     </div>
 
                     <div id="single-color-section">
-                        <label>Select Filament:</label>
                         <select name="single_filament" required>
                             <option value="" disabled selected>Choose a filament...</option>
                             {% for f in filaments %}
-                            <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
+                            <option value="{{ f.name }}" data-hex="{{ f.hex or '#888888' }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
                             {% endfor %}
                         </select>
                     </div>
 
                     <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
-                        <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
-                        <div id="color-mappings">
-                            <div class="mapping-row">
-                                <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
-                                <select name="mapped_filament[]" style="flex: 1; margin: 0;">
-                                    {% for f in filaments %}
-                                    <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
-                                    {% endfor %}
-                                </select>
-                                <div style="width: 35px;"></div>
-                            </div>
+                        <div class="multi-guide">
+                            <strong>Simple way to map multi-color:</strong><br>
+                            1) Set how many colored parts your print has.<br>
+                            2) Click Generate Rows.<br>
+                            3) For each row, type a part name and choose its filament.
                         </div>
-                        <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+
+                        <div class="multi-controls">
+                            <label for="multi-part-count" style="margin:0; font-weight:700;">Part Count</label>
+                            <input id="multi-part-count" class="multi-count-input" type="number" min="2" max="12" value="2">
+                            <button type="button" class="btn-secondary" id="btn-build-mappings">Generate Rows</button>
+                            <button type="button" class="btn-secondary" onclick="addMappingRow()">+ Add One Row</button>
+                        </div>
+
+                        <div class="mapping-header">
+                            <span>Model Part</span>
+                            <span>Filament</span>
+                            <span>Remove</span>
+                        </div>
+                        <div id="color-mappings"></div>
                     </div>
                 </div>
 
+                <div style="margin-top: 15px;" id="step-delivery-date">
+                    <label><strong>Preferred Delivery Date (optional):</strong></label>
+                    <input id="preferred_delivery_date" type="date" name="preferred_delivery_date">
+                    <div id="preferred-date-hint" class="preferred-date-hint">Choose a target date and we will flag if timing looks tight.</div>
+                </div>
+
                 <div class="submit-row">
-                    <button type="submit" id="btn-add-cart" class="btn-primary" data-intent="add_to_cart" {% if not shop_open %}disabled{% endif %}>
+                    <button type="button" id="btn-add-cart" class="btn-primary" {% if not shop_open %}disabled{% endif %}>
                         {% if shop_open %}Add To Cart{% else %}Shop Closed{% endif %}
-                    </button>
-                    <button type="submit" id="btn-submit" class="btn-outline" data-intent="purchase_now" {% if not shop_open %}disabled{% endif %}>
-                        {% if shop_open %}Purchase Now{% else %}Shop Closed{% endif %}
                     </button>
                 </div>
             </fieldset>
@@ -351,22 +496,50 @@
     </div>
 </div>
 
-<div id="price-confirm-modal" class="modal">
-    <div class="modal-backdrop" id="modal-backdrop"></div>
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <h3 id="modal-title">Estimated Price</h3>
-        <p id="modal-message">Loading...</p>
-        <div class="modal-actions">
-            <button type="button" id="modal-cancel" class="btn-secondary">Cancel</button>
-            <button type="button" id="modal-confirm" class="btn-primary">Confirm Submission</button>
-        </div>
-    </div>
+<div id="order-form-data" style="display:none;"
+    data-filaments='{{ filaments|tojson|safe }}'>
 </div>
 
 <script>
 (function() {
-    let orderSubmitConfirmed = false;
-    let pendingOrderIntent = 'purchase_now';
+    let addCartInProgress = false;
+    const dataEl = document.getElementById('order-form-data');
+    let filamentCatalog = [];
+    try {
+        filamentCatalog = JSON.parse(dataEl?.dataset?.filaments || '[]');
+    } catch (e) {
+        filamentCatalog = [];
+    }
+
+    function getFilamentHex(name) {
+        const target = String(name || '').trim().toLowerCase();
+        if (!target) return '#888888';
+        const f = filamentCatalog.find(function (f) {
+            return String((f && f.name) || '').trim().toLowerCase() === target;
+        });
+        return (f && f.hex) ? f.hex : '#888888';
+    }
+
+    function updateDeliveryHint() {
+        const input = document.getElementById('preferred_delivery_date');
+        const hint = document.getElementById('preferred-date-hint');
+        if (!input || !hint) return;
+        if (!input.value) {
+            hint.textContent = 'Choose a target date and we will flag if timing looks tight.';
+            return;
+        }
+        const chosen = new Date(input.value + 'T00:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((chosen.getTime() - today.getTime()) / 86400000);
+        if (diffDays < 0) {
+            hint.textContent = 'Selected date is in the past. Please pick a future date.';
+        } else if (diffDays < 2) {
+            hint.textContent = 'Tight timeline: minimum lead time is about 2 days.';
+        } else {
+            hint.textContent = "Looks feasible \u2014 we'll do our best to meet this date.";
+        }
+    }
 
     window.toggleInstructions = function () {
         const inst = document.getElementById('profile-instructions');
@@ -379,148 +552,263 @@
     };
 
     window.toggleColorMode = function (mode) {
-        document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
-        document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+            document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
+            document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+        };
 
-        const singleSelect = document.querySelector('select[name="single_filament"]');
-        if (singleSelect) singleSelect.required = (mode === 'single');
+    window.addMappingRow = function (partLabel, filamentValue) {
+            const container = document.getElementById('color-mappings');
+            const existingCards = container.querySelectorAll('.swatch-row-card');
+            const rowIndex = existingCards.length + 1;
 
-        document.querySelectorAll('#color-mappings .mapping-row').forEach(function (row) {
-            const part = row.querySelector('input[name="model_part[]"]');
-            const fil = row.querySelector('select[name="mapped_filament[]"]');
-            if (part) part.required = (mode === 'multi');
-            if (fil) fil.required = (mode === 'multi');
-        });
-    };
+            const card = document.createElement('div');
+            card.className = 'swatch-row-card';
 
-    window.addMappingRow = function () {
+            const header = document.createElement('div');
+            header.className = 'swatch-row-header';
+
+            const partInput = document.createElement('input');
+            partInput.type = 'text';
+            partInput.name = 'model_part[]';
+            partInput.placeholder = 'Part ' + rowIndex + ' (e.g. Eyes)';
+            partInput.value = partLabel || '';
+
+            const trashBtn = document.createElement('button');
+            trashBtn.type = 'button';
+            trashBtn.className = 'delete-btn';
+            trashBtn.textContent = '✕';
+            trashBtn.addEventListener('click', function () { card.remove(); });
+
+            header.appendChild(partInput);
+            header.appendChild(trashBtn);
+            card.appendChild(header);
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'order-swatch-name';
+            nameEl.textContent = filamentValue || '';
+            card.appendChild(nameEl);
+
+            const swatchGrid = document.createElement('div');
+            swatchGrid.className = 'order-swatch-grid';
+
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'mapped_filament[]';
+            hiddenInput.value = filamentValue || '';
+
+            filamentCatalog.forEach(function (f) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'order-swatch-btn';
+                btn.style.background = f.hex || '#8b8b8b';
+                btn.setAttribute('data-name', f.name);
+                btn.title = f.name;
+                if (String(filamentValue || '').toLowerCase() === f.name.toLowerCase()) {
+                    btn.classList.add('active');
+                }
+                btn.addEventListener('click', function () {
+                    swatchGrid.querySelectorAll('.order-swatch-btn').forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    hiddenInput.value = f.name;
+                    nameEl.textContent = f.name;
+                });
+                swatchGrid.appendChild(btn);
+            });
+
+            card.appendChild(swatchGrid);
+            card.appendChild(hiddenInput);
+            container.appendChild(card);
+        };
+
+        function initSingleColorSwatches() {
+            const singleSection = document.getElementById('single-color-section');
+            if (!singleSection || !filamentCatalog.length) return;
+            const select = singleSection.querySelector('select[name="single_filament"]');
+            if (!select) return;
+            select.style.display = 'none';
+            select.required = false;
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'order-swatch-name';
+            nameEl.textContent = '';
+
+            const grid = document.createElement('div');
+            grid.id = 'single-swatch-grid';
+            grid.className = 'order-swatch-grid';
+
+            filamentCatalog.forEach(function (f) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'order-swatch-btn';
+                btn.style.background = f.hex || '#8b8b8b';
+                btn.setAttribute('data-name', f.name);
+                btn.title = f.name;
+                btn.addEventListener('click', function () {
+                    grid.querySelectorAll('.order-swatch-btn').forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    select.value = f.name;
+                    nameEl.textContent = f.name;
+                });
+                grid.appendChild(btn);
+            });
+
+            select.insertAdjacentElement('beforebegin', nameEl);
+            select.insertAdjacentElement('beforebegin', grid);
+        }
+
+    function rebuildMappingRows(count) {
         const container = document.getElementById('color-mappings');
-        const firstSelect = document.querySelector('select[name="mapped_filament[]"]');
-        const filamentOptions = firstSelect ? firstSelect.innerHTML : '';
+        if (!container) return;
+        container.innerHTML = '';
+        const safeCount = Math.max(2, Math.min(12, Number(count) || 2));
+        for (let i = 0; i < safeCount; i++) {
+            addMappingRow();
+        }
+    }
 
-        const newRow = document.createElement('div');
-        newRow.className = 'mapping-row';
-        newRow.innerHTML = `
-            <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;" required>
-            <select name="mapped_filament[]" style="flex: 1; margin: 0;" required>
-                ${filamentOptions}
-            </select>
-            <button type="button" class="delete-btn" onclick="this.parentElement.remove()">✕</button>
-        `;
-        container.appendChild(newRow);
-    };
-
-    document.querySelectorAll('#order-form button[type="submit"][data-intent]').forEach(function (button) {
-        button.addEventListener('click', function () {
-            pendingOrderIntent = button.getAttribute('data-intent') || 'purchase_now';
-            const intentInput = document.getElementById('order-intent');
-            if (intentInput) intentInput.value = pendingOrderIntent;
-        });
+    document.getElementById('btn-build-mappings')?.addEventListener('click', function () {
+        const countInput = document.getElementById('multi-part-count');
+        const count = countInput ? parseInt(countInput.value, 10) : 2;
+        rebuildMappingRows(count);
     });
 
-    document.getElementById('order-form')?.addEventListener('submit', function(evt) {
-        if (orderSubmitConfirmed) {
-            return;
+    document.getElementById('preferred_delivery_date')?.addEventListener('change', updateDeliveryHint);
+
+    // Add To Cart — stores item in localStorage and opens the cart drawer
+    document.getElementById('btn-add-cart')?.addEventListener('click', async function () {
+        if (addCartInProgress) return;
+        const addBtn = document.getElementById('btn-add-cart');
+        addCartInProgress = true;
+        if (addBtn) {
+            addBtn.disabled = true;
+            addBtn.setAttribute('data-prev-text', addBtn.textContent || 'Add To Cart');
+            addBtn.textContent = 'Adding...';
         }
-
-        evt.preventDefault();
-
         const linkInput = document.getElementById('makerworld_link');
-        const linkVal = linkInput ? linkInput.value.trim() : '';
+        const linkVal = (linkInput ? linkInput.value.trim() : '');
         const allowedRe = /^(?:https?:\/\/)?(?:www\.)?(?:makerworld\.com|printables\.com)(?:[\/\:\?#]|$)/i;
         if (!allowedRe.test(linkVal)) {
-            alert('Please enter a makerworld.com or printables.com link (you may omit https://).');
-            if (linkInput) linkInput.focus();
+            alert('Please enter a makerworld.com or printables.com link.');
+            linkInput?.focus();
+            if (addBtn) {
+                addBtn.disabled = false;
+                addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
+            }
+            addCartInProgress = false;
             return;
         }
-
-        const weightInput = document.getElementById('model_weight');
-        const weightRaw = weightInput ? weightInput.value.trim() : '';
-        const weightVal = weightRaw ? parseFloat(weightRaw) : NaN;
-        if (weightRaw && (Number.isNaN(weightVal) || weightVal <= 0)) {
-            alert('Please enter a valid model weight (in grams) as shown in the MakerWorld popup.');
-            if (weightInput) weightInput.focus();
-            return;
-        }
-
         const modeEl = document.querySelector('input[name="color_mode"]:checked');
         const mode = modeEl ? modeEl.value : 'single';
-        if (mode === 'single') {
-            const sel = document.querySelector('select[name="single_filament"]');
-            if (sel && !sel.value) {
-                alert('Please choose a filament color.');
-                sel.focus();
+        const singleSelect = document.querySelector('select[name="single_filament"]');
+        if (mode === 'single' && singleSelect && !singleSelect.value) {
+            alert('Please choose a filament color.');
+            if (addBtn) {
+                addBtn.disabled = false;
+                addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
+            }
+            addCartInProgress = false;
+            return;
+        }
+        if (mode === 'multi') {
+            const rows = document.querySelectorAll('#color-mappings .swatch-row-card');
+            if (rows.length < 2) {
+                alert('Multi-color requires at least 2 mapped parts.');
+                if (addBtn) {
+                    addBtn.disabled = false;
+                    addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
+                }
+                addCartInProgress = false;
                 return;
             }
-        } else {
-            const rows = document.querySelectorAll('#color-mappings .mapping-row');
             for (const row of rows) {
                 const part = row.querySelector('input[name="model_part[]"]');
-                const fil = row.querySelector('select[name="mapped_filament[]"]');
-                if (!part.value.trim() || !fil.value) {
+                const fil = row.querySelector('input[name="mapped_filament[]"]');
+                if (!part || !part.value.trim() || !fil || !fil.value) {
                     alert('Please fill out every part and filament when using multi-color.');
+                    if (addBtn) {
+                        addBtn.disabled = false;
+                        addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
+                    }
+                    addCartInProgress = false;
                     return;
                 }
             }
         }
-
-        if (weightRaw) {
-            const estimatedRaw = weightVal * 154 * 2.5;
-            const estimated = Math.ceil(estimatedRaw / 5000) * 5000;
-            const formatted = estimated.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-            const modal = document.getElementById('price-confirm-modal');
-            const messageEl = document.getElementById('modal-message');
-            messageEl.innerHTML = `<span class="price-estimate">Rp${formatted}</span>`;
-            modal.classList.add('open');
-
-            const closeModal = function() {
-                modal.classList.remove('open');
-            };
-
-            const confirmBtn = document.getElementById('modal-confirm');
-            const cancelBtn = document.getElementById('modal-cancel');
-            const backdrop = document.getElementById('modal-backdrop');
-
-            const onConfirm = function() {
-                orderSubmitConfirmed = true;
-                const intentInput = document.getElementById('order-intent');
-                if (intentInput) intentInput.value = pendingOrderIntent;
-                cleanup();
-                closeModal();
-                document.getElementById('order-form').submit();
-            };
-
-            const onCancel = function() {
-                cleanup();
-                closeModal();
-            };
-
-            const onKey = function(e) {
-                if (e.key === 'Escape') onCancel();
-            };
-
-            function cleanup() {
-                confirmBtn.removeEventListener('click', onConfirm);
-                cancelBtn.removeEventListener('click', onCancel);
-                backdrop.removeEventListener('click', onCancel);
-                document.removeEventListener('keydown', onKey);
+        const weightInput = document.getElementById('model_weight');
+        const weightRaw = weightInput ? weightInput.value.trim() : '';
+        const weightVal = weightRaw ? parseFloat(weightRaw) : 0;
+        const estimatedPrice = weightVal > 0 ? Math.ceil((weightVal * 154 * 2.5) / 5000) * 5000 : 0;
+        let displayName = 'Unnamed Model';
+        try {
+            let normalized = linkVal;
+            if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
+            const url = new URL(normalized);
+            const segs = url.pathname.split('/').filter(Boolean);
+            const candidate = segs.find(function (s) { return /^\d+-/.test(s); }) || segs[segs.length - 1] || '';
+            if (candidate) {
+                const parts = candidate.split('-');
+                const slug = (parts[0].match(/^\d+$/) ? parts.slice(1) : parts).join(' ');
+                displayName = slug.trim().replace(/\b\w/g, function (c) { return c.toUpperCase(); }) || 'Unnamed Model';
             }
-
-            confirmBtn.addEventListener('click', onConfirm);
-            cancelBtn.addEventListener('click', onCancel);
-            backdrop.addEventListener('click', onCancel);
-            document.addEventListener('keydown', onKey);
-            return;
+        } catch (e) {}
+        let filamentHex = '#888888';
+        let singleFilamentName = '';
+        let multiMappings = [];
+        if (mode === 'single' && singleSelect) {
+            const selectedOption = singleSelect.options[singleSelect.selectedIndex];
+            filamentHex = selectedOption?.getAttribute('data-hex') || getFilamentHex(singleSelect.value);
+            singleFilamentName = singleSelect.value;
+        } else if (mode === 'multi') {
+            const rows = Array.from(document.querySelectorAll('#color-mappings .swatch-row-card'));
+            multiMappings = rows.map(function (row) {
+                const filSel = row.querySelector('input[name="mapped_filament[]"]');
+                const hex = getFilamentHex(filSel?.value);
+                return { part: row.querySelector('input[name="model_part[]"]')?.value || '', filament: filSel?.value || '', hex: hex };
+            });
+            filamentHex = multiMappings[0]?.hex || '#888888';
+            singleFilamentName = multiMappings.map(function (m) { return m.filament; }).join(', ');
         }
-
-        orderSubmitConfirmed = true;
-        const intentInput = document.getElementById('order-intent');
-        if (intentInput) intentInput.value = pendingOrderIntent;
-        document.getElementById('order-form').submit();
+        const profileInput = document.querySelector('input[name="print_profile"]');
+        const preferredDate = document.getElementById('preferred_delivery_date')?.value || '';
+        const item = {
+            id: Math.random().toString(36).slice(2, 10),
+            displayName: displayName,
+            link: linkVal,
+            colorMode: mode,
+            singleFilament: singleFilamentName,
+            filamentHex: filamentHex,
+            multiMappings: multiMappings,
+            weight: weightVal || 0,
+            profile: profileInput?.value || '1',
+            preferredDeliveryDate: preferredDate,
+            estimatedPrice: estimatedPrice,
+            addedAt: new Date().toISOString(),
+        };
+        if (window.addToCart) {
+            await window.addToCart(item);
+        } else {
+            try {
+                const cartData = JSON.parse(localStorage.getItem('bcart_v1') || '{"items":[]}');
+                cartData.items.push(item);
+                localStorage.setItem('bcart_v1', JSON.stringify(cartData));
+            } catch (e) {}
+        }
+        if (addBtn) {
+            addBtn.disabled = false;
+            addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
+        }
+        addCartInProgress = false;
     });
 
+    document.getElementById('order-form')?.addEventListener('submit', function(evt) {
+        evt.preventDefault();
+        document.getElementById('btn-add-cart')?.click();
+    });
+
+    initSingleColorSwatches();
+    rebuildMappingRows(2);
     toggleColorMode('single');
+    updateDeliveryHint();
 })();
 </script>
 {% endblock %}

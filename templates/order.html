@@ -142,17 +142,28 @@
                 </p>
                 {% endif %}
                 <p><strong>Current Status:</strong>
-                    {% if order.status == 'In Cart' %}
+                    {% set status_display = order.get('status_display') or order.status %}
+                    {% if status_display == 'Awaiting Deletion' %}
+                        <span style="color:#7a3b00; font-weight:bold;">Awaiting Deletion</span>
+                    {% elif order.status == 'In Cart' %}
                         <span style="color:#0f6a38; font-weight:bold;">Saved In Cart</span>
+                    {% elif order.status == 'Quoted' %}
+                        <span style="color:#0f6a38; font-weight:bold;">Quoted In Cart</span>
+                    {% elif order.status == 'Requested' %}
+                        <span style="color:#1d4ed8; font-weight:bold;">Requested</span>
                     {% elif order.status == 'Declined' %}
                         <span style="color:#d9534f; font-weight:bold;">Declined</span>
                     {% elif order.status in ['Cancelled', 'Price Denied'] %}
                         <span style="color:#d9534f; font-weight:bold;">{{ order.status }}</span>
                     {% else %}
-                        <span style="color: var(--bambu-green); font-weight:bold;">{{ order.status }}</span>
+                        <span style="color: var(--bambu-green); font-weight:bold;">{{ status_display }}</span>
                     {% endif %}
                 </p>
+                <p><strong>ETA:</strong> <span style="color:#1d4f9c; font-weight:bold;">{{ order_eta or 'Timeline updates after admin review' }}</span></p>
                 <p><strong>Est. Delivery:</strong> <span style="color: #d9534f; font-weight: bold;">{{ order.delivery_time }}</span></p>
+                {% if order.get('preferred_delivery_date') %}
+                <p><strong>Preferred Delivery Date:</strong> <span style="color:#21563f; font-weight:bold;">{{ order.preferred_delivery_date }}</span></p>
+                {% endif %}
                 {% if order.admin_note %}
                 <div style="margin-top:12px; padding:12px; background:#fff9e6; border-left:4px solid #ffd966; border-radius:6px; color:#333;">
                     <strong>Admin Notes:</strong>
@@ -161,7 +172,16 @@
                 {% endif %}
                 {% if order.get('deleted_at') %}
                 <div style="margin-top:12px; padding:12px; background:#fff4ec; border:1px solid #f5c49e; border-radius:6px; color:#7a3b00;">
-                    <strong>⏳ Pending Deletion</strong> &mdash; This order will be permanently removed within 3 days.
+                    <strong>⏳ Awaiting Deletion</strong> - This order will be permanently removed {% if order.pending_delete_on %}on {{ order.pending_delete_on }}{% else %}within 3 days{% endif %}.
+                    {% if order.get('delete_restore_requested_at') %}
+                    <div style="margin-top:8px; padding:8px; border-radius:6px; background:#fff7ed; border:1px solid #facc15; color:#8a4f00;">
+                        Keep request sent. The admin has been notified.
+                    </div>
+                    {% else %}
+                    <form action="/request_keep_order/{{ order.id }}" method="POST" style="margin-top:10px;">
+                        <button type="submit" class="modal-btn modal-btn-confirm-green" style="width:100%;">Request: Do Not Delete This Order</button>
+                    </form>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
@@ -205,21 +225,17 @@
             <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
                 {% if order.status == 'In Cart' %}
                     <div style="margin-bottom:12px; padding:12px; background:#eef9f2; border:1px solid #cfe7d8; border-radius:8px; color:#21563f;">
-                        This item is saved in your cart and visible to the admin for pricing. Once a quote is ready, it will move to Waiting for Approval.
+                        This item is saved in your cart and visible to the admin for pricing. Once a quote is ready, the price will appear in your cart so you can select it and proceed to checkout.
                     </div>
                 {% endif %}
-                {% if order.status == 'Waiting for Approval' %}
-                    <div style="margin-bottom: 10px;">
-                        <form action="/approve_price/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showApproveModal(this);">
-                            <button type="submit" style="background-color: var(--bambu-green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 1em;">
-                                Confirm Order
-                            </button>
-                        </form>
+                {% if order.status == 'Quoted' %}
+                    <div style="margin-bottom:12px; padding:12px; background:#eef9f2; border:1px solid #cfe7d8; border-radius:8px; color:#21563f;">
+                        This order has been quoted. Select it from your cart and click Place Order to mark it as requested.
                     </div>
                 {% endif %}
 
                 {% set locked = ['Printing', 'Completed', 'Done', 'Delivered', 'Cancelled', 'Price Denied'] %}
-                {% if order.status not in locked %}
+                {% if order.status not in locked and not order.get('deleted_at') %}
                     <form action="/cancel_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showCancelModal(this);">
                         <button type="submit" style="background-color: transparent; color: #d9534f; border: 1px solid #d9534f; padding: 10px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 0.9em;">
                             Cancel Order
@@ -238,10 +254,6 @@
                 </form>
             </div>
             
-            <br>
-            <div style="text-align: center;">
-                <a href="{% if order.status == 'In Cart' %}/cart{% else %}/{% endif %}" style="color: var(--bambu-green); text-decoration:none; font-weight:bold;">← Return to {% if order.status == 'In Cart' %}Cart{% else %}Home{% endif %}</a>
-            </div>
         </div>
     </div>
 
@@ -252,17 +264,6 @@
             <div class="modal-buttons">
                 <button class="modal-btn modal-btn-cancel" onclick="closeCancelModal()">No, Keep it</button>
                 <button class="modal-btn modal-btn-confirm-red" id="confirmCancelBtn">Yes, Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="approveModal" class="modal-overlay">
-        <div class="modal-box">
-            <h3 style="margin-top:0;">Confirm Purchase</h3>
-            <p class="modal-message">By confirming this purchase, you agree to pay the full amount, and you will no longer be able to cancel the order after confirming.</p>
-            <div class="modal-buttons">
-                <button class="modal-btn modal-btn-cancel" onclick="closeApproveModal()">Go Back</button>
-                <button class="modal-btn modal-btn-confirm-green" id="confirmApproveBtn">Confirm &amp; Pay</button>
             </div>
         </div>
     </div>
@@ -280,10 +281,33 @@
         </div>
     </div>
 
+    <div id="pendingDeleteModal" class="modal-overlay" onclick="if(event.target===this)this.style.display='none';">
+        <div class="modal-box">
+            <h3 style="margin-top:0; color:#9a5d00;">Awaiting Deletion</h3>
+            <p class="modal-message">This order is marked for deletion and currently overrides all other status updates.{% if order.pending_delete_on %}<br>Scheduled removal: {{ order.pending_delete_on }}.{% endif %}</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('pendingDeleteModal').style.display='none'">Close</button>
+                {% if not order.get('delete_restore_requested_at') %}
+                <form action="/request_keep_order/{{ order.id }}" method="POST" style="flex:1; margin:0;">
+                    <button type="submit" class="modal-btn modal-btn-confirm-green" style="width:100%;">Request Keep</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     {% if order.status == 'Declined' %}
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('declinedModal').style.display = 'flex';
+        });
+    </script>
+    {% endif %}
+
+    {% if order.get('deleted_at') %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('pendingDeleteModal').style.display = 'flex';
         });
     </script>
     {% endif %}
@@ -339,19 +363,30 @@
             if (pendingForm) pendingForm.submit();
         };
 
-        let approveForm = null;
-        function showApproveModal(formElement) {
-            approveForm = formElement;
-            document.getElementById('approveModal').style.display = 'flex';
-        }
-        function closeApproveModal() {
-            approveForm = null;
-            document.getElementById('approveModal').style.display = 'none';
-        }
-        document.getElementById('confirmApproveBtn').onclick = function() {
-            if (approveForm) approveForm.submit();
-        };
 
+        (function () {
+            const initialStatus = '{{ (order.get("status_display") or order.status or "")|lower }}';
+            if (!initialStatus) return;
+            let firstToken = null;
+            async function poll() {
+                try {
+                    const res = await fetch('/api/user/updates', { headers: { 'Accept': 'application/json' } });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const token = String(data.latest_update_token || '');
+                    if (!firstToken) {
+                        firstToken = token;
+                        return;
+                    }
+                    if (token && firstToken && token !== firstToken) {
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    // ignore polling errors
+                }
+            }
+            setInterval(poll, 30000);
+        })();
         // --- USER CHAT (modal) ---
         const orderId = '{{ order.id }}';
         let userChatInterval = null;

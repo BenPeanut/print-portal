@@ -141,6 +141,27 @@
             display: block;
         }
 
+        .suggested-delete-form {
+            margin-top: 8px;
+        }
+
+        .suggested-delete-btn {
+            border: 1px solid #f3c2c2;
+            background: #fff5f5;
+            color: #9a2f2f;
+            border-radius: 8px;
+            padding: 6px 10px;
+            width: 100%;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .suggested-delete-btn:hover {
+            background: #ffecec;
+            border-color: #eaa3a3;
+        }
+
         /* --- Live User Feed --- */
         .user-list {
             list-style: none;
@@ -188,10 +209,9 @@
 <body>
     <div class="nav-bar">
         <a href="/admin_home" class="active">Home</a>
-        <a href="/orders">Orders</a>
-        <a href="/filaments">Filaments</a>
-        <a href="/suggested">Suggested Orders</a>
-        <a href="/archive">Archived Orders</a>
+        <a href="/dashboard#filaments-section">Filaments</a>
+        <a href="/dashboard#suggested-section">Suggested Orders</a>
+        <a href="/dashboard#orders-section">Orders</a>
     </div>
 
     <div class="dashboard-container">
@@ -207,6 +227,9 @@
                             <div class="suggested-info">
                                 <p title="{{ item.title }}">{{ item.title }}</p>
                                 <small>For: {{ item.target_user }}</small>
+                                <form class="suggested-delete-form" action="/dashboard/featured/delete/{{ item.id }}" method="POST" onsubmit="return confirm('Delete this suggested print?');">
+                                    <button type="submit" class="suggested-delete-btn">Delete Suggestion</button>
+                                </form>
                             </div>
                         </div>
                         {% endfor %}

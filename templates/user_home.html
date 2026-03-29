@@ -154,7 +154,7 @@
 
     .stats-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 12px;
         margin-bottom: 16px;
     }
@@ -189,6 +189,18 @@
         font-weight: 700;
     }
 
+    .xp-track {
+        display: none;
+    }
+
+    .xp-fill {
+        display: none;
+    }
+
+    .xp-next {
+        display: none;
+    }
+
     .main-grid {
         display: grid;
         grid-template-columns: 1.6fr 1fr;
@@ -211,6 +223,12 @@
     .order-meta strong { display: block; }
     .order-meta small { color: #60766b; }
 
+    .order-item.awaiting-approval {
+        border-color: #fcd34d;
+        background: linear-gradient(180deg, #fefce8, #ffffff);
+        box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.25);
+    }
+
     .order-item.waiting {
         border-color: #facc15;
         background: linear-gradient(180deg, #fffbeb, #ffffff);
@@ -228,10 +246,10 @@
         background: #fff;
     }
 
-    .status-pill.waiting-approval {
+    .status-pill.awaiting-approval {
         color: #92400e;
         border-color: #f59e0b;
-        background: #fff7ed;
+        background: #fef3c7;
     }
 
     .status-pill.approved {
@@ -241,9 +259,10 @@
     }
 
     .status-pill.printing {
-        color: #1d4ed8;
-        border-color: #60a5fa;
-        background: #eff6ff;
+        color: #ffffff;
+        border-color: #00ae42;
+        background: #00ae42;
+        animation: pulse-green 2s ease-in-out infinite;
     }
 
     .status-pill.completed,
@@ -260,6 +279,30 @@
         color: #991b1b;
         border-color: #f87171;
         background: #fef2f2;
+    }
+
+    .status-pill.awaiting-deletion {
+        color: #7a3b00;
+        border-color: #f2b57d;
+        background: #fff3e8;
+    }
+
+    @keyframes pulse-green {
+        0%, 100% {
+            opacity: 1;
+            box-shadow: 0 0 0 0 rgba(0, 174, 66, 0.5);
+        }
+        50% {
+            opacity: 0.9;
+            box-shadow: 0 0 0 6px rgba(0, 174, 66, 0);
+        }
+    }
+
+    .status-pill.waiting-approval,
+    .status-pill.waiting-for-approval {
+        color: #92400e;
+        border-color: #f59e0b;
+        background: #fff7ed;
     }
 
     .approval-flag {
@@ -364,38 +407,219 @@
         -webkit-backdrop-filter: blur(6px);
     }
 
-    .modal-content {
+    .config-modal-content {
         position: relative;
         background: #ffffff;
-        border-radius: 14px;
-        padding: 22px 24px;
-        width: min(560px, 92%);
-        box-shadow: 0 16px 36px rgba(0,0,0,0.25);
+        border-radius: 24px;
+        width: min(1120px, calc(100vw - 36px));
+        max-height: calc(100vh - 36px);
+        box-shadow: 0 20px 54px rgba(5, 32, 20, 0.35);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
     }
 
-    .modal-actions {
+    .config-media {
+        position: relative;
+        min-height: 520px;
+        background: radial-gradient(circle at 35% 20%, #ffffff 0%, #f1f7f4 58%, #e8f0ec 100%);
+        border-right: 1px solid #dbe8e1;
+    }
+
+    .config-media-image {
+        position: absolute;
+        inset: 24px;
+        border-radius: 18px;
+        background-size: cover;
+        background-position: center;
+        box-shadow: 0 14px 32px rgba(15, 55, 37, 0.2);
+    }
+
+    .config-form {
+        overflow-y: auto;
+        padding: 26px 24px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fcf9 100%);
+    }
+
+    .config-headline {
+        margin: 0;
+        font-size: 1.65rem;
+        line-height: 1.1;
+        color: #153e2f;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+    }
+
+    .config-copy {
+        margin: 10px 0 18px;
+        color: #557266;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .config-price {
+        margin: 0 0 20px;
+        font-size: 2rem;
+        color: #00ae42;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+    }
+
+    .config-section {
+        border: 1px solid #dce9e2;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px 14px 12px;
+        margin-bottom: 12px;
+    }
+
+    .config-section-title {
+        margin: 0 0 10px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: #2f5747;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .profile-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .profile-pill {
+        border: 1px solid #cfe0d7;
+        background: #f7fcf9;
+        color: #235743;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.85rem;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .profile-pill:hover {
+        background: #eef8f3;
+        border-color: #b9d8c9;
+    }
+
+    .profile-pill.active {
+        background: #00ae42;
+        color: #ffffff;
+        border-color: #00ae42;
+        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.26);
+    }
+
+    .parts-stack {
+        display: grid;
+        gap: 10px;
+        overflow: visible;
+    }
+
+    .part-card {
+        border: 1px solid #dce9e2;
+        border-radius: 14px;
+        background: #fafdfb;
+        padding: 10px 10px 12px;
+        position: relative;
+    }
+
+    .part-card:hover {
+        z-index: 2;
+    }
+
+    .part-title {
+        margin: 0 0 8px;
+        color: #1d4f39;
+        font-size: 0.92rem;
+        font-weight: 800;
+    }
+
+    .swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        gap: 8px;
+        overflow: visible;
+    }
+
+    .swatch-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid rgba(0, 0, 0, 0.08);
+        cursor: pointer;
+        position: relative;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+        justify-self: center;
+        z-index: 1;
+    }
+
+    .swatch-btn:hover {
+        transform: translateY(-1px);
+        z-index: 5;
+    }
+
+    .swatch-btn:focus-visible {
+        z-index: 5;
+    }
+
+    .swatch-btn.active {
+        transform: scale(1.06);
+        border-color: #1a553a;
+        box-shadow: 0 0 0 3px rgba(21, 85, 57, 0.16);
+        z-index: 4;
+    }
+
+    .swatch-btn.suggested {
+        box-shadow: 0 0 15px rgba(0, 174, 66, 0.6);
+        filter: saturate(1.08) blur(0.15px);
+    }
+
+    .swatch-btn::after {
+        content: attr(data-name);
+        position: absolute;
+        left: 50%;
+        top: calc(100% + 8px);
+        transform: translateX(-50%);
+        background: #143d2d;
+        color: #ffffff;
+        font-size: 0.68rem;
+        line-height: 1;
+        border-radius: 999px;
+        padding: 5px 8px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+        z-index: 9999;
+    }
+
+    .swatch-btn:hover::after,
+    .swatch-btn:focus-visible::after { opacity: 1; }
+
+    .config-actions {
         display: flex;
         justify-content: flex-end;
         gap: 10px;
         margin-top: 18px;
     }
 
-    .modal-select {
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #ddd;
-        width: 180px;
-    }
+    @media (max-width: 980px) {
+        .config-modal-content {
+            grid-template-columns: 1fr;
+            width: min(760px, calc(100vw - 24px));
+        }
 
-    .color-pill {
-        background: #f1f1f1;
-        color: #333;
-        padding: 6px 12px;
-        border-radius: 16px;
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1.2;
-        white-space: nowrap;
+        .config-media {
+            min-height: 280px;
+            border-right: none;
+            border-bottom: 1px solid #dbe8e1;
+        }
+
+        .config-media-image { inset: 14px; }
+        .config-form { padding: 18px 14px; }
     }
 
     @media (max-width: 980px) {
@@ -436,28 +660,29 @@
 
 <div id="featured-order-modal" class="modal">
     <div class="modal-backdrop" id="featured-modal-backdrop"></div>
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
-        <h3 id="featured-modal-title">Featured Print</h3>
-        <div id="featured-modal-image" style="height:220px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 14px;"></div>
-        <p id="featured-modal-description" style="margin: 0 0 12px 0; color: #444;"></p>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
-            <div id="featured-modal-price" style="font-size: 1.7rem; font-weight: 800; color: #00ae42;"></div>
-            <div id="featured-modal-profile-wrap" style="display:flex; flex-direction:column; gap: 6px;">
-                <label style="font-size: 0.85rem; margin: 0;">Print Profile</label>
-                <select id="featured-modal-profile" class="modal-select"></select>
+    <div class="config-modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
+        <div class="config-media">
+            <div id="featured-modal-image" class="config-media-image"></div>
+        </div>
+        <div class="config-form">
+            <h3 id="featured-modal-title" class="config-headline">Featured Print</h3>
+            <p id="featured-modal-description" class="config-copy"></p>
+            <p id="featured-modal-price" class="config-price">Rp0</p>
+
+            <section class="config-section">
+                <p class="config-section-title">Print Profile</p>
+                <div id="featured-modal-profile-pills" class="profile-pills"></div>
+            </section>
+
+            <section class="config-section">
+                <p class="config-section-title">Part Colors</p>
+                <div id="featured-modal-parts" class="parts-stack"></div>
+            </section>
+
+            <div class="config-actions">
+                <button type="button" id="featured-modal-cancel" class="muted-btn">Cancel</button>
+                <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Add To Cart</button>
             </div>
-        </div>
-        <div id="featured-modal-suggested-colors" style="margin-bottom: 10px; display:none; font-size: 0.9rem;">
-            <strong>Suggested Colors:</strong>
-            <div id="featured-modal-color-pills" style="margin-top: 6px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-        </div>
-        <div id="featured-modal-filament-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
-            <div style="font-size: 0.85rem;">Choose Filament</div>
-            <select id="featured-modal-filament" class="modal-select"></select>
-        </div>
-        <div class="modal-actions">
-            <button type="button" id="featured-modal-cancel" class="muted-btn">Cancel</button>
-            <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Order</button>
         </div>
     </div>
 </div>
@@ -488,23 +713,34 @@
             {% set highlighted = waiting_approval_orders[0] %}
             <div class="approval-flag">
                 <strong>Price Ready For Approval</strong><br>
-                Order <a href="/order/{{ highlighted.id }}">#{{ highlighted.id }}</a> is waiting for your confirmation.
+                Order <a href="/order/{{ highlighted.id }}" data-order-preview-url="/order/{{ highlighted.id }}" data-order-preview-title="Order #{{ highlighted.id }}">#{{ highlighted.id }}</a> is in your requested queue.
+            </div>
+            {% endif %}
+
+            <!-- Notification for requested orders -->
+            {% if waiting_approval_orders and waiting_approval_orders|length > 0 %}
+            <div style="border: 1px solid #fef08a; background: #fefce8; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.9rem; color: #78350f;">
+                <strong style="color: #92400e;">✓ Order Received</strong><br>
+                <span style="display: block; margin-top: 6px;">Your order request has been submitted. We will begin production based on queue and schedule.</span>
             </div>
             {% endif %}
 
             <ul class="order-list">
                 {% for order in recent_orders %}
-                {% set status_text = (order.status or 'Unknown') %}
+                {% set status_text = (order.get('status_display') or order.status or 'Unknown') %}
                 {% set status_key = status_text|lower|replace(' ', '-') %}
-                <li class="order-item {% if status_key == 'waiting-for-approval' %}waiting{% endif %}">
+                <li class="order-item {% if status_key == 'awaiting-approval' %}awaiting-approval{% elif status_key == 'waiting-for-approval' %}waiting{% endif %}">
                     <div class="order-meta">
                         <strong>{{ order.name or order.product_name or 'Unnamed Order' }}</strong>
                         <small>#{{ order.id }} · <span class="status-pill {{ status_key }}">{{ status_text }}</span></small>
+                        {% if order.print_price and order.print_price != '0' %}
+                        <small style="display:block; margin-top:4px; color:#0f5132;"><strong>Price:</strong> Rp{{ "{:,}".format((order.print_price|int)) }}</small>
+                        {% endif %}
                         {% if order.admin_note %}
                         <small style="display:block; margin-top:4px; color:#0f5132;"><strong>Admin note:</strong> {{ order.admin_note }}</small>
                         {% endif %}
                     </div>
-                    <a class="order-link" href="/order/{{ order.id }}">Open</a>
+                    <a class="order-link" href="/order/{{ order.id }}" data-order-preview-url="/order/{{ order.id }}" data-order-preview-title="Order #{{ order.id }}">Open</a>
                 </li>
                 {% else %}
                 <li class="order-item"><div class="order-meta"><strong>No recent orders</strong><small>Start by submitting your first print request.</small></div></li>
@@ -513,15 +749,19 @@
 
             <div class="mini-card">
                 <h4 class="section-title" style="font-size:1rem;">Most Recent Progress</h4>
-                {% set status = (latest_order.status if latest_order else '')|lower %}
+                {% set status = ((latest_order.get('status_display') or latest_order.status) if latest_order else '')|lower %}
                 {% if status in ['delivered', 'done', 'completed'] %}
                     {% set step_idx = 4 %}
                 {% elif status in ['quality check'] %}
                     {% set step_idx = 3 %}
                 {% elif status in ['printing'] %}
                     {% set step_idx = 2 %}
-                {% elif status in ['approved', 'waiting for approval'] %}
+                {% elif status in ['pending', 'confirmed', 'requested', 'approved', 'waiting for approval'] %}
                     {% set step_idx = 1 %}
+                {% elif status in ['awaiting approval', 'quoted'] %}
+                    {% set step_idx = 0 %}
+                {% elif status in ['awaiting deletion'] %}
+                    {% set step_idx = 0 %}
                 {% else %}
                     {% set step_idx = 0 %}
                 {% endif %}
@@ -637,6 +877,207 @@
 })();
 
 (function () {
+    const modalState = {
+        item: null,
+        profile: '',
+        parts: [],
+        selections: {},
+    };
+        modalState.profiles = [];
+        modalState.profileObj = null;
+
+    function getFilamentCatalog() {
+        let filaments = [];
+        try {
+            filaments = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
+        } catch (error) {
+            filaments = [];
+        }
+        return (filaments || []).map(function (f) {
+            if (typeof f === 'string') {
+                return { name: f, hex: '#8b8b8b' };
+            }
+            return {
+                name: String((f && f.name) || '').trim(),
+                hex: String((f && f.hex) || '#8b8b8b').trim() || '#8b8b8b',
+            };
+        }).filter(function (f) { return f.name; });
+    }
+
+    function parseSuggestedColorMap(text) {
+        const map = {};
+        const segments = String(text || '').split('|').map(function (seg) { return seg.trim(); }).filter(Boolean);
+        segments.forEach(function (seg) {
+            const idx = seg.indexOf(':');
+            if (idx > -1) {
+                const partName = seg.slice(0, idx).trim();
+                const colorName = seg.slice(idx + 1).trim();
+                if (partName && colorName) map[partName.toLowerCase()] = colorName;
+            } else {
+                map.__default = seg;
+            }
+        });
+        return map;
+    }
+
+    function featuredPriceForProfile(basePrice, profileModifier) {
+        return Math.max(0, Number(basePrice || 0) + Number(profileModifier || 0));
+    }
+
+    function normalizeItemProfiles(item) {
+        if (!item || typeof item !== 'object') return [];
+        const pricing = Array.isArray(item.profile_pricing) ? item.profile_pricing : [];
+        if (pricing.length) {
+            const mapped = pricing
+                .map(function (p) {
+                    const name = String((p && p.name) || '').trim();
+                    if (!name) return null;
+                    return {
+                        name: name,
+                        price: Number((p && (p.price !== undefined ? p.price : p.price_modifier)) || 0),
+                        is_default: Boolean(p && p.is_default),
+                    };
+                })
+                .filter(Boolean);
+            if (mapped.length && !mapped.some(function (p) { return p.is_default; })) {
+                const defaultName = String(item.suggested_profile || '').trim().toLowerCase();
+                const defaultEntry = mapped.find(function (p) { return p.name.toLowerCase() === defaultName; }) || mapped[0];
+                if (defaultEntry) defaultEntry.is_default = true;
+            }
+            return mapped;
+        }
+
+        const options = Array.isArray(item.profile_options)
+            ? item.profile_options
+            : String(item.profile_options || '').split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+        if (!options.length) return [];
+        const suggested = String(item.suggested_profile || '').trim().toLowerCase();
+        return options.map(function (name, idx) {
+            return {
+                name: String(name),
+                price: Number(item.price || 0),
+                is_default: suggested ? String(name).trim().toLowerCase() === suggested : idx === 0,
+            };
+        });
+    }
+
+    function deriveParts(item) {
+        const parts = [];
+        const suggestedMap = parseSuggestedColorMap(item.suggested_colors || item.suggested_filament || '');
+        const rawParts = Array.isArray(item.part_options)
+            ? item.part_options
+            : (Array.isArray(item.category_options) ? item.category_options : []);
+
+        rawParts.forEach(function (part, idx) {
+            if (typeof part === 'string') {
+                const partName = part.trim();
+                if (!partName) return;
+                parts.push({
+                    name: partName,
+                    suggested: suggestedMap[partName.toLowerCase()] || suggestedMap.__default || String(item.suggested_filament || '').trim(),
+                    key: 'part_' + idx,
+                });
+                return;
+            }
+            if (part && typeof part === 'object') {
+                const partName = String(part.part || part.name || part.label || part.title || '').trim();
+                if (!partName) return;
+                parts.push({
+                    name: partName,
+                    suggested: String(part.suggested_filament || part.filament || part.color || suggestedMap[partName.toLowerCase()] || suggestedMap.__default || item.suggested_filament || '').trim(),
+                    key: 'part_' + idx,
+                });
+            }
+        });
+
+        if (!parts.length) {
+            parts.push({
+                name: 'Main Part',
+                suggested: String(item.suggested_filament || suggestedMap.__default || '').trim(),
+                key: 'part_0',
+            });
+        }
+
+        return parts;
+    }
+
+    function renderPrice() {
+        const priceEl = document.getElementById('featured-modal-price');
+        if (!priceEl || !modalState.item) return;
+        const total = modalState.profileObj ? Number(modalState.profileObj.price || 0) : 0;
+        priceEl.textContent = 'Rp' + Number(total).toLocaleString('id-ID');
+    }
+
+    function renderProfiles() {
+        const wrap = document.getElementById('featured-modal-profile-pills');
+        if (!wrap || !modalState.item) return;
+            const profiles = modalState.profiles || [];
+            if (!modalState.profileObj && profiles.length) {
+                modalState.profileObj = profiles.find(function (p) { return p.is_default; }) || profiles[0];
+                modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+            }
+        wrap.innerHTML = '';
+
+            profiles.forEach(function (profileObj) {
+                const profileName = profileObj.name || '';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+                btn.className = 'profile-pill' + (modalState.profile === profileName ? ' active' : '');
+                const profilePrice = Number(profileObj.price || 0);
+                const label = profilePrice > 0 ? profileName + ' — Rp' + profilePrice.toLocaleString('id-ID') : profileName;
+                btn.textContent = label;
+            btn.addEventListener('click', function () {
+                modalState.profile = profileName;
+                    modalState.profileObj = profileObj;
+                renderProfiles();
+                renderPrice();
+            });
+            wrap.appendChild(btn);
+        });
+    }
+
+    function renderParts() {
+        const partsWrap = document.getElementById('featured-modal-parts');
+        if (!partsWrap || !modalState.item) return;
+        const filaments = getFilamentCatalog();
+        partsWrap.innerHTML = '';
+
+        modalState.parts.forEach(function (part, partIndex) {
+            const card = document.createElement('div');
+            card.className = 'part-card';
+
+            const title = document.createElement('p');
+            title.className = 'part-title';
+            title.textContent = part.name;
+            card.appendChild(title);
+
+            const grid = document.createElement('div');
+            grid.className = 'swatch-grid';
+
+            filaments.forEach(function (filament) {
+                const swatch = document.createElement('button');
+                swatch.type = 'button';
+                swatch.className = 'swatch-btn';
+                swatch.style.background = filament.hex || '#8b8b8b';
+                swatch.setAttribute('data-name', filament.name);
+                swatch.title = filament.name;
+
+                const selected = String(modalState.selections[part.key] || '').toLowerCase() === filament.name.toLowerCase();
+                if (selected) swatch.classList.add('active');
+                if (String(part.suggested || '').toLowerCase() === filament.name.toLowerCase()) swatch.classList.add('suggested');
+
+                swatch.addEventListener('click', function () {
+                    modalState.selections[part.key] = filament.name;
+                    renderParts();
+                });
+                grid.appendChild(swatch);
+            });
+
+            card.appendChild(grid);
+            partsWrap.appendChild(card);
+        });
+    }
+
     function openFeaturedModal(index) {
         const slides = document.querySelectorAll('#hero-container .hero-slide');
         if (!slides[index]) return;
@@ -651,76 +1092,55 @@
         const modal = document.getElementById('featured-order-modal');
         const img = document.getElementById('featured-modal-image');
         const desc = document.getElementById('featured-modal-description');
-        const price = document.getElementById('featured-modal-price');
-        const filament = document.getElementById('featured-modal-filament');
-        const profileSelect = document.getElementById('featured-modal-profile');
-        const profileWrap = document.getElementById('featured-modal-profile-wrap');
-        const colorsContainer = document.getElementById('featured-modal-suggested-colors');
-        const pillsContainer = document.getElementById('featured-modal-color-pills');
-        const filamentRow = document.getElementById('featured-modal-filament-row');
+        const title = document.getElementById('featured-modal-title');
+        if (!modal || !img || !desc || !title) return;
 
+        title.textContent = item.title;
         img.style.backgroundImage = `url('${item.image_url || ''}')`;
-        desc.textContent = item.description || '';
-        price.textContent = `Rp${(Number(item.price) || 0).toLocaleString()}`;
+        desc.textContent = item.description || 'Configure your print setup before ordering.';
 
-        const rawProfileOptions = item.profile_options || [];
-        let profileOptions = [];
-        if (Array.isArray(rawProfileOptions)) profileOptions = rawProfileOptions.map(function (p) { return String(p || '').trim(); }).filter(Boolean);
-        else if (typeof rawProfileOptions === 'string' && rawProfileOptions.trim()) {
-            profileOptions = rawProfileOptions.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
-        }
-
-        profileSelect.innerHTML = '';
-        if (profileOptions.length) {
-            profileOptions.forEach(function (p, idx) {
-                const opt = document.createElement('option');
-                opt.value = p;
-                opt.textContent = p;
-                if (idx === 0) opt.selected = true;
-                profileSelect.appendChild(opt);
-            });
-            profileWrap.style.display = 'flex';
-        } else {
-            profileWrap.style.display = 'none';
-        }
-
-        filament.innerHTML = '';
-        let currentFilaments = [];
-        try {
-            currentFilaments = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
-        } catch (error) {
-            currentFilaments = [];
-        }
-        const recommended = (item.suggested_filament || '').toString().trim().toLowerCase();
-        currentFilaments.forEach(function (f) {
-            const name = typeof f === 'string' ? f : (f && f.name ? String(f.name) : '');
-            if (!name) return;
-            const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
-            if (recommended && name.toLowerCase() === recommended) opt.selected = true;
-            filament.appendChild(opt);
+        modalState.item = item;
+        modalState.profile = '';
+            modalState.profileObj = null;
+        modalState.parts = deriveParts(item);
+        modalState.selections = {};
+        modalState.parts.forEach(function (part) {
+            modalState.selections[part.key] = part.suggested || '';
         });
-
-        const suggestedColorsString = (item.suggested_colors || item.suggested_filament || '').toString();
-        if (suggestedColorsString && suggestedColorsString.includes('|')) {
-            colorsContainer.style.display = 'block';
-            pillsContainer.innerHTML = '';
-            suggestedColorsString.split('|').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (seg) {
-                const pill = document.createElement('span');
-                pill.className = 'color-pill';
-                pill.textContent = seg;
-                pillsContainer.appendChild(pill);
-            });
-            filamentRow.style.display = 'none';
-        } else {
-            colorsContainer.style.display = 'none';
-            filamentRow.style.display = 'flex';
-        }
 
         modal.dataset.featuredIndex = String(index);
         modal.dataset.featuredId = item.id || '';
         modal.classList.add('open');
+
+            renderParts();
+            renderPrice();
+
+            const itemProfiles = normalizeItemProfiles(item);
+            if (itemProfiles.length) {
+                modalState.profiles = itemProfiles;
+                modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
+                modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+                renderProfiles();
+                renderPrice();
+            } else {
+                fetch('/api/print-profiles')
+                    .then(function (res) { return res.ok ? res.json() : []; })
+                    .catch(function () { return []; })
+                    .then(function (profiles) {
+                        const basePrice = Number((modalState.item && modalState.item.price) || 0);
+                        const rawProfiles = Array.isArray(profiles) ? profiles : [];
+                        modalState.profiles = rawProfiles.map(function (p) {
+                            return { name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
+                        });
+                        if (!modalState.profiles.length) {
+                            modalState.profiles = [{ name: 'Standard', price: basePrice, is_default: true }];
+                        }
+                        modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
+                        modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+                        renderProfiles();
+                        renderPrice();
+                    });
+            }
     }
 
     function closeFeaturedModal() {
@@ -750,26 +1170,21 @@
 
     document.getElementById('featured-modal-confirm')?.addEventListener('click', async function () {
         const modal = document.getElementById('featured-order-modal');
-        const index = parseInt(modal?.dataset?.featuredIndex || '-1', 10);
-        const slides = document.querySelectorAll('#hero-container .hero-slide');
-        if (index < 0 || !slides[index]) return;
-
-        let item = {};
-        try {
-            item = JSON.parse(slides[index].dataset.item || '{}');
-        } catch (error) {
-            item = {};
-        }
+        const item = modalState.item || {};
         if (!item || !item.title) return;
 
-        const filament = document.getElementById('featured-modal-filament')?.value || '';
-        const profile = document.getElementById('featured-modal-profile-wrap')?.style.display === 'none'
-            ? ''
-            : (document.getElementById('featured-modal-profile')?.value || '');
-        const suggestedColorsFromItem = (item.suggested_colors || item.suggested_filament || '').toString();
-        const suggestedColors = suggestedColorsFromItem && suggestedColorsFromItem.includes('|')
-            ? suggestedColorsFromItem
-            : filament;
+        const profile = modalState.profile || '';
+        const selectedParts = (modalState.parts || []).map(function (part) {
+            return {
+                part: part.name,
+                filament: modalState.selections[part.key] || '',
+            };
+        });
+        const suggestedColors = selectedParts
+            .map(function (entry) { return entry.part + ': ' + entry.filament; })
+            .join(' | ');
+        const primaryFilament = selectedParts.length ? selectedParts[0].filament : '';
+            const dynamicPrice = modalState.profileObj ? Number(modalState.profileObj.price || 0) : 0;
 
         const btn = document.getElementById('featured-modal-confirm');
         const originalText = btn.textContent;
@@ -783,16 +1198,39 @@
                 body: JSON.stringify({
                     title: item.title,
                     makerworld_link: item.makerworld_url,
-                    price: item.price,
-                    filament: filament,
+                    price: dynamicPrice,
+                    filament: primaryFilament,
                     profile: profile,
                     suggested_colors: suggestedColors,
+                    category_choices: selectedParts,
                     item_id: item.id,
                 }),
             });
             const data = await res.json();
             if (res.ok && data.order_id) {
-                window.location.href = `/order/${data.order_id}`;
+                const modalItem = modalState.item || {};
+                const cartItem = {
+                    id: Math.random().toString(36).slice(2, 10),
+                    orderId: data.order_id,
+                    displayName: modalItem.title || 'Featured Print',
+                    link: modalItem.makerworld_url || '',
+                    colorMode: selectedParts.length > 1 ? 'multi' : 'single',
+                    singleFilament: primaryFilament || '',
+                    filamentHex: '#8b8b8b',
+                    multiMappings: selectedParts,
+                    weight: Number(modalItem.model_weight || 0),
+                    profile: profile,
+                    preferredDeliveryDate: '',
+                    estimatedPrice: Number(dynamicPrice || 0),
+                    quantity: 1,
+                    addedAt: new Date().toISOString(),
+                };
+
+                if (window.addToCart) {
+                    await window.addToCart(cartItem);
+                }
+                closeFeaturedModal();
+                if (window.openCartDrawer) window.openCartDrawer();
             } else {
                 alert(data.error || 'Unable to create order.');
             }

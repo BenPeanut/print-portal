@@ -3,6 +3,7 @@ import atexit
 import csv
 import io
 import os
+from pathlib import Path
 import random
 import threading
 import uuid
@@ -10,10 +11,14 @@ import json
 from urllib.parse import urlparse, unquote
 import re
 import psycopg2
+from dotenv import load_dotenv
 from psycopg2.pool import ThreadedConnectionPool
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / '.env')
 
 app = Flask(__name__)
 
@@ -41,6 +46,11 @@ CONTROL_SETTING_DEFAULTS = {
     'lifetime_total_plastic_used': 0.0,
     'announcement_message': '',
 }
+
+PENDING_DELETE_DAYS = 3
+PENDING_DELETE_STATUS = 'Awaiting Deletion'
+MAX_ADMIN_NOTIFICATIONS = 300
+MAX_SUPPORT_REPORTS = 400
 
 _DB_POOL = None
 _DB_POOL_LOCK = threading.Lock()
@@ -546,6 +556,19 @@ def _redirect_back_to_dashboard(default_hash=''):
     return redirect(dashboard_path)
 
 
+def _parse_selected_order_ids():
+    selected_ids = []
+    seen_ids = set()
+    for raw_value in request.form.getlist('selected_order_ids'):
+        for piece in str(raw_value or '').split(','):
+            order_id = piece.strip()
+            if not order_id or order_id in seen_ids:
+                continue
+            seen_ids.add(order_id)
+            selected_ids.append(order_id)
+    return selected_ids
+
+
 def _parse_iso_utc(value):
     if not value:
         return None
@@ -574,6 +597,150 @@ def _order_last_modified(order):
 
     parsed = [_parse_iso_utc(c) for c in candidates if c]
     return max(parsed) if parsed else None
+
+
+def _normalize_admin_notifications(settings):
+    raw = settings.get('admin_notifications', [])
+    if not isinstance(raw, list):
+        raw = []
+
+    normalized = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        notif_id = str(item.get('id') or '').strip()
+        if not notif_id:
+            notif_id = str(uuid.uuid4())[:12]
+
+        created_at = str(item.get('created_at') or '').strip() or datetime.utcnow().isoformat() + 'Z'
+        normalized.append({
+            'id': notif_id,
+            'type': str(item.get('type') or 'general').strip() or 'general',
+            'title': str(item.get('title') or 'Notification').strip() or 'Notification',
+            'message': str(item.get('message') or '').strip(),
+            'order_id': str(item.get('order_id') or '').strip() or None,
+            'actor_user_id': str(item.get('actor_user_id') or '').strip() or None,
+            'created_at': created_at,
+            'is_read': bool(item.get('is_read', False)),
+        })
+
+    normalized.sort(key=lambda n: _parse_iso_utc(n.get('created_at')) or datetime.min, reverse=True)
+    settings['admin_notifications'] = normalized[:MAX_ADMIN_NOTIFICATIONS]
+    return settings['admin_notifications']
+
+
+def _add_admin_notification(db, notif_type, title, message, order_id=None, actor_user_id=None):
+    settings = db.setdefault('settings', {'filaments': []})
+    notifications = _normalize_admin_notifications(settings)
+    notifications.insert(0, {
+        'id': str(uuid.uuid4())[:12],
+        'type': str(notif_type or 'general').strip() or 'general',
+        'title': str(title or 'Notification').strip() or 'Notification',
+        'message': str(message or '').strip(),
+        'order_id': (str(order_id).strip() if order_id else None),
+        'actor_user_id': (str(actor_user_id).strip() if actor_user_id else None),
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'is_read': False,
+    })
+    settings['admin_notifications'] = notifications[:MAX_ADMIN_NOTIFICATIONS]
+
+
+def _mark_admin_notification_read(db, notification_id=None, mark_all=False):
+    settings = db.setdefault('settings', {'filaments': []})
+    notifications = _normalize_admin_notifications(settings)
+    changed = False
+    if mark_all:
+        for notif in notifications:
+            if not notif.get('is_read'):
+                notif['is_read'] = True
+                changed = True
+        return changed
+
+    target = str(notification_id or '').strip()
+    if not target:
+        return False
+
+    for notif in notifications:
+        if notif.get('id') == target and not notif.get('is_read'):
+            notif['is_read'] = True
+            changed = True
+            break
+    return changed
+
+
+def _normalize_support_reports(settings):
+    raw = settings.get('support_reports', [])
+    if not isinstance(raw, list):
+        raw = []
+
+    allowed_statuses = {'new', 'in_review', 'planned', 'resolved', 'dismissed'}
+    allowed_types = {'bug', 'suggestion', 'other'}
+    allowed_severity = {'low', 'medium', 'high', 'critical'}
+    normalized = []
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        report_id = str(item.get('id') or '').strip()[:20] or str(uuid.uuid4())[:12]
+        report_type = str(item.get('report_type') or 'bug').strip().lower()
+        if report_type not in allowed_types:
+            report_type = 'bug'
+        status = str(item.get('status') or 'new').strip().lower()
+        if status not in allowed_statuses:
+            status = 'new'
+        severity = str(item.get('severity') or 'medium').strip().lower()
+        if severity not in allowed_severity:
+            severity = 'medium'
+
+        created_at = str(item.get('created_at') or '').strip() or (datetime.utcnow().isoformat() + 'Z')
+        normalized.append({
+            'id': report_id,
+            'report_type': report_type,
+            'status': status,
+            'severity': severity,
+            'title': str(item.get('title') or '').strip() or 'Untitled report',
+            'details': str(item.get('details') or '').strip(),
+            'steps': str(item.get('steps') or '').strip(),
+            'expected': str(item.get('expected') or '').strip(),
+            'actual': str(item.get('actual') or '').strip(),
+            'page_url': str(item.get('page_url') or '').strip(),
+            'screenshot_url': str(item.get('screenshot_url') or '').strip(),
+            'browser': str(item.get('browser') or '').strip(),
+            'os': str(item.get('os') or '').strip(),
+            'user_id': str(item.get('user_id') or '').strip() or None,
+            'username': str(item.get('username') or '').strip() or 'Unknown user',
+            'admin_note': str(item.get('admin_note') or '').strip(),
+            'created_at': created_at,
+            'updated_at': str(item.get('updated_at') or '').strip() or created_at,
+        })
+
+    normalized.sort(key=lambda r: _parse_iso_utc(r.get('created_at')) or datetime.min, reverse=True)
+    settings['support_reports'] = normalized[:MAX_SUPPORT_REPORTS]
+    return settings['support_reports']
+
+
+def _is_order_pending_deletion(order):
+    return bool(isinstance(order, dict) and order.get('deleted_at'))
+
+
+def _mark_order_pending_deletion(order, requested_by='admin'):
+    if not isinstance(order, dict):
+        return
+    order['deleted_at'] = datetime.utcnow().isoformat()
+    order['delete_requested_by'] = str(requested_by or 'admin')
+    order['delete_restore_requested_at'] = None
+    order['delete_restore_requested_by'] = None
+    order['updated_at'] = datetime.utcnow().isoformat()
+
+
+def _restore_soft_deleted_order(order):
+    if not isinstance(order, dict):
+        return
+    order['deleted_at'] = None
+    order['delete_requested_by'] = None
+    order['delete_restore_requested_at'] = None
+    order['delete_restore_requested_by'] = None
+    order['updated_at'] = datetime.utcnow().isoformat()
 
 
 def save_db(data, full_replace=False):
@@ -756,10 +923,17 @@ def _decorate_orders_with_pending_delete_date(orders):
     for order in orders:
         deleted_at = order.get('deleted_at')
         order['pending_delete_on'] = None
+        base_status = str(order.get('status') or '').strip() or 'Unknown'
+        if deleted_at:
+            order['status_display'] = PENDING_DELETE_STATUS
+            order['status_display_key'] = 'awaiting-deletion'
+        else:
+            order['status_display'] = base_status
+            order['status_display_key'] = base_status.lower().replace(' ', '-')
         if not deleted_at:
             continue
         try:
-            purge_at = datetime.fromisoformat(deleted_at) + timedelta(days=3)
+            purge_at = datetime.fromisoformat(deleted_at) + timedelta(days=PENDING_DELETE_DAYS)
             order['pending_delete_on'] = purge_at.strftime('%b %d, %Y')
         except Exception:
             # Keep it visible even if timestamp parsing fails.
@@ -768,8 +942,8 @@ def _decorate_orders_with_pending_delete_date(orders):
 
 
 def _purge_expired_soft_deletes(db):
-    """Drop orders whose deleted_at timestamp is older than 3 days."""
-    cutoff = datetime.utcnow() - timedelta(days=3)
+    """Drop orders whose deleted_at timestamp is older than the grace period."""
+    cutoff = datetime.utcnow() - timedelta(days=PENDING_DELETE_DAYS)
     surviving = []
     expired_ids = []
     for order in db.get('orders', []):
@@ -812,6 +986,103 @@ def _compute_user_material_credits(user_obj, user_orders):
     )
     return int(completed_grams // 500.0)
 
+
+def _estimate_order_eta(order):
+    status = str(order.get('status') or '').strip().lower()
+    quoted_total = max(0.0, _to_float(order.get('print_price'), 0)) + max(0.0, _to_float(order.get('material_fee'), 0))
+    if order.get('deleted_at'):
+        return 'Scheduled for deletion'
+    if status in {'delivered', 'done', 'completed'}:
+        return 'Completed'
+    if status in {'cancelled', 'declined', 'price denied'}:
+        return 'Stopped'
+    if status in {'in cart', 'quoted'}:
+        if quoted_total > 0:
+            return 'Quoted and ready in cart'
+        return 'Quote usually within 24h'
+    if status in {'pending', 'confirmed', 'requested', 'awaiting approval', 'waiting for approval'}:
+        return 'Requested by you, queued for production'
+
+    est_hours = max(0.0, _to_float(order.get('estimated_print_hours'), 0))
+    if status in {'printing', 'approved'}:
+        if est_hours <= 0:
+            return 'In production, usually 1-2 days'
+        remaining_hours = max(1, int(round(est_hours)))
+        if remaining_hours <= 24:
+            return f'About {remaining_hours}h remaining'
+        return f'About {max(1, int(round(remaining_hours / 24.0)))} day(s) remaining'
+
+    return 'Timeline updates after admin review'
+
+
+def _build_user_notifications(user_obj, user_orders):
+    latest_seen_iso = str((user_obj or {}).get('notifications_last_seen_at') or '').strip()
+    latest_seen_dt = _parse_iso_utc(latest_seen_iso)
+    notifications = []
+    added_keys = set()
+
+    for order in user_orders[:40]:
+        order_id = str(order.get('id') or '').strip()
+        if not order_id:
+            continue
+        updated_dt = _order_last_modified(order) or datetime.min
+        updated_iso = updated_dt.isoformat() if updated_dt != datetime.min else ''
+        updated_label = updated_dt.strftime('%b %d, %H:%M') if updated_dt != datetime.min else 'Recently'
+        status = str(order.get('status_display') or order.get('status') or 'Unknown').strip()
+        status_key = status.lower()
+
+        is_quoted = status_key == 'quoted' or (
+            status_key == 'in cart'
+            and (max(0.0, _to_float(order.get('print_price'), 0)) + max(0.0, _to_float(order.get('material_fee'), 0)) > 0)
+        )
+
+        if is_quoted:
+            key = f'quote:{order_id}'
+            if key not in added_keys:
+                notifications.append({
+                    'key': key,
+                    'title': 'Quote ready in cart',
+                    'message': f'Order #{order_id} has a quote and can be requested from your cart.',
+                    'order_id': order_id,
+                    'updated_at': updated_iso,
+                    'updated_label': updated_label,
+                    'is_unread': bool(updated_dt != datetime.min and (latest_seen_dt is None or updated_dt > latest_seen_dt)),
+                })
+                added_keys.add(key)
+
+        if status_key in {'pending', 'confirmed', 'requested', 'printing', 'completed', 'done', 'delivered'}:
+            key = f'status:{order_id}:{status_key}'
+            if key not in added_keys:
+                notifications.append({
+                    'key': key,
+                    'title': f'Order {status}',
+                    'message': f'Order #{order_id} is now {status}.',
+                    'order_id': order_id,
+                    'updated_at': updated_iso,
+                    'updated_label': updated_label,
+                    'is_unread': bool(updated_dt != datetime.min and (latest_seen_dt is None or updated_dt > latest_seen_dt)),
+                })
+                added_keys.add(key)
+
+        admin_note = str(order.get('admin_note') or '').strip()
+        if admin_note:
+            key = f'note:{order_id}'
+            if key not in added_keys:
+                snippet = admin_note if len(admin_note) <= 90 else (admin_note[:87] + '...')
+                notifications.append({
+                    'key': key,
+                    'title': 'Admin note added',
+                    'message': f'Order #{order_id}: {snippet}',
+                    'order_id': order_id,
+                    'updated_at': updated_iso,
+                    'updated_label': updated_label,
+                    'is_unread': bool(updated_dt != datetime.min and (latest_seen_dt is None or updated_dt > latest_seen_dt)),
+                })
+                added_keys.add(key)
+
+    notifications.sort(key=lambda n: _parse_iso_utc(n.get('updated_at')) or datetime.min, reverse=True)
+    return notifications[:20]
+
 # --- USER ROUTES ---
 def _default_featured_items():
     return [
@@ -840,6 +1111,9 @@ def _default_featured_items():
 
 def _build_user_portal_context(user_id, search_query=''):
     db = get_db()
+    purged_ids = _purge_expired_soft_deletes(db)
+    if purged_ids:
+        save_db(db)
     settings = db.setdefault('settings', {'filaments': []})
     filaments, filaments_changed = _normalize_filaments(settings)
     if filaments_changed:
@@ -848,7 +1122,7 @@ def _build_user_portal_context(user_id, search_query=''):
     user = next((u for u in db.get('users', []) if u.get('id') == user_id), None)
     control_settings = _load_control_center_settings()
     completed_statuses = {'completed', 'done', 'delivered'}
-    inactive_statuses = completed_statuses | {'cancelled', 'declined', 'price denied', 'in cart'}
+    inactive_statuses = completed_statuses | {'cancelled', 'declined', 'price denied', 'in cart', 'quoted'}
 
     owned_orders = [o for o in db.get('orders', []) if o.get('owner') == user_id]
     owned_orders = sorted(
@@ -860,11 +1134,11 @@ def _build_user_portal_context(user_id, search_query=''):
 
     cart_orders = [
         o for o in owned_orders
-        if str(o.get('status') or '').strip().lower() == 'in cart'
+        if str(o.get('status') or '').strip().lower() in {'in cart', 'quoted', 'pending quote'}
     ]
     user_orders = [
         o for o in owned_orders
-        if str(o.get('status') or '').strip().lower() != 'in cart'
+        if str(o.get('status') or '').strip().lower() not in {'in cart', 'quoted', 'pending quote'}
     ]
 
     normalized_query = (search_query or '').strip().lower()
@@ -905,16 +1179,55 @@ def _build_user_portal_context(user_id, search_query=''):
         if str(o.get('status') or '').strip().lower() not in inactive_statuses
     )
     material_credits = _compute_user_material_credits(user, user_orders)
-    waiting_approval_orders = [
+    awaiting_approval_orders = [
         o for o in user_orders
-        if str(o.get('status') or '').strip().lower() == 'waiting for approval'
+        if str(o.get('status') or '').strip().lower() in {'pending', 'confirmed', 'requested', 'awaiting approval', 'waiting for approval'}
     ]
+    eta_by_order = {
+        str(o.get('id') or ''): _estimate_order_eta(o)
+        for o in user_orders
+        if o.get('id')
+    }
+    user_notifications = _build_user_notifications(user, user_orders)
+    unread_user_notification_count = sum(1 for n in user_notifications if n.get('is_unread'))
+    user_updates_token = ''
+    if user_orders:
+        last_dt = _order_last_modified(user_orders[0])
+        if last_dt is not None:
+            user_updates_token = last_dt.isoformat()
+
+    order_presets = []
+    if isinstance(user, dict):
+        raw_presets = user.get('order_presets', [])
+        if isinstance(raw_presets, list):
+            for p in raw_presets:
+                if not isinstance(p, dict):
+                    continue
+                pname = str(p.get('name') or '').strip()
+                if not pname:
+                    continue
+                order_presets.append({
+                    'id': str(p.get('id') or '')[:20] or str(uuid.uuid4())[:10],
+                    'name': pname,
+                    'makerworld_link': str(p.get('makerworld_link') or '').strip(),
+                    'model_weight': max(0.0, _to_float(p.get('model_weight'), 0)),
+                    'print_profile': str(p.get('print_profile') or '').strip(),
+                    'color_mode': 'multi' if str(p.get('color_mode') or '').strip().lower() == 'multi' else 'single',
+                    'single_filament': str(p.get('single_filament') or '').strip(),
+                    'mappings': p.get('mappings', []) if isinstance(p.get('mappings', []), list) else [],
+                    'preferred_delivery_date': str(p.get('preferred_delivery_date') or '').strip(),
+                })
 
     member_since = 'Recently joined'
     if isinstance(user, dict) and user.get('created_at'):
         parsed = _parse_iso_utc(user.get('created_at'))
         if parsed is not None:
             member_since = parsed.strftime('%b %Y')
+
+    cart_clear_ids = session.pop('cart_clear_ids', [])
+    if not isinstance(cart_clear_ids, list):
+        cart_clear_ids = []
+    cart_clear_ids = [str(i).strip() for i in cart_clear_ids if str(i).strip()]
 
     return {
         'db': db,
@@ -935,8 +1248,14 @@ def _build_user_portal_context(user_id, search_query=''):
         'active_orders_count': active_orders,
         'total_prints_completed': total_prints_completed,
         'material_credits': material_credits,
-        'waiting_approval_orders': waiting_approval_orders,
+        'waiting_approval_orders': awaiting_approval_orders,
+        'eta_by_order': eta_by_order,
+        'user_notifications': user_notifications,
+        'unread_user_notification_count': unread_user_notification_count,
+        'user_updates_token': user_updates_token,
+        'order_presets': order_presets,
         'member_since': member_since,
+        'cart_clear_ids': cart_clear_ids,
     }
 
 
@@ -954,10 +1273,51 @@ def order_page():
         return redirect(url_for('user_login'))
     context = _build_user_portal_context(session.get('user_id'))
     prefill_link = (request.args.get('makerworld_link') or '').strip()
+    reorder_id = (request.args.get('reorder') or '').strip()
+    prefill_order_data = None
+    if reorder_id:
+        source = next(
+            (
+                o for o in context.get('all_orders', [])
+                if str(o.get('id') or '') == reorder_id
+            ),
+            None,
+        )
+        if source:
+            color_raw = str(source.get('color') or '').strip()
+            mappings = []
+            color_mode = 'single'
+            single_filament = color_raw
+            if '|' in color_raw and ':' in color_raw:
+                color_mode = 'multi'
+                single_filament = ''
+                for seg in color_raw.split('|'):
+                    seg = seg.strip()
+                    if not seg:
+                        continue
+                    part, sep, filament_name = seg.partition(':')
+                    mappings.append({
+                        'part': part.strip() if sep else '',
+                        'filament': (filament_name if sep else seg).strip(),
+                    })
+            prefill_order_data = {
+                'source_order_id': reorder_id,
+                'makerworld_link': source.get('link') or '',
+                'model_weight': max(0.0, _to_float(source.get('print_weight_g'), 0)),
+                'print_profile': source.get('profile') or '',
+                'color_mode': color_mode,
+                'single_filament': single_filament,
+                'mappings': mappings,
+                'preferred_delivery_date': source.get('preferred_delivery_date') or '',
+            }
+            if not prefill_link:
+                prefill_link = str(source.get('link') or '').strip()
+
     return render_template(
         'user_order_form.html',
         active_tab='order',
         prefill_link=prefill_link,
+        prefill_order_data=prefill_order_data,
         **context,
     )
 
@@ -997,7 +1357,81 @@ def user_help():
     if not session.get('user_id'):
         return redirect(url_for('user_login'))
     context = _build_user_portal_context(session.get('user_id'))
-    return render_template('user_help.html', active_tab='help', **context)
+    report_state = str(request.args.get('report') or '').strip().lower()
+    return render_template(
+        'user_help.html',
+        active_tab='help',
+        report_sent=(report_state == 'sent'),
+        report_error=(report_state == 'error'),
+        **context,
+    )
+
+
+@app.route('/help/report', methods=['POST'])
+def submit_support_report():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    report_type = str(request.form.get('report_type') or 'bug').strip().lower()
+    if report_type not in {'bug', 'suggestion', 'other'}:
+        report_type = 'bug'
+
+    title = str(request.form.get('title') or '').strip()
+    details = str(request.form.get('details') or '').strip()
+    if not title or not details:
+        return redirect(url_for('user_help', report='error'))
+
+    severity = str(request.form.get('severity') or 'medium').strip().lower()
+    if severity not in {'low', 'medium', 'high', 'critical'}:
+        severity = 'medium'
+
+    page_url = str(request.form.get('page_url') or '').strip()
+    if page_url and len(page_url) > 400:
+        page_url = page_url[:400]
+
+    screenshot_url = str(request.form.get('screenshot_url') or '').strip()
+    if screenshot_url and len(screenshot_url) > 600:
+        screenshot_url = screenshot_url[:600]
+
+    db = get_db()
+    settings = db.setdefault('settings', {'filaments': []})
+    reports = _normalize_support_reports(settings)
+    report_id = str(uuid.uuid4())[:12]
+
+    report = {
+        'id': report_id,
+        'report_type': report_type,
+        'status': 'new',
+        'severity': severity,
+        'title': title,
+        'details': details,
+        'steps': str(request.form.get('steps') or '').strip(),
+        'expected': str(request.form.get('expected') or '').strip(),
+        'actual': str(request.form.get('actual') or '').strip(),
+        'page_url': page_url,
+        'screenshot_url': screenshot_url,
+        'browser': str(request.user_agent.browser or '').strip(),
+        'os': str(request.user_agent.platform or '').strip(),
+        'user_id': str(session.get('user_id') or '').strip() or None,
+        'username': str(session.get('username') or 'Unknown user').strip() or 'Unknown user',
+        'admin_note': '',
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'updated_at': datetime.utcnow().isoformat() + 'Z',
+    }
+
+    reports.insert(0, report)
+    settings['support_reports'] = reports[:MAX_SUPPORT_REPORTS]
+
+    issue_label = 'Bug report' if report_type == 'bug' else 'Suggestion'
+    _add_admin_notification(
+        db,
+        notif_type='support_report',
+        title=f'New {issue_label.lower()}',
+        message=f"{report.get('username')} submitted: {title[:72]}",
+        actor_user_id=report.get('user_id'),
+    )
+    save_db(db)
+    return redirect(url_for('user_help', report='sent'))
 
 
 @app.route('/user_register', methods=['GET', 'POST'])
@@ -1011,7 +1445,12 @@ def user_register():
         if any(u for u in db['users'] if u.get('username') == username):
             return render_template('register.html', error='Username already taken')
         user_id = str(uuid.uuid4())[:8]
-        user = {'id': user_id, 'username': username, 'password_hash': generate_password_hash(password), 'created_at': datetime.utcnow().isoformat()}
+        user = {
+            'id': user_id,
+            'username': username,
+            'password_hash': generate_password_hash(password),
+            'created_at': datetime.utcnow().isoformat(),
+        }
         db['users'].append(user)
         save_db(db)
         session['user_id'] = user_id
@@ -1094,7 +1533,6 @@ def submit_order():
                 **context,
             )
     order_id = str(uuid.uuid4())[:8]
-    order_intent = (request.form.get('order_intent') or 'purchase_now').strip().lower()
     
     # Capture the name if the user provided one (used as nickname).
     raw_name = request.form.get('name', '').strip()
@@ -1103,6 +1541,15 @@ def submit_order():
     profile_choice = request.form.get('print_profile', '').strip()
     if not profile_choice:
         profile_choice = "1"
+
+    preferred_delivery_date = (request.form.get('preferred_delivery_date') or '').strip()
+    if preferred_delivery_date:
+        try:
+            chosen_date = date.fromisoformat(preferred_delivery_date)
+            if chosen_date < date.today():
+                preferred_delivery_date = ''
+        except Exception:
+            preferred_delivery_date = ''
 
     mode = request.form.get('color_mode')
     if mode == 'single':
@@ -1169,18 +1616,320 @@ def submit_order():
         "print_weight_g": max(0.0, _to_float(request.form.get('model_weight') or 0)),
         "profile": profile_choice,
         "color": color_string,
-        "status": "In Cart" if order_intent == 'add_to_cart' else "Pending Quote",
+        "status": "In Cart",
         "print_price": "0",
         "material_fee": "0",
         "delivery_time": "TBD",
+        "preferred_delivery_date": preferred_delivery_date,
         "estimated_print_hours": max(0.0, _to_float(request.form.get('estimated_print_hours') or 0)),
     }
     
     db['orders'].append(new_order)
     save_db(db)
-    if order_intent == 'add_to_cart':
+    return redirect(url_for('user_cart'))
+
+
+def _cart_payload_signature(owner_id, raw_link, product_name, color_string, profile, weight, preferred_date):
+    return '||'.join([
+        str(owner_id or '').strip(),
+        str(raw_link or '').strip().lower(),
+        str(product_name or '').strip().lower(),
+        str(color_string or '').strip().lower(),
+        str(profile or '').strip().lower(),
+        '{:.3f}'.format(max(0.0, _to_float(weight, 0))),
+        str(preferred_date or '').strip(),
+    ])
+
+
+def _parse_cart_quantity(value, default=1):
+    try:
+        qty = int(float(value))
+    except (TypeError, ValueError):
+        qty = default
+    return max(1, min(99, qty))
+
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    import json as _json
+    cart_json_str = request.form.get('cart_json', '[]')
+    try:
+        items = _json.loads(cart_json_str)
+        if not isinstance(items, list):
+            items = []
+    except Exception:
+        items = []
+
+    if not items:
         return redirect(url_for('user_cart'))
-    return redirect(url_for('check_order_by_id', order_id=order_id))
+
+    db = get_db()
+    owner_id = session.get('user_id')
+    checked_out_item_ids = []
+    processed_order_ids = set()
+    orders = db.setdefault('orders', [])
+    created_checkout_ids = []
+    remove_cart_order_ids = set()
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        incoming_order_id = str(item.get('orderId') or item.get('order_id') or '').strip()
+        if not incoming_order_id or incoming_order_id in processed_order_ids:
+            continue
+
+        existing = next(
+            (
+                o for o in orders
+                if str(o.get('id') or '') == incoming_order_id
+                and o.get('owner') == owner_id
+            ),
+            None,
+        )
+        if existing is None:
+            continue
+
+        status_key = str(existing.get('status') or '').strip().lower()
+        if status_key not in {'in cart', 'quoted', 'pending quote'}:
+            continue
+
+        quantity = _parse_cart_quantity(item.get('quantity'), default=1)
+        quoted_unit_price = max(0.0, _to_float(item.get('estimatedPrice'), 0))
+        if quoted_unit_price <= 0:
+            existing_total = max(0.0, _to_float(existing.get('print_price'), 0)) + max(0.0, _to_float(existing.get('material_fee'), 0))
+            existing_qty = _parse_cart_quantity(existing.get('quantity'), default=1)
+            quoted_unit_price = existing_total / existing_qty if existing_qty > 0 else existing_total
+        if quoted_unit_price <= 0:
+            # Enforce priced-only checkout from cart.
+            continue
+
+        selected_profile = str(existing.get('profile') or item.get('profile') or 'Standard').strip() or 'Standard'
+        selected_colors = str(existing.get('color') or '').strip()
+        if not selected_colors:
+            if str(item.get('colorMode') or '').strip().lower() == 'multi':
+                mappings = item.get('multiMappings') or []
+                selected_colors = ' | '.join(
+                    '{}: {}'.format(str(m.get('part') or ''), str(m.get('filament') or '')).strip()
+                    for m in mappings if isinstance(m, dict) and (m.get('part') or m.get('filament'))
+                )
+            else:
+                selected_colors = str(item.get('singleFilament') or '').strip()
+
+        total_price = int(round(quoted_unit_price * quantity))
+        model_weight = max(0.0, _to_float(item.get('weight'), existing.get('print_weight_g') or 0))
+        est_hours_per_unit = max(0.0, _to_float(existing.get('estimated_print_hours'), 0))
+
+        new_order_id = str(uuid.uuid4())[:8]
+        checkout_order = {
+            'id': new_order_id,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat(),
+            'name': existing.get('name') or existing.get('product_name') or str(item.get('displayName') or 'Unnamed Order'),
+            'nickname': existing.get('nickname'),
+            'owner': owner_id,
+            'product_name': existing.get('product_name') or existing.get('name') or str(item.get('displayName') or 'Unnamed Order'),
+            'admin_note': existing.get('admin_note', ''),
+            'messages': [],
+            'link': existing.get('link') or str(item.get('link') or ''),
+            'print_weight_g': model_weight * quantity,
+            'profile': selected_profile,
+            'color': selected_colors,
+            'quantity': quantity,
+            'status': 'Pending',
+            'print_price': str(total_price),
+            'material_fee': '0',
+            'delivery_time': 'TBD',
+            'preferred_delivery_date': existing.get('preferred_delivery_date') or str(item.get('preferredDeliveryDate') or ''),
+            'estimated_print_hours': est_hours_per_unit * quantity,
+            'source_cart_order_id': incoming_order_id,
+            'final_unit_price': int(round(quoted_unit_price)),
+            'final_total_price': total_price,
+            'selected_print_profile': selected_profile,
+            'selected_colors': selected_colors,
+            'payment_status': 'Unpaid',
+        }
+        orders.append(checkout_order)
+        created_checkout_ids.append(new_order_id)
+        remove_cart_order_ids.add(incoming_order_id)
+        processed_order_ids.add(incoming_order_id)
+
+        item_id = str(item.get('id') or '').strip()
+        if item_id:
+            checked_out_item_ids.append(item_id)
+
+    if not created_checkout_ids:
+        return redirect(url_for('user_cart'))
+
+    if remove_cart_order_ids:
+        db['orders'] = [
+            o for o in db.get('orders', [])
+            if str(o.get('id') or '') not in remove_cart_order_ids
+        ]
+        for old_id in remove_cart_order_ids:
+            _execute("DELETE FROM orders WHERE id = %s", (old_id,))
+
+    save_db(db)
+    if checked_out_item_ids:
+        session['cart_clear_ids'] = checked_out_item_ids
+    session['last_checkout_order_ids'] = created_checkout_ids
+    return redirect(url_for('checkout_thank_you'))
+
+
+@app.route('/checkout/thank-you')
+def checkout_thank_you():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    order_ids = session.pop('last_checkout_order_ids', [])
+    if not isinstance(order_ids, list):
+        order_ids = []
+    order_ids = [str(oid).strip() for oid in order_ids if str(oid).strip()]
+    if not order_ids:
+        return redirect(url_for('user_cart'))
+
+    db = get_db()
+    owner_id = session.get('user_id')
+    orders = [
+        o for o in db.get('orders', [])
+        if str(o.get('id') or '') in set(order_ids)
+        and o.get('owner') == owner_id
+    ]
+    orders = sorted(orders, key=lambda o: order_ids.index(str(o.get('id') or '')))
+    grand_total = int(round(sum(max(0.0, _to_float(o.get('final_total_price', o.get('print_price')), 0)) for o in orders)))
+
+    context = _build_user_portal_context(owner_id)
+    return render_template(
+        'checkout_thank_you.html',
+        active_tab='history',
+        checkout_orders=orders,
+        checkout_order_ids=order_ids,
+        checkout_grand_total=grand_total,
+        **context,
+    )
+
+
+@app.route('/cart/save-item', methods=['POST'])
+def save_cart_item():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
+
+    raw_link = str(payload.get('link') or '').strip()
+    if not raw_link:
+        return jsonify({'ok': False, 'error': 'Model link is required'}), 400
+
+    item_id = str(payload.get('id') or '').strip()
+    existing_order_id = str(payload.get('orderId') or '').strip()
+
+    db = get_db()
+    owner_id = session.get('user_id')
+
+    # If this client item was already saved, reuse its order id.
+    if existing_order_id:
+        existing = next(
+            (
+                o for o in db.get('orders', [])
+                if str(o.get('id') or '') == existing_order_id and o.get('owner') == owner_id
+            ),
+            None,
+        )
+        if existing is not None:
+            return jsonify({'ok': True, 'order_id': existing_order_id})
+
+    if item_id:
+        existing_by_item = next(
+            (
+                o for o in db.get('orders', [])
+                if o.get('owner') == owner_id
+                and str(o.get('status') or '').strip().lower() == 'in cart'
+                and str(o.get('cart_item_id') or '') == item_id
+            ),
+            None,
+        )
+        if existing_by_item is not None:
+            return jsonify({'ok': True, 'order_id': str(existing_by_item.get('id') or '')})
+
+    color_mode = str(payload.get('colorMode') or 'single')
+    if color_mode == 'multi':
+        mappings = payload.get('multiMappings') or []
+        color_parts = [
+            '{}: {}'.format(str(m.get('part') or ''), str(m.get('filament') or ''))
+            for m in mappings if isinstance(m, dict) and m.get('part')
+        ]
+        color_string = ' | '.join(color_parts) if color_parts else 'Multi-color'
+    else:
+        color_string = str(payload.get('singleFilament') or 'Not Selected')
+
+    product_name = str(payload.get('displayName') or 'Unnamed Order')
+    weight = max(0.0, _to_float(payload.get('weight') or 0))
+    profile = str(payload.get('profile') or '1').strip() or '1'
+    preferred_date = str(payload.get('preferredDeliveryDate') or '').strip()
+    if preferred_date:
+        try:
+            chosen_date = date.fromisoformat(preferred_date)
+            if chosen_date < date.today():
+                preferred_date = ''
+        except Exception:
+            preferred_date = ''
+
+    incoming_signature = _cart_payload_signature(owner_id, raw_link, product_name, color_string, profile, weight, preferred_date)
+    existing_by_signature = next(
+        (
+            o for o in db.get('orders', [])
+            if o.get('owner') == owner_id
+            and str(o.get('status') or '').strip().lower() == 'in cart'
+            and _cart_payload_signature(
+                owner_id,
+                o.get('link'),
+                o.get('name') or o.get('product_name'),
+                o.get('color'),
+                o.get('profile'),
+                o.get('print_weight_g'),
+                o.get('preferred_delivery_date'),
+            ) == incoming_signature
+        ),
+        None,
+    )
+    if existing_by_signature is not None:
+        return jsonify({'ok': True, 'order_id': str(existing_by_signature.get('id') or '')})
+
+    quantity = _parse_cart_quantity(payload.get('quantity'), default=1)
+    total_price = 0
+    order_id = str(uuid.uuid4())[:8]
+
+    new_order = {
+        'id': order_id,
+        'created_at': datetime.utcnow().isoformat(),
+        'updated_at': datetime.utcnow().isoformat(),
+        'name': product_name,
+        'nickname': None,
+        'owner': owner_id,
+        'product_name': product_name,
+        'admin_note': '',
+        'messages': [],
+        'link': raw_link,
+        'print_weight_g': weight * quantity,
+        'profile': profile,
+        'color': color_string,
+        'quantity': quantity,
+        'status': 'In Cart',
+        'print_price': str(total_price),
+        'material_fee': '0',
+        'delivery_time': 'TBD',
+        'preferred_delivery_date': preferred_date,
+        'estimated_print_hours': 0.0,
+        'cart_item_id': item_id,
+    }
+    db['orders'].append(new_order)
+    save_db(db)
+    return jsonify({'ok': True, 'order_id': order_id})
 
 
 @app.route('/cart/remove/<order_id>', methods=['POST'])
@@ -1210,10 +1959,18 @@ def remove_cart_item(order_id):
 
 @app.route('/order/<order_id>/messages', methods=['GET', 'POST'])
 def order_messages(order_id):
+    is_admin = bool(session.get('logged_in'))
+    user_id = session.get('user_id')
+    if not is_admin and not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+
     db = get_db()
     order = next((o for o in db['orders'] if o['id'] == order_id), None)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
+
+    if not is_admin and order.get('owner') != user_id:
+        return jsonify({'error': 'Unauthorized'}), 403
 
     if request.method == 'GET':
         return jsonify({'messages': order.get('messages', [])})
@@ -1221,7 +1978,7 @@ def order_messages(order_id):
     # POST: append a message
     data = request.get_json() or request.form
     text = (data.get('text') or '').strip()
-    sender = data.get('sender') or 'user'
+    sender = 'admin' if is_admin else 'user'
     if not text:
         return jsonify({'error': 'Empty message'}), 400
 
@@ -1231,6 +1988,18 @@ def order_messages(order_id):
         'ts': datetime.utcnow().isoformat() + 'Z'
     }
     order.setdefault('messages', []).append(msg)
+
+    if str(sender).strip().lower() == 'user':
+        username = session.get('username') or order.get('owner') or 'Unknown user'
+        _add_admin_notification(
+            db,
+            notif_type='user_message',
+            title='New user message',
+            message=f'{username} sent a new message for order #{order.get("id")}.',
+            order_id=order.get('id'),
+            actor_user_id=order.get('owner'),
+        )
+
     save_db(db)
     return jsonify({'messages': order.get('messages', [])})
 
@@ -1245,8 +2014,98 @@ def check_order_by_id(order_id):
         if order.get('owner') != session.get('user_id'):
             return "Order not found", 404
     if order:
-        return render_template('order.html', order=order)
+        _decorate_orders_with_pending_delete_date([order])
+        return render_template('order.html', order=order, order_eta=_estimate_order_eta(order))
     return "Order not found", 404
+
+
+@app.route('/user/notifications/read_all', methods=['POST'])
+def user_notifications_read_all():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+    db = get_db()
+    user = next((u for u in db.get('users', []) if u.get('id') == session.get('user_id')), None)
+    if user is not None:
+        user['notifications_last_seen_at'] = datetime.utcnow().isoformat()
+        save_db(db)
+    next_url = (request.form.get('next') or '').strip()
+    if next_url:
+        return redirect(next_url)
+    return redirect(url_for('index'))
+
+
+@app.route('/api/user/updates')
+def user_updates_api():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    context = _build_user_portal_context(session.get('user_id'))
+    return jsonify({
+        'latest_update_token': context.get('user_updates_token') or '',
+        'unread_notifications': int(context.get('unread_user_notification_count') or 0),
+    })
+
+
+@app.route('/order/presets/save', methods=['POST'])
+def save_order_preset():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    db = get_db()
+    user = next((u for u in db.get('users', []) if u.get('id') == session.get('user_id')), None)
+    if user is None:
+        return redirect(url_for('order_page'))
+
+    preset_name = (request.form.get('preset_name') or '').strip()
+    if not preset_name:
+        return redirect(url_for('order_page'))
+
+    color_mode = 'multi' if (request.form.get('color_mode') or '').strip().lower() == 'multi' else 'single'
+    single_filament = (request.form.get('single_filament') or '').strip()
+    mappings = []
+    parts = request.form.getlist('model_part[]')
+    mapped_filaments = request.form.getlist('mapped_filament[]')
+    for part, filament_name in zip(parts, mapped_filaments):
+        p = str(part or '').strip()
+        f = str(filament_name or '').strip()
+        if not p or not f:
+            continue
+        mappings.append({'part': p, 'filament': f})
+
+    preset = {
+        'id': str(uuid.uuid4())[:10],
+        'name': preset_name,
+        'makerworld_link': (request.form.get('makerworld_link') or '').strip(),
+        'model_weight': max(0.0, _to_float(request.form.get('model_weight') or 0)),
+        'print_profile': (request.form.get('print_profile') or '').strip(),
+        'color_mode': color_mode,
+        'single_filament': single_filament,
+        'mappings': mappings,
+        'preferred_delivery_date': (request.form.get('preferred_delivery_date') or '').strip(),
+    }
+
+    presets = user.setdefault('order_presets', [])
+    presets.insert(0, preset)
+    user['order_presets'] = presets[:20]
+    save_db(db)
+    return redirect(url_for('order_page'))
+
+
+@app.route('/order/presets/delete/<preset_id>', methods=['POST'])
+def delete_order_preset(preset_id):
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    db = get_db()
+    user = next((u for u in db.get('users', []) if u.get('id') == session.get('user_id')), None)
+    if user is None:
+        return redirect(url_for('order_page'))
+
+    presets = user.get('order_presets', [])
+    if isinstance(presets, list):
+        user['order_presets'] = [p for p in presets if str(p.get('id') or '') != str(preset_id)]
+        save_db(db)
+    return redirect(url_for('order_page'))
 
 
 @app.route('/order/<order_id>/invoice')
@@ -1299,7 +2158,7 @@ def check_order():
 def approve_price(order_id):
     db = get_db()
     for order in db['orders']:
-        if order['id'] == order_id and order['status'] == 'Waiting for Approval':
+        if order['id'] == order_id and order['status'] == 'Waiting for Approval' and not _is_order_pending_deletion(order):
             order['status'] = 'Approved'
             save_db(db)
             break
@@ -1309,7 +2168,7 @@ def approve_price(order_id):
 def deny_price(order_id):
     db = get_db()
     for order in db['orders']:
-        if order['id'] == order_id and order['status'] == 'Waiting for Approval':
+        if order['id'] == order_id and order['status'] == 'Waiting for Approval' and not _is_order_pending_deletion(order):
             order['status'] = 'Price Denied'
             save_db(db)
             break
@@ -1321,6 +2180,8 @@ def cancel_order(order_id):
     locked_statuses = ['Printing', 'Completed', 'Done', 'Delivered']
     for order in db['orders']:
         if order['id'] == order_id:
+            if _is_order_pending_deletion(order):
+                return "This order is awaiting deletion and cannot be changed right now.", 403
             if order['status'] in locked_statuses:
                 return "This order is already being processed and cannot be cancelled.", 403
             order['status'] = 'Cancelled'
@@ -1359,14 +2220,20 @@ def dashboard():
     _purge_expired_soft_deletes(db)
     purged_soft_deleted_orders = len(db.get('orders', [])) != before_purge_count
     settings = payload['settings']
+    notifications = _normalize_admin_notifications(settings)
+    unread_notification_count = sum(1 for n in notifications if not n.get('is_read'))
+    support_reports = _normalize_support_reports(settings)
+    open_support_reports_count = sum(1 for r in support_reports if str(r.get('status') or '').lower() in {'new', 'in_review', 'planned'})
     filaments, filaments_changed = _normalize_filaments(settings)
     if filaments_changed or purged_soft_deleted_orders:
         save_db(db)
     status_priority = {
         'in cart': 0,
+        'quoted': 1,
         'pending quote': 1,
+        'requested': 2,
         'waiting for approval': 2,
-        'approved': 3,
+        'approved': 2,
         'printing': 3,
         'completed': 4,
         'done': 4,
@@ -1423,6 +2290,21 @@ def dashboard():
 
     current_colors = ", ".join([f.get('name', '') for f in filaments])
     lifetime_profit = int(round(_get_business_stat('lifetime_profit', 0)))
+    
+    # Fetch print profiles from database
+    print_profiles = []
+    try:
+        rows = _execute(
+            "SELECT id, name, price_modifier, description, is_active, is_default FROM print_profiles ORDER BY is_default DESC, name",
+            fetch=True
+        ) or []
+        print_profiles = [
+            {'id': r[0], 'name': r[1], 'price_modifier': float(r[2] or 0), 'description': r[3], 'is_active': bool(r[4]), 'is_default': bool(r[5])}
+            for r in rows
+        ]
+    except Exception:
+        pass
+    
     return render_template(
         'dashboard.html',
         orders=active_orders,
@@ -1432,11 +2314,97 @@ def dashboard():
         users=payload['users'],
         user_credit_map=user_credit_map,
         featured_prints=featured_prints,
+        print_profiles=print_profiles,
         fresh_order_ids=fresh_order_ids,
         control_settings=control_settings,
         supabase_connected=_is_database_connected(),
         lifetime_profit=lifetime_profit,
+        admin_notifications=notifications,
+        unread_notification_count=unread_notification_count,
+        support_reports=support_reports,
+        open_support_reports_count=open_support_reports_count,
     )
+
+
+@app.route('/dashboard/support-reports/<report_id>', methods=['POST'])
+def update_support_report(report_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    settings = db.setdefault('settings', {'filaments': []})
+    reports = _normalize_support_reports(settings)
+    target = str(report_id or '').strip()
+    next_status = str(request.form.get('status') or '').strip().lower()
+    allowed_statuses = {'new', 'in_review', 'planned', 'resolved', 'dismissed'}
+    if next_status not in allowed_statuses:
+        next_status = 'new'
+    next_note = str(request.form.get('admin_note') or '').strip()
+
+    changed = False
+    for report in reports:
+        if str(report.get('id') or '') != target:
+            continue
+        if str(report.get('status') or '').lower() != next_status:
+            report['status'] = next_status
+            changed = True
+        if str(report.get('admin_note') or '') != next_note:
+            report['admin_note'] = next_note
+            changed = True
+        if changed:
+            report['updated_at'] = datetime.utcnow().isoformat() + 'Z'
+        break
+
+    if changed:
+        settings['support_reports'] = reports[:MAX_SUPPORT_REPORTS]
+        save_db(db)
+
+    return _redirect_back_to_dashboard('#reports-section')
+
+
+@app.route('/dashboard/support-reports/<report_id>/delete', methods=['POST'])
+def delete_support_report(report_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    settings = db.setdefault('settings', {'filaments': []})
+    reports = _normalize_support_reports(settings)
+    target = str(report_id or '').strip()
+    remaining_reports = [
+        report for report in reports
+        if str(report.get('id') or '').strip() != target
+    ]
+
+    if len(remaining_reports) != len(reports):
+        settings['support_reports'] = remaining_reports[:MAX_SUPPORT_REPORTS]
+        save_db(db)
+
+    return _redirect_back_to_dashboard('#reports-section')
+
+
+@app.route('/dashboard/notifications/read/<notification_id>', methods=['POST'])
+def read_dashboard_notification(notification_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    changed = _mark_admin_notification_read(db, notification_id=notification_id)
+    if changed:
+        save_db(db)
+    return _redirect_back_to_dashboard('#home-section')
+
+
+@app.route('/dashboard/notifications/read_all', methods=['POST'])
+def read_all_dashboard_notifications():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    changed = _mark_admin_notification_read(db, mark_all=True)
+    if changed:
+        save_db(db)
+    return _redirect_back_to_dashboard('#home-section')
 
 
 @app.route('/dashboard/users/<user_id>/credits', methods=['POST'])
@@ -1545,13 +2513,134 @@ def update_control_center_settings():
 
 @app.route('/delete_order/<order_id>', methods=['POST'])
 def delete_order(order_id):
-    """Soft-delete: marks order with deleted_at; purged after 3 days."""
+    """Soft-delete: marks order as awaiting deletion; purged after grace period."""
     if not session.get('logged_in'): return redirect(url_for('login'))
     db = get_db()
     for order in db['orders']:
         if order['id'] == order_id:
-            order['deleted_at'] = datetime.utcnow().isoformat()
+            _mark_order_pending_deletion(order, requested_by='admin')
+            _add_admin_notification(
+                db,
+                notif_type='delete_pending',
+                title='Order marked for deletion',
+                message=f'Order #{order_id} is now awaiting deletion for {PENDING_DELETE_DAYS} days.',
+                order_id=order_id,
+                actor_user_id=order.get('owner'),
+            )
             break
+    save_db(db)
+    return _redirect_back_to_dashboard('#orders-section')
+
+
+@app.route('/restore_order/<order_id>', methods=['POST'])
+def restore_order(order_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    restored = False
+    for order in db.get('orders', []):
+        if order.get('id') == order_id and _is_order_pending_deletion(order):
+            _restore_soft_deleted_order(order)
+            _add_admin_notification(
+                db,
+                notif_type='delete_restore',
+                title='Order restored',
+                message=f'Order #{order_id} was restored and is no longer awaiting deletion.',
+                order_id=order_id,
+                actor_user_id=order.get('owner'),
+            )
+            restored = True
+            break
+
+    if restored:
+        save_db(db)
+    return _redirect_back_to_dashboard('#orders-section')
+
+
+@app.route('/hard_delete_order/<order_id>', methods=['POST'])
+def hard_delete_order(order_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    before = len(db.get('orders', []))
+    db['orders'] = [o for o in db.get('orders', []) if o.get('id') != order_id]
+    deleted = len(db.get('orders', [])) != before
+
+    if deleted:
+        _execute("DELETE FROM orders WHERE id = %s", (order_id,))
+        _add_admin_notification(
+            db,
+            notif_type='delete_finalized',
+            title='Order permanently deleted',
+            message=f'Order #{order_id} was permanently removed.',
+            order_id=order_id,
+        )
+        save_db(db)
+    return _redirect_back_to_dashboard('#orders-section')
+
+
+@app.route('/bulk_order_action', methods=['POST'])
+def bulk_order_action():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    action = (request.form.get('action') or '').strip().lower()
+    selected_ids = _parse_selected_order_ids()
+    allowed_actions = {'delete', 'archive', 'decline', 'hard_delete'}
+    if action not in allowed_actions or not selected_ids:
+        return _redirect_back_to_dashboard('#orders-section')
+
+    db = get_db()
+    selected_set = set(selected_ids)
+    updated_orders = []
+    affected_count = 0
+
+    for order in db.get('orders', []):
+        order_id = order.get('id')
+        if order_id not in selected_set:
+            updated_orders.append(order)
+            continue
+
+        if action == 'hard_delete':
+            if _is_order_pending_deletion(order):
+                _execute("DELETE FROM orders WHERE id = %s", (order_id,))
+                affected_count += 1
+                continue
+            updated_orders.append(order)
+            continue
+
+        if _is_order_pending_deletion(order):
+            updated_orders.append(order)
+            continue
+
+        if action == 'delete':
+            _mark_order_pending_deletion(order, requested_by='admin')
+        elif action == 'archive':
+            order['status'] = 'Delivered'
+        elif action == 'decline':
+            order['status'] = 'Declined'
+
+        affected_count += 1
+        updated_orders.append(order)
+
+    if not affected_count:
+        return _redirect_back_to_dashboard('#orders-section')
+
+    db['orders'] = updated_orders
+    action_labels = {
+        'delete': 'marked for deletion',
+        'archive': 'archived',
+        'decline': 'declined',
+        'hard_delete': 'permanently deleted',
+    }
+    _add_admin_notification(
+        db,
+        notif_type='bulk_order_action',
+        title='Bulk order update',
+        message=f'{affected_count} order(s) were {action_labels[action]}.',
+    )
     save_db(db)
     return _redirect_back_to_dashboard('#orders-section')
 
@@ -1561,7 +2650,7 @@ def decline_order(order_id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     db = get_db()
     for order in db['orders']:
-        if order['id'] == order_id:
+        if order['id'] == order_id and not _is_order_pending_deletion(order):
             order['status'] = 'Declined'
             save_db(db)
             break
@@ -1573,7 +2662,7 @@ def archive_order(order_id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     db = get_db()
     for order in db['orders']:
-        if order['id'] == order_id:
+        if order['id'] == order_id and not _is_order_pending_deletion(order):
             order['status'] = 'Delivered'
             save_db(db)
             break
@@ -1589,10 +2678,58 @@ def soft_delete_order(order_id):
     for order in db['orders']:
         if order['id'] == order_id:
             if is_admin or (user_id and order.get('owner') == user_id):
-                order['deleted_at'] = datetime.utcnow().isoformat()
+                _mark_order_pending_deletion(order, requested_by='admin' if is_admin else 'user')
+                if not is_admin:
+                    _add_admin_notification(
+                        db,
+                        notif_type='delete_pending',
+                        title='User requested deletion',
+                        message=f'User {session.get("username") or user_id or "unknown"} marked order #{order_id} for deletion.',
+                        order_id=order_id,
+                        actor_user_id=user_id,
+                    )
                 save_db(db)
             break
+    next_url = (request.form.get('next') or '').strip()
+    if next_url:
+        return redirect(next_url)
     return redirect(url_for('index'))
+
+
+@app.route('/request_keep_order/<order_id>', methods=['POST'])
+def request_keep_order(order_id):
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+
+    db = get_db()
+    user_id = session.get('user_id')
+    requested = False
+    for order in db.get('orders', []):
+        if order.get('id') != order_id:
+            continue
+        if order.get('owner') != user_id:
+            return "Order not found", 404
+        if not _is_order_pending_deletion(order):
+            return redirect(url_for('check_order_by_id', order_id=order_id))
+
+        if not order.get('delete_restore_requested_at'):
+            order['delete_restore_requested_at'] = datetime.utcnow().isoformat()
+            order['delete_restore_requested_by'] = user_id
+            order['updated_at'] = datetime.utcnow().isoformat()
+            _add_admin_notification(
+                db,
+                notif_type='delete_keep_request',
+                title='Keep request from user',
+                message=f'User {session.get("username") or user_id} requested to keep order #{order_id}.',
+                order_id=order_id,
+                actor_user_id=user_id,
+            )
+            requested = True
+        break
+
+    if requested:
+        save_db(db)
+    return redirect(url_for('check_order_by_id', order_id=order_id))
 
 @app.route('/dashboard/featured', methods=['POST'])
 def add_featured_print():
@@ -1601,12 +2738,50 @@ def add_featured_print():
     title = request.form.get('title', '').strip()
     image_url = request.form.get('image_url', '').strip()
     makerworld_url = request.form.get('makerworld_url', '').strip()
-    price = request.form.get('price', '').strip()
     suggested_filament = request.form.get('suggested_filament', '').strip()
-    suggested_colors = request.form.get('suggested_colors', '').strip() or suggested_filament
+    suggested_color_list = [c.strip() for c in request.form.getlist('suggested_color_list[]') if c.strip()]
+    suggested_colors = request.form.get('suggested_colors', '').strip()
+    if suggested_color_list:
+        suggested_colors = ' | '.join(suggested_color_list)
+        if not suggested_filament:
+            suggested_filament = suggested_color_list[0]
+    else:
+        suggested_colors = suggested_colors or suggested_filament
+        if suggested_colors and not suggested_filament:
+            suggested_filament = suggested_colors.split('|', 1)[0].split(':')[-1].strip()
     suggested_profile = request.form.get('suggested_profile', '').strip() or ''
     profile_options_raw = request.form.get('profile_options', '').strip() or ''
     profile_options = [p.strip() for p in profile_options_raw.split(',') if p.strip()]
+    profile_pricing_raw = request.form.get('profile_pricing', '').strip() or ''
+    profile_pricing = []
+    if profile_pricing_raw:
+        try:
+            parsed_profile_pricing = json.loads(profile_pricing_raw)
+            if isinstance(parsed_profile_pricing, list):
+                for row in parsed_profile_pricing:
+                    if not isinstance(row, dict):
+                        continue
+                    name = str(row.get('name') or '').strip()
+                    if not name:
+                        continue
+                    try:
+                        profile_price = float(row.get('price') or row.get('price_modifier') or 0)
+                    except (TypeError, ValueError):
+                        profile_price = 0.0
+                    profile_pricing.append({
+                        'name': name,
+                        'price': profile_price,
+                        'is_default': bool(row.get('is_default')),
+                    })
+        except Exception:
+            profile_pricing = []
+    price_value = 0.0
+    if profile_pricing:
+        if not any(p.get('is_default') for p in profile_pricing):
+            profile_pricing[0]['is_default'] = True
+        profile_options = [p['name'] for p in profile_pricing]
+        suggested_profile = next((p['name'] for p in profile_pricing if p.get('is_default')), profile_options[0] if profile_options else '')
+        price_value = next((p['price'] for p in profile_pricing if p.get('is_default')), profile_pricing[0]['price'] if profile_pricing else 0.0)
     category_options_raw = request.form.get('category_options', '').strip() or ''
     category_options = []
     if category_options_raw:
@@ -1616,13 +2791,22 @@ def add_featured_print():
                 category_options = []
         except Exception:
             category_options = []
+    parts_configuration_raw = request.form.get('parts_configuration', '').strip() or ''
+    parts_configuration = []
+    if parts_configuration_raw:
+        try:
+            parts_configuration = json.loads(parts_configuration_raw)
+            if not isinstance(parts_configuration, list):
+                parts_configuration = []
+        except Exception:
+            parts_configuration = []
     target_users = request.form.getlist('target_users')
     if not target_users:
         target_users = [request.form.get('target_user', 'ALL')]
     target_users = _normalize_target_users(target_users, fallback='ALL')
     target_user = 'ALL' if 'ALL' in target_users else target_users[0]
 
-    if not (title and image_url and makerworld_url and price):
+    if not (title and image_url and makerworld_url):
         return _redirect_back_to_dashboard('#suggested-section')
 
     new_item = {
@@ -1631,12 +2815,14 @@ def add_featured_print():
         'image_url': image_url,
         'makerworld_url': makerworld_url,
         'description': request.form.get('description', '').strip(),
-        'price': float(price),
+        'price': price_value,
         'suggested_filament': suggested_filament,
         'suggested_colors': suggested_colors,
         'suggested_profile': suggested_profile,
         'profile_options': profile_options,
+        'profile_pricing': profile_pricing,
         'category_options': category_options,
+        'parts_configuration': parts_configuration,
         'target_user': target_user,
         'target_users': target_users,
     }
@@ -1658,12 +2844,50 @@ def edit_featured_print(item_id):
     title = request.form.get('title', '').strip()
     image_url = request.form.get('image_url', '').strip()
     makerworld_url = request.form.get('makerworld_url', '').strip()
-    price = request.form.get('price', '').strip()
     suggested_filament = request.form.get('suggested_filament', '').strip()
-    suggested_colors = request.form.get('suggested_colors', '').strip() or suggested_filament
+    suggested_color_list = [c.strip() for c in request.form.getlist('suggested_color_list[]') if c.strip()]
+    suggested_colors = request.form.get('suggested_colors', '').strip()
+    if suggested_color_list:
+        suggested_colors = ' | '.join(suggested_color_list)
+        if not suggested_filament:
+            suggested_filament = suggested_color_list[0]
+    else:
+        suggested_colors = suggested_colors or suggested_filament
+        if suggested_colors and not suggested_filament:
+            suggested_filament = suggested_colors.split('|', 1)[0].split(':')[-1].strip()
     suggested_profile = request.form.get('suggested_profile', '').strip() or ''
     profile_options_raw = request.form.get('profile_options', '').strip() or ''
     profile_options = [p.strip() for p in profile_options_raw.split(',') if p.strip()]
+    profile_pricing_raw = request.form.get('profile_pricing', '').strip() or ''
+    profile_pricing = []
+    if profile_pricing_raw:
+        try:
+            parsed_profile_pricing = json.loads(profile_pricing_raw)
+            if isinstance(parsed_profile_pricing, list):
+                for row in parsed_profile_pricing:
+                    if not isinstance(row, dict):
+                        continue
+                    name = str(row.get('name') or '').strip()
+                    if not name:
+                        continue
+                    try:
+                        profile_price = float(row.get('price') or row.get('price_modifier') or 0)
+                    except (TypeError, ValueError):
+                        profile_price = 0.0
+                    profile_pricing.append({
+                        'name': name,
+                        'price': profile_price,
+                        'is_default': bool(row.get('is_default')),
+                    })
+        except Exception:
+            profile_pricing = []
+    price_value = float(item.get('price', 0) or 0)
+    if profile_pricing:
+        if not any(p.get('is_default') for p in profile_pricing):
+            profile_pricing[0]['is_default'] = True
+        profile_options = [p['name'] for p in profile_pricing]
+        suggested_profile = next((p['name'] for p in profile_pricing if p.get('is_default')), profile_options[0] if profile_options else '')
+        price_value = next((p['price'] for p in profile_pricing if p.get('is_default')), profile_pricing[0]['price'] if profile_pricing else 0.0)
     category_options_raw = request.form.get('category_options', '').strip() or ''
     category_options = []
     if category_options_raw:
@@ -1673,6 +2897,15 @@ def edit_featured_print(item_id):
                 category_options = []
         except Exception:
             category_options = []
+    parts_configuration_raw = request.form.get('parts_configuration', '').strip() or ''
+    parts_configuration = []
+    if parts_configuration_raw:
+        try:
+            parts_configuration = json.loads(parts_configuration_raw)
+            if not isinstance(parts_configuration, list):
+                parts_configuration = []
+        except Exception:
+            parts_configuration = []
 
     target_users = request.form.getlist('target_users')
     if not target_users:
@@ -1680,19 +2913,21 @@ def edit_featured_print(item_id):
     target_users = _normalize_target_users(target_users, fallback='ALL')
     target_user = 'ALL' if 'ALL' in target_users else target_users[0]
 
-    if not (title and image_url and makerworld_url and price):
+    if not (title and image_url and makerworld_url):
         return _redirect_back_to_dashboard('#suggested-section')
 
     item['title'] = title
     item['image_url'] = image_url
     item['makerworld_url'] = makerworld_url
     item['description'] = request.form.get('description', '').strip()
-    item['price'] = float(price)
+    item['price'] = price_value
     item['suggested_filament'] = suggested_filament
     item['suggested_colors'] = suggested_colors
     item['suggested_profile'] = suggested_profile
     item['profile_options'] = profile_options
+    item['profile_pricing'] = profile_pricing
     item['category_options'] = category_options
+    item['parts_configuration'] = parts_configuration
     item['target_user'] = target_user
     item['target_users'] = target_users
 
@@ -1706,6 +2941,106 @@ def delete_featured_print(item_id):
     db['featured_prints'] = [f for f in db.get('featured_prints', []) if f.get('id') != item_id]
     save_db(db)
     return _redirect_back_to_dashboard('#suggested-section')
+
+@app.route('/api/print-profiles', methods=['GET'])
+def get_print_profiles():
+    try:
+        rows = _execute(
+            "SELECT id, name, price_modifier, description, is_active, is_default FROM print_profiles WHERE is_active = TRUE ORDER BY is_default DESC, name",
+            fetch=True
+        ) or []
+        profiles = [
+            {'id': r[0], 'name': r[1], 'price_modifier': float(r[2] or 0), 'description': r[3], 'is_active': bool(r[4]), 'is_default': bool(r[5])}
+            for r in rows
+        ]
+        # Guarantee a fallback default so the modal math never breaks
+        if not any(p['is_default'] for p in profiles):
+            if profiles:
+                profiles[0]['is_default'] = True
+            else:
+                profiles = [{'id': None, 'name': 'Standard', 'price_modifier': 0.0, 'description': '', 'is_active': True, 'is_default': True}]
+        return jsonify(profiles)
+    except Exception:
+        # Hard fallback: DB unreachable
+        return jsonify([{'id': None, 'name': 'Standard', 'price_modifier': 0.0, 'description': '', 'is_active': True, 'is_default': True}]), 200
+
+@app.route('/api/print-profiles/default', methods=['GET'])
+def get_default_print_profile():
+    """Returns only the default profile. Used by order modal auto-selection."""
+    try:
+        rows = _execute(
+            "SELECT id, name, price_modifier, description FROM print_profiles WHERE is_default = TRUE AND is_active = TRUE LIMIT 1",
+            fetch=True
+        ) or []
+        if rows:
+            r = rows[0]
+            return jsonify({'id': r[0], 'name': r[1], 'price_modifier': float(r[2] or 0), 'description': r[3], 'is_default': True})
+        # No default row exists — fall back to first active profile
+        rows = _execute(
+            "SELECT id, name, price_modifier, description FROM print_profiles WHERE is_active = TRUE ORDER BY name LIMIT 1",
+            fetch=True
+        ) or []
+        if rows:
+            r = rows[0]
+            return jsonify({'id': r[0], 'name': r[1], 'price_modifier': float(r[2] or 0), 'description': r[3], 'is_default': True})
+    except Exception:
+        pass
+    # Ultimate fallback
+    return jsonify({'id': None, 'name': 'Standard', 'price_modifier': 0.0, 'description': '', 'is_default': True})
+
+@app.route('/dashboard/print-profiles', methods=['POST'])
+def create_print_profile():
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    name = (request.form.get('name') or '').strip()
+    try:
+        price_modifier = float(request.form.get('price_modifier', 0))
+    except:
+        price_modifier = 0
+    description = (request.form.get('description') or '').strip()
+    is_default = request.form.get('is_default') == 'true'
+    try:
+        if is_default:
+            # Unset any existing default first (only one allowed)
+            _execute("UPDATE print_profiles SET is_default = FALSE WHERE is_default = TRUE")
+        _execute(
+            "INSERT INTO print_profiles (name, price_modifier, description, is_active, is_default) VALUES (%s, %s, %s, TRUE, %s)",
+            (name, price_modifier, description, is_default)
+        )
+    except Exception:
+        pass
+    return _redirect_back_to_dashboard('#print-profiles-section')
+
+@app.route('/dashboard/print-profiles/edit/<int:profile_id>', methods=['POST'])
+def edit_print_profile(profile_id):
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    name = (request.form.get('name') or '').strip()
+    try:
+        price_modifier = float(request.form.get('price_modifier', 0))
+    except:
+        price_modifier = 0
+    description = (request.form.get('description') or '').strip()
+    is_active = request.form.get('is_active') == 'true'
+    is_default = request.form.get('is_default') == 'true'
+    try:
+        if is_default:
+            # Clear the current default on all OTHER profiles first
+            _execute("UPDATE print_profiles SET is_default = FALSE WHERE is_default = TRUE AND id != %s", (profile_id,))
+        _execute(
+            "UPDATE print_profiles SET name = %s, price_modifier = %s, description = %s, is_active = %s, is_default = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (name, price_modifier, description, is_active, is_default, profile_id)
+        )
+    except Exception:
+        pass
+    return _redirect_back_to_dashboard('#print-profiles-section')
+
+@app.route('/dashboard/print-profiles/delete/<int:profile_id>', methods=['POST'])
+def delete_print_profile(profile_id):
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    try:
+        _execute("DELETE FROM print_profiles WHERE id = %s", (profile_id,))
+    except Exception:
+        pass
+    return _redirect_back_to_dashboard('#print-profiles-section')
 
 @app.route('/create_featured_order', methods=['POST'])
 def create_featured_order():
@@ -1721,7 +3056,7 @@ def create_featured_order():
         price_val = 0
 
     # allow featured items to suggest a specific profile and/or multi-color mapping
-    profile_choice = (data.get('profile') or data.get('suggested_profile') or '').strip()
+    profile_choice = (data.get('profile') or data.get('suggested_profile') or '').strip() or 'Standard'
     suggested_colors = (data.get('suggested_colors') or data.get('filament') or '').strip()
     category_choices = data.get('category_choices') or []
     if not isinstance(category_choices, list):
@@ -1729,6 +3064,30 @@ def create_featured_order():
 
     if not title or not makerworld_link or price_val <= 0:
         return jsonify({'error': 'Missing required fields'}), 400
+
+    db = get_db()
+    owner_id = session.get('user_id')
+    now = datetime.utcnow()
+    for existing in db.get('orders', []):
+        if existing.get('owner') != owner_id:
+            continue
+        status_key = str(existing.get('status') or '').strip().lower()
+        if status_key not in {'quoted', 'in cart', 'requested', 'pending quote'}:
+            continue
+        if str(existing.get('link') or '').strip() != makerworld_link:
+            continue
+        if str(existing.get('name') or existing.get('product_name') or '').strip() != title:
+            continue
+        if str(existing.get('profile') or '').strip() != profile_choice:
+            continue
+        if str(existing.get('color') or '').strip() != suggested_colors:
+            continue
+        existing_price = max(0, int(round(_to_float(existing.get('print_price'), 0))))
+        if existing_price != int(round(price_val)):
+            continue
+        created_at = _parse_iso_utc(existing.get('created_at'))
+        if created_at and (now - created_at).total_seconds() <= 120:
+            return jsonify({'order_id': str(existing.get('id') or '')})
 
     order_id = str(uuid.uuid4())[:8]
     new_order = {
@@ -1743,18 +3102,27 @@ def create_featured_order():
         'profile': profile_choice,
         'color': suggested_colors,
         'category_choices': category_choices,
-        # use the existing “Waiting for Approval” status so user can confirm in the order page
-        'status': 'Waiting for Approval',
+        'status': 'Quoted',
+        'quote_notified_at': datetime.utcnow().isoformat(),
         'print_price': str(int(price_val)),
         'material_fee': '0',
         'delivery_time': 'TBD',
         'fixed_price': True,
         'suggested_colors': suggested_colors,
         'suggested_profile': profile_choice,
+        'part_color_choices': category_choices,
     }
 
-    db = get_db()
     db.setdefault('orders', []).append(new_order)
+    username = session.get('username') or owner_id or 'A user'
+    _add_admin_notification(
+        db,
+        notif_type='featured_order',
+        title='Featured print ordered',
+        message=f'{username} ordered {title}.',
+        order_id=order_id,
+        actor_user_id=owner_id,
+    )
     save_db(db)
 
     return jsonify({'order_id': order_id})
@@ -1767,9 +3135,30 @@ def update_order(order_id):
     for order in db['orders']:
         if order['id'] == order_id:
             old_status = str(order.get('status') or '').strip().lower()
-            order['status'] = request.form.get('status')
-            order['print_price'] = request.form.get('print_price', '0')
-            order['material_fee'] = request.form.get('material_fee', '0')
+            requested_status = str(request.form.get('status') or '').strip() or 'In Cart'
+
+            price_val = max(0, int(round(_to_float(request.form.get('print_price'), order.get('print_price') or 0))))
+            fee_val = max(0, int(round(_to_float(request.form.get('material_fee'), order.get('material_fee') or 0))))
+            order['print_price'] = str(price_val)
+            order['material_fee'] = str(fee_val)
+
+            requested_key = requested_status.lower()
+            if requested_key in {'waiting for approval', 'awaiting approval', 'approved', 'pending quote'}:
+                requested_status = 'Quoted'
+                requested_key = 'quoted'
+
+            if requested_key == 'in cart' and (price_val + fee_val) > 0:
+                requested_status = 'Quoted'
+                requested_key = 'quoted'
+            elif requested_key == 'quoted' and (price_val + fee_val) <= 0:
+                requested_status = 'In Cart'
+                requested_key = 'in cart'
+
+            if requested_key == 'quoted' and not order.get('quote_notified_at'):
+                order['quote_notified_at'] = datetime.utcnow().isoformat()
+
+            if not _is_order_pending_deletion(order):
+                order['status'] = requested_status
             order['delivery_time'] = request.form.get('delivery_time', 'TBD')
             order['print_weight_g'] = max(0.0, _to_float(request.form.get('print_weight_g'), order.get('print_weight_g') or 0))
             order['estimated_print_hours'] = max(0.0, _to_float(request.form.get('estimated_print_hours'), order.get('estimated_print_hours') or 0))

@@ -1,0 +1,115 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Thank You | Client Portal' %}
+
+{% block content %}
+<style>
+    .thank-shell {
+        max-width: 820px;
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+    }
+
+    .thank-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: #fff;
+        padding: 20px;
+    }
+
+    .thank-hero {
+        background: linear-gradient(135deg, #ebfdf2 0%, #f5fff8 55%, #ffffff 100%);
+    }
+
+    .thank-title {
+        margin: 0;
+        color: #0f5132;
+        font-size: 1.5rem;
+        font-weight: 900;
+    }
+
+    .thank-copy {
+        margin: 8px 0 0;
+        color: #466255;
+    }
+
+    .order-list {
+        margin: 12px 0 0;
+        padding-left: 18px;
+    }
+
+    .order-list li { margin-bottom: 6px; }
+
+    .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .total {
+        font-size: 1.3rem;
+        font-weight: 900;
+        color: #00ae42;
+    }
+
+    .pay-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .btn-pay,
+    .btn-muted {
+        text-decoration: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-pay {
+        border: none;
+        background: #00ae42;
+        color: #fff;
+    }
+
+    .btn-muted {
+        border: 1px solid #cde2d7;
+        background: #f7fcf9;
+        color: #1d5e3e;
+    }
+</style>
+
+<div class="thank-shell">
+    <section class="thank-card thank-hero">
+        <h2 class="thank-title">Thank You For Your Purchase</h2>
+        <p class="thank-copy">Your order request has been created in our queue with status <strong>Pending</strong>.</p>
+    </section>
+
+    <section class="thank-card">
+        <div class="row">
+            <h3 style="margin:0;">Order IDs</h3>
+            <div class="total">Rp {{ '{:,}'.format(checkout_grand_total|int) }}</div>
+        </div>
+        <ol class="order-list">
+            {% for oid in checkout_order_ids %}
+            <li><a href="/order/{{ oid }}" data-order-preview-url="/order/{{ oid }}" data-order-preview-title="Order #{{ oid }}">#{{ oid }}</a></li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    <section class="thank-card">
+        <div class="pay-actions">
+            <a class="btn-muted" href="/">Return To Home</a>
+            {% if checkout_order_ids and checkout_order_ids|length > 0 %}
+            <a class="btn-pay" href="/order/{{ checkout_order_ids[0] }}" data-order-preview-url="/order/{{ checkout_order_ids[0] }}" data-order-preview-title="Order #{{ checkout_order_ids[0] }}">View Order</a>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}

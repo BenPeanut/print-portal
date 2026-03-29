@@ -37,9 +37,9 @@
         }
 
         .top-nav {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(140px, 1fr) auto minmax(140px, 1fr);
             align-items: center;
-            justify-content: space-between;
             gap: 12px;
             padding: 0 20px;
             background: rgba(255, 255, 255, 0.9);
@@ -58,6 +58,7 @@
             align-items: center;
             gap: 18px;
             flex-wrap: wrap;
+            justify-self: center;
         }
 
         .top-nav a {
@@ -84,6 +85,363 @@
             color: var(--muted);
             font-weight: 700;
             letter-spacing: 0.04em;
+            justify-self: start;
+        }
+
+        .top-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-self: end;
+        }
+
+        .notif-wrap {
+            position: relative;
+        }
+
+        .notif-bell {
+            position: relative;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            border: 1px solid #d7e5dd;
+            background: #ffffff;
+            color: #2f463b;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .notif-bell:hover {
+            background: #f2f8f4;
+        }
+
+        .notif-badge {
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            min-width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            background: #d92d20;
+            color: #fff;
+            font-size: 0.72rem;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #fff;
+            padding: 0 6px;
+        }
+
+        .notif-panel {
+            display: none;
+            position: absolute;
+            top: 52px;
+            right: 0;
+            width: min(440px, calc(100vw - 24px));
+            max-height: 70vh;
+            overflow: hidden;
+            border: 1px solid #dbe8e2;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 22px 50px rgba(21, 42, 33, 0.2);
+            z-index: 40;
+        }
+
+        .notif-panel.open {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .notif-panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border-bottom: 1px solid #e5efea;
+            background: #f8fcfa;
+        }
+
+        .notif-panel-head h3 {
+            margin: 0;
+            font-size: 0.92rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .notif-list {
+            overflow: auto;
+            padding: 8px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .notif-item {
+            border: 1px solid #dbe8e2;
+            border-radius: 11px;
+            padding: 10px;
+            background: #fff;
+        }
+
+        .notif-item.unread {
+            border-color: #aad7bc;
+            background: #f3fbf6;
+        }
+
+        .notif-title {
+            margin: 0;
+            font-size: 0.86rem;
+            font-weight: 800;
+            color: #1f3d30;
+        }
+
+        .notif-copy {
+            margin: 6px 0;
+            font-size: 0.83rem;
+            color: #466356;
+            line-height: 1.4;
+        }
+
+        .notif-meta {
+            font-size: 0.74rem;
+            color: #607a6d;
+            margin-bottom: 8px;
+        }
+
+        .notif-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notif-empty {
+            padding: 14px;
+            text-align: center;
+            color: #607a6d;
+            font-size: 0.85rem;
+        }
+
+        .reports-view {
+            height: 100%;
+            min-height: 0;
+            overflow: auto;
+            padding: 6px;
+        }
+
+        .reports-stack {
+            display: grid;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .report-admin-card {
+            background: #fff;
+            border: 1px solid #d7e6de;
+            border-radius: 14px;
+            box-shadow: 0 12px 24px rgba(20, 44, 34, 0.08);
+            padding: 14px;
+        }
+
+        .report-admin-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .report-delete-btn {
+            background: #fff5f5;
+            color: #9f1f1f;
+            border: 1px solid #e3a6a6;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 0.86rem;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .report-delete-btn:hover {
+            background: #ffecec;
+            border-color: #d98a8a;
+            color: #841818;
+        }
+
+        .report-admin-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .report-admin-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #1e3d30;
+        }
+
+        .report-admin-meta {
+            margin: 4px 0 0;
+            font-size: 0.82rem;
+            color: #627b6f;
+        }
+
+        .report-badges {
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .report-pill {
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            border: 1px solid transparent;
+        }
+
+        .report-pill.type {
+            background: #eef6ff;
+            border-color: #cfe2ff;
+            color: #295288;
+        }
+
+        .report-pill.status-new {
+            background: #ebf7ff;
+            border-color: #b8dfff;
+            color: #145987;
+        }
+
+        .report-pill.status-in_review {
+            background: #fff7e9;
+            border-color: #ffe1b3;
+            color: #8a5a08;
+        }
+
+        .report-pill.status-planned {
+            background: #f1efff;
+            border-color: #d7d2ff;
+            color: #4f439a;
+        }
+
+        .report-pill.status-resolved {
+            background: #eafaf0;
+            border-color: #bde9cb;
+            color: #1e6a41;
+        }
+
+        .report-pill.status-dismissed {
+            background: #f4f6f8;
+            border-color: #d8dee4;
+            color: #4b5a67;
+        }
+
+        .report-pill.sev-low {
+            background: #edf8f2;
+            border-color: #caead9;
+            color: #2d6d4d;
+        }
+
+        .report-pill.sev-medium {
+            background: #eef4ff;
+            border-color: #cfdeff;
+            color: #2b4c89;
+        }
+
+        .report-pill.sev-high {
+            background: #fff3e8;
+            border-color: #ffd3af;
+            color: #8e4f18;
+        }
+
+        .report-pill.sev-critical {
+            background: #ffeef0;
+            border-color: #ffc4cb;
+            color: #a12438;
+        }
+
+        .report-admin-block {
+            margin: 10px 0;
+        }
+
+        .report-admin-label {
+            margin: 0 0 4px;
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #688075;
+            font-weight: 800;
+        }
+
+        .report-admin-text {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #294438;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .report-admin-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .report-admin-form {
+            margin-top: 10px;
+            border-top: 1px solid #e6efea;
+            padding-top: 10px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .report-admin-form select,
+        .report-admin-form textarea {
+            width: 100%;
+            border: 1px solid #cdded5;
+            border-radius: 10px;
+            padding: 9px 11px;
+            font-size: 0.88rem;
+            color: #223a2f;
+            background: #fff;
+        }
+
+        .report-admin-form textarea {
+            min-height: 84px;
+            resize: vertical;
+        }
+
+        .report-admin-empty {
+            margin-top: 12px;
+            border: 1px dashed #cfe0d8;
+            border-radius: 14px;
+            padding: 18px;
+            text-align: center;
+            color: #61796e;
+            font-weight: 600;
+            background: #f8fcfa;
+        }
+
+        .top-nav-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            background: #d92d20;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 900;
+            margin-left: 5px;
+            padding: 0 5px;
+            vertical-align: middle;
         }
 
         .dashboard-wrap {
@@ -1400,6 +1758,28 @@
             width: 116px;
         }
 
+        .featured-delete-btn {
+            background: #fff5f5;
+            color: #9f1f1f;
+            border: 1px solid #e8a0a0;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 0;
+            display: block;
+            text-align: center;
+            font-weight: 800;
+            transition: all 0.2s ease;
+        }
+
+        .featured-delete-btn:hover {
+            background: #ffecec;
+            color: #8b1a1a;
+            border-color: #d98a8a;
+        }
+
         .featured-empty {
             margin-top: 12px;
             color: #5e6c64;
@@ -1479,6 +1859,270 @@
             gap: 10px;
             margin-top: 6px;
             flex-wrap: wrap;
+        }
+
+        .featured-color-builder {
+            border: 1px solid #dbe8e1;
+            border-radius: 12px;
+            padding: 12px;
+            background: linear-gradient(180deg, #f8fbf9 0%, #f2f8f4 100%);
+            display: grid;
+            gap: 10px;
+        }
+
+        .featured-color-mode {
+            display: none;
+        }
+
+        .featured-color-mode label {
+            margin: 0;
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .featured-color-row {
+            display: grid;
+            gap: 8px;
+        }
+
+        .featured-filament-select {
+            display: none;
+        }
+
+        .featured-filament-select:focus {
+            outline: none;
+            border-color: #83c59d;
+            box-shadow: 0 0 0 3px rgba(0, 174, 66, 0.12);
+            background-color: #fff;
+        }
+
+        .featured-color-wrapper {
+            display: grid;
+            gap: 14px;
+        }
+
+        .featured-color-section {
+            display: grid;
+            gap: 8px;
+        }
+
+        .featured-material-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #2d423a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .featured-swatch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+            gap: 8px;
+            overflow: visible;
+        }
+
+        .featured-swatch-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .featured-swatch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 3;
+        }
+
+        .featured-swatch-btn:focus-visible {
+            z-index: 3;
+        }
+
+        .featured-swatch-btn.active {
+            transform: scale(1.08);
+            border-color: #1a553a;
+            box-shadow: 0 0 0 3px rgba(21, 85, 57, 0.16);
+            z-index: 2;
+        }
+
+        .featured-swatch-btn::after {
+            content: attr(data-name);
+            position: absolute;
+            left: 50%;
+            top: calc(100% + 8px);
+            transform: translateX(-50%);
+            background: #143d2d;
+            color: #ffffff;
+            font-size: 0.65rem;
+            line-height: 1;
+            border-radius: 999px;
+            padding: 4px 7px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease;
+            z-index: 9999;
+        }
+
+        .featured-swatch-btn:hover::after {
+            opacity: 1;
+        }
+
+        .featured-multi-list {
+            display: none;
+        }
+
+        .featured-multi-item {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .featured-multi-remove {
+            border: 1px solid #e9c9c9;
+            background: #fff6f6;
+            color: #9c2f2f;
+            border-radius: 10px;
+            font-weight: 700;
+            min-height: 42px;
+            padding: 0 10px;
+            cursor: pointer;
+        }
+
+        .featured-multi-tools {
+            display: none;
+        }
+
+        .featured-multi-add-btn {
+            border: 1px dashed #9ac8ad;
+            background: #f4fbf7;
+            color: #246746;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .featured-parts-builder {
+            margin-bottom: 12px;
+        }
+
+        .featured-part-card {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #f7faf9;
+            border: 1px solid #d0e8db;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .featured-part-card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .featured-part-name-input {
+            flex: 1;
+            border: 1px solid #c9ddd4;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.875rem;
+            background: #fff;
+            color: #1a1a1a;
+            margin: 0;
+            min-height: 0;
+            width: auto;
+        }
+
+        .featured-part-remove-btn {
+            background: #ff4d4d;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            min-height: 32px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            padding: 0;
+            margin: 0;
+        }
+
+        .featured-add-part-btn {
+            background: transparent;
+            border: 2px dashed #00ae42;
+            color: #00ae42;
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+            min-height: 0;
+        }
+
+        .featured-add-part-btn:hover {
+            background: rgba(0, 174, 66, 0.06);
+        }
+
+        .featured-profile-builder {
+            margin-bottom: 12px;
+        }
+
+        .featured-profile-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) auto auto;
+            gap: 8px;
+            align-items: center;
+            background: #f7faf9;
+            border: 1px solid #d0e8db;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .featured-profile-name,
+        .featured-profile-price {
+            border: 1px solid #c9ddd4;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.84rem;
+            margin: 0;
+            min-height: 0;
+            width: 100%;
+        }
+
+        .featured-profile-default {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.76rem;
+            color: #2f4b3d;
+            font-weight: 700;
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .featured-profile-default input[type="radio"] {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #00ae42;
         }
 
         .form-grid-2 {
@@ -1597,6 +2241,108 @@
         }
         .filter-tab.active { border-bottom-color: var(--accent); color: #22362a; }
         .filter-tab:hover:not(.active) { border-bottom-color: var(--accent); color: #22362a; }
+        .orders-bulk-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin: 0 0 16px;
+            padding: 14px 16px;
+            border: 1px solid #d6e4dc;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f7fbf8 0%, #edf5f0 100%);
+            box-shadow: 0 14px 28px rgba(31, 52, 40, 0.08);
+            position: sticky;
+            top: 12px;
+            z-index: 20;
+        }
+        .orders-bulk-bar.is-active {
+            display: flex;
+        }
+        .orders-bulk-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 0;
+        }
+        .orders-bulk-count {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #22362a;
+        }
+        .orders-bulk-hint {
+            font-size: 0.84rem;
+            color: #62756a;
+        }
+        .orders-bulk-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .orders-bulk-actions form {
+            margin: 0;
+        }
+        .orders-bulk-btn {
+            border: none;
+            border-radius: 11px;
+            padding: 10px 14px;
+            font-size: 0.84rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+        .orders-bulk-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(31, 52, 40, 0.12);
+        }
+        .orders-bulk-btn.delete {
+            background: #fff3ee;
+            color: #a44b1f;
+            border: 1px solid #f0c5b0;
+        }
+        .orders-bulk-btn.archive {
+            background: #eef6ff;
+            color: #1b5f97;
+            border: 1px solid #bdd7f2;
+        }
+        .orders-bulk-btn.decline {
+            background: #fff7e9;
+            color: #996200;
+            border: 1px solid #edd491;
+        }
+        .orders-bulk-btn.hard-delete {
+            background: #c53b3b;
+            color: #ffffff;
+        }
+        .bulk-select-col,
+        .bulk-select-cell {
+            width: 54px;
+            min-width: 54px;
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+        .bulk-select-all,
+        .bulk-row-select {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .bulk-select-all input,
+        .bulk-row-select input {
+            width: 17px;
+            height: 17px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .bulk-select-all span {
+            display: none;
+        }
+        .order-row.row-selected td {
+            background: #f5fbf6;
+        }
         .queue-header {
             display: flex;
             justify-content: space-between;
@@ -1666,6 +2412,11 @@
         .admin-table td:last-child {
             border-right: 1px solid #e7ece8;
             border-radius: 0 14px 14px 0;
+        }
+        .admin-table th.bulk-select-col,
+        .admin-table td.bulk-select-cell {
+            padding-left: 10px;
+            padding-right: 10px;
         }
 
         .orders-view .admin-table .workflow-form {
@@ -1768,6 +2519,213 @@
             padding: 0;
             border-radius: 22px;
             box-shadow: 0 30px 80px rgba(21, 36, 29, 0.24);
+        }
+
+        /* ── Pricing Popup Modal ─────────────────────────────── */
+        .modal-box.order-expand-modal-box {
+            width: min(800px, calc(100vw - 24px));
+            max-width: 800px;
+            max-height: min(92vh, 920px);
+            text-align: left;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0;
+            border-radius: 22px;
+            box-shadow: 0 28px 80px rgba(18, 32, 22, 0.34);
+        }
+        .oem-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 22px 26px 20px;
+            background: linear-gradient(135deg, #17301d 0%, #2c4e3a 100%);
+            border-radius: 22px 22px 0 0;
+            gap: 14px;
+        }
+        .oem-title-col { flex: 1; min-width: 0; }
+        .oem-order-name {
+            font-size: 1.22rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 8px;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+        .oem-meta-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-bottom: 8px;
+        }
+        .oem-id-badge {
+            font-size: 0.75rem;
+            font-family: 'Courier New', monospace;
+            background: rgba(255,255,255,0.13);
+            color: rgba(255,255,255,0.88);
+            padding: 2px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.04em;
+        }
+        .oem-user-text {
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.62);
+        }
+        .oem-color-row { margin-top: 8px; }
+        .oem-actions-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 9px;
+            flex-shrink: 0;
+        }
+        .oem-close-btn {
+            background: rgba(255,255,255,0.11) !important;
+            color: rgba(255,255,255,0.88) !important;
+            border: 1px solid rgba(255,255,255,0.20) !important;
+            padding: 7px 15px !important;
+            border-radius: 10px !important;
+            font-size: 0.84rem !important;
+            cursor: pointer;
+            transition: background 0.18s;
+            white-space: nowrap;
+        }
+        .oem-close-btn:hover { background: rgba(255,255,255,0.22) !important; }
+        .oem-body {
+            padding: 24px 26px 20px;
+            background: #f6f9f7;
+        }
+        .oem-section { margin-bottom: 22px; }
+        .oem-section:last-child { margin-bottom: 0; }
+        .oem-section-title {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
+            color: #5e7a6b;
+            border-bottom: 1px solid #dce8e0;
+            padding-bottom: 7px;
+            margin-bottom: 13px;
+        }
+        .oem-fields-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 13px;
+        }
+        .oem-field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .oem-field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #4a5d52;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        #orderExpandModal .workflow-form {
+            background: transparent;
+            border: none;
+            padding: 0;
+            box-shadow: none;
+            display: block;
+        }
+        #orderExpandModal .workflow-form input,
+        #orderExpandModal .workflow-form select,
+        #orderExpandModal .workflow-form textarea {
+            border: 1.5px solid #ccdbd3;
+            border-radius: 10px;
+            background: #ffffff;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 13px;
+            font-size: 0.9rem;
+            color: #1d2b22;
+            -webkit-text-fill-color: #1d2b22;
+            transition: border-color 0.18s, box-shadow 0.18s;
+            margin: 0;
+        }
+        #orderExpandModal .workflow-form input:focus,
+        #orderExpandModal .workflow-form select:focus,
+        #orderExpandModal .workflow-form textarea:focus {
+            outline: none;
+            border-color: #7ecb98;
+            box-shadow: 0 0 0 3px rgba(0,174,66,0.10);
+        }
+        #orderExpandModal .workflow-form input[readonly] {
+            background: #eef3f0;
+            color: #7a9687;
+            -webkit-text-fill-color: #7a9687;
+            cursor: default;
+        }
+        #orderExpandModal .workflow-form select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: linear-gradient(45deg, transparent 50%, #5f7167 50%),
+                              linear-gradient(135deg, #5f7167 50%, transparent 50%);
+            background-position: calc(100% - 16px) calc(50% - 2px),
+                                 calc(100% - 11px) calc(50% - 2px);
+            background-size: 5px 5px, 5px 5px;
+            background-repeat: no-repeat;
+            background-color: #ffffff;
+            padding-right: 32px;
+        }
+        #orderExpandModal .workflow-form textarea {
+            min-height: 90px;
+            resize: vertical;
+            line-height: 1.48;
+        }
+        .oem-update-btn {
+            display: block;
+            width: 100%;
+            background: var(--accent, #00ae42);
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.96rem;
+            cursor: pointer;
+            margin-top: 18px;
+            transition: background 0.18s, box-shadow 0.18s;
+            letter-spacing: 0.01em;
+        }
+        .oem-update-btn:hover {
+            background: #009a3b;
+            box-shadow: 0 5px 18px rgba(0,174,66,0.22);
+        }
+        .oem-footer {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 26px 16px;
+            background: #ffffff;
+            border-top: 1px solid #dce8e0;
+            border-radius: 0 0 22px 22px;
+            flex-wrap: wrap;
+        }
+        .oem-footer-left  { display: flex; gap: 8px; align-items: center; }
+        .oem-footer-right { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+        .oem-footer form  { display: inline-flex; margin: 0; }
+        .oem-footer .btn-action-orange,
+        .oem-footer .btn-action-blue,
+        .oem-footer .btn-delete-box { width: auto !important; margin: 0 !important; }
+
+        @media (max-width: 980px) {
+            .orders-bulk-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .orders-bulk-actions {
+                justify-content: stretch;
+            }
+            .orders-bulk-actions form {
+                flex: 1 1 180px;
+            }
+            .orders-bulk-btn {
+                width: 100%;
+            }
         }
 
         #filaments-section .usage-form input,
@@ -1880,6 +2838,7 @@
             }
 
             .top-nav {
+                display: flex;
                 padding: 10px 12px;
                 align-items: flex-start;
                 flex-direction: column;
@@ -1977,6 +2936,10 @@
             .target-grid {
                 grid-template-columns: 1fr;
             }
+
+            .report-admin-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -1986,6 +2949,7 @@
         data-price-per-gram="{{ '%.0f'|format(control_settings.get('price_per_gram', control_settings.get('default_price_per_gram', 0))) }}"
         data-power-cost-per-hour="{{ '%.0f'|format(control_settings.get('power_cost_per_hour', 0)) }}"
         data-profit-margin="{{ '%.4f'|format(control_settings.get('profit_margin', 1.2)) }}"
+        data-filaments='{{ filaments|tojson|safe }}'
         style="display:none;"></div>
     <div id="page-loader" class="page-loader" aria-live="polite" aria-busy="true">
         <div class="loader-spinner" aria-hidden="true"></div>
@@ -1993,10 +2957,11 @@
     </div>
 
     {% set printing_orders = orders | selectattr('status', 'equalto', 'Printing') | list %}
-    {% set cart_requests = orders | selectattr('status', 'equalto', 'In Cart') | rejectattr('deleted_at') | list %}
-    {% set new_requests = orders | selectattr('status', 'equalto', 'Pending Quote') | rejectattr('deleted_at') | list %}
-    {% set pending_approvals = orders | selectattr('status', 'equalto', 'Waiting for Approval') | list %}
+    {% set cart_requests = orders | selectattr('status', 'in', ['In Cart', 'Quoted', 'Pending Quote']) | rejectattr('deleted_at') | list %}
+    {% set new_requests = orders | selectattr('status', 'equalto', 'Requested') | rejectattr('deleted_at') | list %}
+    {% set pending_approvals = orders | selectattr('status', 'equalto', 'Quoted') | rejectattr('deleted_at') | list %}
     {% set completed = orders | selectattr('status', 'in', ['Completed', 'Done', 'Delivered']) | list %}
+    {% set deleted_orders = orders | selectattr('deleted_at') | list %}
 
     <div class="page">
         <nav class="top-nav" aria-label="Dashboard Sections">
@@ -2007,9 +2972,51 @@
                 <li><a href="#filaments-section" data-view="filaments">Filaments</a></li>
                 <li><a href="#suggested-section" data-view="suggested">Suggested Prints</a></li>
                 <li><a href="#users-section" data-view="users">Users</a></li>
+                <li><a href="#reports-section" data-view="reports">Reports{% if open_support_reports_count and open_support_reports_count > 0 %}<span class="top-nav-count">{{ open_support_reports_count if open_support_reports_count < 100 else '99+' }}</span>{% endif %}</a></li>
                 <li><a href="/admin/analytics">Analytics</a></li>
                 <li><a href="#settings-section" data-view="settings">Settings</a></li>
             </ul>
+            <div class="top-nav-right">
+                <div class="notif-wrap">
+                    <button type="button" id="notif-bell" class="notif-bell" title="Notifications" aria-label="Notifications">
+                        <span aria-hidden="true">🔔</span>
+                        {% if unread_notification_count and unread_notification_count > 0 %}
+                        <span class="notif-badge">{{ unread_notification_count if unread_notification_count < 100 else '99+' }}</span>
+                        {% endif %}
+                    </button>
+                    <div id="notif-panel" class="notif-panel" role="dialog" aria-modal="false" aria-label="Admin Notifications">
+                        <div class="notif-panel-head">
+                            <h3>Notification Center</h3>
+                            <form action="/dashboard/notifications/read_all" method="POST" style="margin:0;">
+                                <button type="submit" class="btn">Mark all read</button>
+                            </form>
+                        </div>
+                        <div class="notif-list">
+                            {% if admin_notifications and admin_notifications|length > 0 %}
+                                {% for notif in admin_notifications %}
+                                <article class="notif-item {% if not notif.is_read %}unread{% endif %}">
+                                    <p class="notif-title">{{ notif.title }}</p>
+                                    <p class="notif-copy">{{ notif.message }}</p>
+                                    <div class="notif-meta">{{ notif.created_at }}</div>
+                                    <div class="notif-actions">
+                                        {% if notif.order_id %}
+                                        <button type="button" class="btn" data-open-order-id="{{ notif.order_id }}">View In Dashboard</button>
+                                        {% endif %}
+                                        {% if not notif.is_read %}
+                                        <form action="/dashboard/notifications/read/{{ notif.id }}" method="POST" style="margin:0;">
+                                            <button type="submit" class="btn">Mark read</button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </article>
+                                {% endfor %}
+                            {% else %}
+                                <div class="notif-empty">No notifications yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </nav>
 
         <main class="dashboard-wrap">
@@ -2060,16 +3067,20 @@
                             <p>{{ cart_requests|length }} item(s) are saved in customer carts and ready for admin pricing.</p>
                         </div>
                         <div class="alert-item">
-                            <h4>Pending Price Approvals</h4>
-                            <p>{{ pending_approvals|length }} order(s) are waiting for user approval.</p>
+                            <h4>Quoted In Cart</h4>
+                            <p>{{ pending_approvals|length }} order(s) have prices and are ready for user request.</p>
                         </div>
                         <div class="alert-item">
                             <h4>Active Printing Queue</h4>
                             <p>{{ printing_orders|length }} order(s) are currently printing.</p>
                         </div>
                         <div class="alert-item">
-                            <h4>Filament Watch</h4>
-                            <p>Use out-of-stock toggles below for quick operational marking.</p>
+                            <h4>Pending Deletions</h4>
+                            <p>{{ deleted_orders|length }} order(s) are awaiting deletion and visible in the Deleted tab.</p>
+                        </div>
+                        <div class="alert-item">
+                            <h4>New Notifications</h4>
+                            <p>{{ unread_notification_count }} unread notification(s) are in the top-right bell center.</p>
                         </div>
                     </div>
                 </article>
@@ -2116,11 +3127,11 @@
                                     <h4>{{ order.get('product_name') or order.get('name') or 'Unnamed Order' }}</h4>
                                     <small>{{ user_map.get(order.get('owner'), 'unknown') }}</small>
                                 </div>
-                                <span class="queue-status pill pill-new">New Request</span>
+                                <span class="queue-status pill pill-waiting">Requested</span>
                             </div>
                             {% endfor %}
                         {% else %}
-                            <p class="empty">No new requests.</p>
+                            <p class="empty">No requested orders.</p>
                         {% endif %}
                     </div>
                 </article>
@@ -2163,13 +3174,52 @@
                             <button class="filter-tab active" data-filter="needs-action">Needs Action</button>
                             <button class="filter-tab" data-filter="printing">Active / Printing</button>
                             <button class="filter-tab" data-filter="completed">Completed</button>
-                            <button class="filter-tab" data-filter="cancelled">Cancelled</button>
+                            <button class="filter-tab" data-filter="cancelled">Cancelled / Declined</button>
+                            <button class="filter-tab" data-filter="deleted">Deleted</button>
                             <button class="filter-tab" data-filter="all">All Orders</button>
+                        </div>
+                    </div>
+                    <div id="orders-bulk-bar" class="orders-bulk-bar" hidden>
+                        <div class="orders-bulk-summary">
+                            <span id="orders-bulk-count" class="orders-bulk-count">0 selected</span>
+                            <span id="orders-bulk-hint" class="orders-bulk-hint">Apply a bulk action to the selected orders.</span>
+                        </div>
+                        <div class="orders-bulk-actions">
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'delete', 'Mark the selected orders for deletion?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn delete">Delete Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'archive', 'Archive the selected orders?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="archive">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn archive">Archive Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'decline', 'Decline the selected orders?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="decline">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn decline">Decline Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'hard_delete', 'Permanently delete the selected orders? This cannot be undone.');" data-bulk-mode="deleted" hidden>
+                                <input type="hidden" name="action" value="hard_delete">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn hard-delete">Delete Permanently</button>
+                            </form>
                         </div>
                     </div>
                     <table class="admin-table">
                         <thead>
                             <tr>
+                                <th class="bulk-select-col">
+                                    <label class="bulk-select-all" for="select-all-orders" title="Select all visible orders">
+                                        <input type="checkbox" id="select-all-orders">
+                                        <span>Select all visible orders</span>
+                                    </label>
+                                </th>
                                 <th>Order Info</th>
                                 <th>Color/Link</th>
                                 <th style="text-align: center;">User Status</th>
@@ -2181,11 +3231,24 @@
                             {% for order in orders %}
                             <tr class="order-row {% if order.status in ['Cancelled', 'Price Denied'] %}row-dead{% endif %}{% if order.get('deleted_at') %} row-pending-delete{% endif %}"
                                 data-order-row="true"
+                                data-order-id="{{ order.id }}"
                                 data-order-status="{{ order.status }}"
                                 data-deleted="{{ 'true' if order.get('deleted_at') else 'false' }}">
-                                <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order?');">
-                                    <button type="submit" class="delete-floating-btn" title="Delete Order">🗑️</button>
+                                {% if order.get('deleted_at') %}
+                                <form action="/hard_delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order right now?');">
+                                    <button type="submit" class="delete-floating-btn" title="Delete Permanently">🗑️</button>
                                 </form>
+                                {% else %}
+                                <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order as awaiting deletion?');">
+                                    <button type="submit" class="delete-floating-btn" title="Mark For Deletion">🗑️</button>
+                                </form>
+                                {% endif %}
+
+                                <td class="bulk-select-cell">
+                                    <label class="bulk-row-select" title="Select order {{ order.id }}">
+                                        <input type="checkbox" class="order-select-checkbox" data-order-select="{{ order.id }}" value="{{ order.id }}">
+                                    </label>
+                                </td>
 
                                 <td>
                                     <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong>{% if order.id in fresh_order_ids %}<span class="pill pill-fresh">New 24h</span>{% endif %}<br>
@@ -2195,7 +3258,7 @@
 
                                 <td>
                                     <div class="profile-container">
-                                        <div class="profile-badge detail-only"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.profile }}</div>
+                                        <div class="profile-badge"><span style="margin-right: 5px; opacity: 0.5;">📄</span> Profile {{ order.get('profile') or order.get('selected_print_profile') or order.get('suggested_profile') or 'Standard' }}</div>
                                         <a href="{{ order.link }}" target="_blank" class="makerworld-badge detail-only">VIEW ON MAKERWORLD ↗</a>
 
                                         {% if order.color %}
@@ -2213,13 +3276,20 @@
                                 </td>
 
                                 <td style="text-align: center;">
-                                    {% if order.status == 'In Cart' %} <span class="pill pill-cart">In Cart</span>
+                                    {% if order.get('deleted_at') %}
+                                    <span class="pill pill-pending-delete">Awaiting Deletion</span>
+                                    {% elif order.status == 'In Cart' %} <span class="pill pill-cart">In Cart</span>
+                                    {% elif order.status == 'Quoted' %} <span class="pill pill-waiting">Quoted</span>
+                                    {% elif order.status == 'Requested' %} <span class="pill pill-new">Requested</span>
                                     {% elif order.status == 'Pending Quote' %} <span class="pill pill-new">New Request</span>
                                     {% elif order.status == 'Waiting for Approval' %} <span class="pill pill-waiting">Awaiting Approval</span>
                                     {% elif order.status == 'Approved' %} <span class="pill pill-approved">✔ Approved</span>
                                     {% elif order.status == 'Price Denied' %} <span class="pill pill-denied">✖ Denied</span>
                                     {% elif order.status == 'Cancelled' %} <span class="pill pill-cancelled">Cancelled</span>
                                     {% else %} <span class="pill pill-approved">{{ order.status }}</span>
+                                    {% endif %}
+                                    {% if order.get('delete_restore_requested_at') %}
+                                    <div style="margin-top:6px;"><span class="pill pill-new">User asked to keep</span></div>
                                     {% endif %}
                                 </td>
 
@@ -2235,11 +3305,10 @@
                                         <input type="text" name="delivery_time" value="{{ order.delivery_time }}" placeholder="Estimated delivery" class="detail-only">
                                         <select name="status" class="detail-only">
                                             <option value="In Cart" {% if order.status == 'In Cart' %}selected{% endif %}>0. Keep in Cart</option>
-                                            <option value="Pending Quote" {% if order.status == 'Pending Quote' %}selected{% endif %}>1. Set to Pending</option>
-                                            <option value="Waiting for Approval" {% if order.status == 'Waiting for Approval' %}selected{% endif %}>2. Send Quote to User</option>
-                                            <option value="Printing" {% if order.status == 'Printing' or order.status == 'Approved' %}selected{% endif %}>3. Start Printing</option>
-                                            <option value="Completed" {% if order.status == 'Completed' or order.status == 'Done' %}selected{% endif %}>4. Mark as Completed</option>
-                                            <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>5. Delivered/Archive</option>
+                                            <option value="Quoted" {% if order.status == 'Quoted' or order.status == 'Waiting for Approval' or order.status == 'Approved' %}selected{% endif %}>1. Mark As Quoted</option>
+                                            <option value="Printing" {% if order.status == 'Printing' %}selected{% endif %}>2. Start Printing</option>
+                                            <option value="Completed" {% if order.status == 'Completed' or order.status == 'Done' %}selected{% endif %}>3. Mark as Completed</option>
+                                            <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>4. Delivered/Archive</option>
                                         </select>
                                         <label style="display:block; font-weight:600;" class="detail-only">Admin Note</label>
                                         <textarea name="admin_note" placeholder="Add a note for the user or internal info..." class="detail-only">{{ order.get('admin_note','') }}</textarea>
@@ -2252,7 +3321,7 @@
                                 </td>
 
                                 <td style="vertical-align: middle; text-align: center;">
-                                    <button type="button" class="order-expand-btn" data-expand-order="{{ order.id }}" aria-expanded="false">Expand ▼</button>
+                                    <button type="button" class="order-expand-btn" data-expand-order="{{ order.id }}" aria-expanded="false">Pricing ▼</button>
                                     <button type="submit" style="background: var(--accent); width: 100%; color: white; border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: bold;">
                                         Update
                                     </button>
@@ -2264,9 +3333,18 @@
                                     <form action="/archive_order/{{ order.id }}" method="POST" style="margin: 0;" class="detail-only">
                                         <button type="submit" class="btn-action-blue">Archive</button>
                                     </form>
-                                    <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order for deletion? It will be removed in 3 days.');" style="margin: 0;">
+                                    {% if order.get('deleted_at') %}
+                                    <form action="/restore_order/{{ order.id }}" method="POST" style="margin: 4px 0 0;">
+                                        <button type="submit" class="btn-action-blue">Restore</button>
+                                    </form>
+                                    <form action="/hard_delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order now?');" style="margin: 0;">
+                                        <button type="submit" class="btn-delete-box" style="margin-top:4px;">Delete Permanently</button>
+                                    </form>
+                                    {% else %}
+                                    <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order for deletion? It will be removed in 3 days unless restored.');" style="margin: 0;">
                                         <button type="submit" class="btn-delete-box" style="margin-top:4px;">Delete</button>
                                     </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -2480,8 +3558,8 @@
                                     class="btn-secondary open-edit-featured-btn"
                                     data-item='{{ item | tojson }}'
                                 >Edit</button>
-                                <form action="/dashboard/featured/delete/{{ item.id }}" method="POST" style="margin:0;">
-                                    <button type="submit" class="btn-delete-box" style="margin-top:0;">Remove</button>
+                                <form action="/dashboard/featured/delete/{{ item.id }}" method="POST" style="margin:0;" onsubmit="return confirm('Delete this suggested print?');">
+                                    <button type="submit" class="featured-delete-btn">Delete Suggestion</button>
                                 </form>
                             </div>
                         </li>
@@ -2524,6 +3602,99 @@
                             </div>
                             {% endfor %}
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view-section" id="reports-section">
+                <div class="reports-view">
+                    <div class="container-fluid">
+                        <div class="suggested-toolbar" style="margin-bottom: 8px;">
+                            <h1 style="margin:0;">Bug Reports And Suggestions</h1>
+                        </div>
+                        <p class="suggested-intro">Review reports submitted from the user Help page, then track status and document admin notes.</p>
+
+                        {% if support_reports and support_reports|length > 0 %}
+                        <div class="reports-stack">
+                            {% for report in support_reports %}
+                            {% set status_key = (report.get('status') or 'new')|lower %}
+                            {% set severity_key = (report.get('severity') or 'medium')|lower %}
+                            <article class="report-admin-card" id="report-{{ report.get('id') }}">
+                                <div class="report-admin-head">
+                                    <div>
+                                        <h3 class="report-admin-title">{{ report.get('title') or 'Untitled report' }}</h3>
+                                        <p class="report-admin-meta">By {{ report.get('username') or 'Unknown user' }}{% if report.get('created_at') %} • {{ report.get('created_at') }}{% endif %}</p>
+                                    </div>
+                                    <div class="report-badges">
+                                        <span class="report-pill type">{{ report.get('report_type') or 'bug' }}</span>
+                                        <span class="report-pill status-{{ status_key }}">{{ status_key.replace('_', ' ') }}</span>
+                                        <span class="report-pill sev-{{ severity_key }}">{{ severity_key }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="report-admin-block">
+                                    <p class="report-admin-label">Details</p>
+                                    <p class="report-admin-text">{{ report.get('details') or 'No details provided.' }}</p>
+                                </div>
+
+                                {% if report.get('steps') %}
+                                <div class="report-admin-block">
+                                    <p class="report-admin-label">Reproduction Steps</p>
+                                    <p class="report-admin-text">{{ report.get('steps') }}</p>
+                                </div>
+                                {% endif %}
+
+                                <div class="report-admin-grid">
+                                    <div>
+                                        <p class="report-admin-label">Expected</p>
+                                        <p class="report-admin-text">{{ report.get('expected') or 'Not provided.' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="report-admin-label">Actual</p>
+                                        <p class="report-admin-text">{{ report.get('actual') or 'Not provided.' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="report-admin-label">Page URL</p>
+                                        <p class="report-admin-text">{% if report.get('page_url') %}<a href="{{ report.get('page_url') }}" target="_blank" rel="noopener noreferrer">Open link</a>{% else %}Not provided.{% endif %}</p>
+                                    </div>
+                                    <div>
+                                        <p class="report-admin-label">Screenshot</p>
+                                        <p class="report-admin-text">{% if report.get('screenshot_url') %}<a href="{{ report.get('screenshot_url') }}" target="_blank" rel="noopener noreferrer">Open screenshot</a>{% else %}Not provided.{% endif %}</p>
+                                    </div>
+                                </div>
+
+                                <form class="report-admin-form" action="/dashboard/support-reports/{{ report.get('id') }}" method="POST">
+                                    <div class="report-admin-grid">
+                                        <div>
+                                            <p class="report-admin-label">Status</p>
+                                            <select name="status" required>
+                                                <option value="new" {% if status_key == 'new' %}selected{% endif %}>New</option>
+                                                <option value="in_review" {% if status_key == 'in_review' %}selected{% endif %}>In Review</option>
+                                                <option value="planned" {% if status_key == 'planned' %}selected{% endif %}>Planned</option>
+                                                <option value="resolved" {% if status_key == 'resolved' %}selected{% endif %}>Resolved</option>
+                                                <option value="dismissed" {% if status_key == 'dismissed' %}selected{% endif %}>Dismissed</option>
+                                            </select>
+                                        </div>
+                                        <div style="grid-column: span 2;">
+                                            <p class="report-admin-label">Admin Note</p>
+                                            <textarea name="admin_note" maxlength="1600" placeholder="Add triage notes, owner, ETA, or reason for dismissal.">{{ report.get('admin_note') or '' }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="report-admin-actions">
+                                        <button type="submit" class="btn btn-success">Save Report Update</button>
+                                    </div>
+                                </form>
+                                <form action="/dashboard/support-reports/{{ report.get('id') }}/delete" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Delete this report permanently?');">
+                                    <div class="report-admin-actions" style="margin-top: 8px;">
+                                        <button type="submit" class="report-delete-btn">Delete Report</button>
+                                    </div>
+                                </form>
+                            </article>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="report-admin-empty">No support reports yet. New bug reports and suggestions from users will appear here.</div>
+                        {% endif %}
                     </div>
                 </div>
             </section>
@@ -2677,23 +3848,49 @@
     <div id="featured-add-modal" class="modal-overlay" style="display: none;">
         <div class="modal-box featured-modal-box">
             <h2 class="modal-title">Add Suggested Print</h2>
-            <form action="/dashboard/featured" method="POST" class="modal-form">
-                <div class="form-grid-2">
-                    <input type="text" name="title" placeholder="Title" required>
-                    <input type="text" name="price" placeholder="Price (numbers)" required>
-                </div>
+            <form id="featured-add-form" action="/dashboard/featured" method="POST" class="modal-form">
+                <input type="text" name="title" placeholder="Title" required>
                 <input type="text" name="image_url" placeholder="Image URL" required>
                 <input type="text" name="makerworld_url" placeholder="MakerWorld URL" required>
                 <textarea name="description" placeholder="Short description" rows="2"></textarea>
 
-                <div class="form-grid-2">
-                    <input type="text" name="suggested_filament" placeholder="Suggested filament (e.g. PLA)">
-                    <input type="text" name="suggested_colors" placeholder="Suggested colors text (optional)">
+                <div class="featured-parts-builder" data-parts-builder="add">
+                    <label style="font-weight:700; color:#2a4a3a; margin-bottom:6px; display:block;">Parts Builder</label>
+                    <div class="featured-parts-list" data-parts-list></div>
+                    <button type="button" class="featured-add-part-btn" data-add-part-btn="add">+ Add Part</button>
                 </div>
 
-                <div class="form-grid-2">
-                    <input type="text" name="suggested_profile" placeholder="Default Profile (e.g. 1)">
-                    <input type="text" name="profile_options" placeholder="Profile options (comma-separated)">
+                <div class="featured-color-builder" data-featured-color-builder="add">
+                    <label>Suggested Color(s)</label>
+                    <div class="featured-color-mode" style="display: none;">
+                        <label><input type="radio" name="add_suggested_mode" value="single" checked> Single color</label>
+                        <label><input type="radio" name="add_suggested_mode" value="multi"> Multi-color</label>
+                    </div>
+                    <div class="featured-color-row" data-single-color-row>
+                        <div class="featured-color-wrapper" data-color-swatches="add"></div>
+                    </div>
+                    <div class="featured-color-row" data-multi-color-row hidden>
+                        <div class="featured-multi-list" data-multi-color-list></div>
+                        <div class="featured-multi-tools">
+                            <button type="button" class="featured-multi-add-btn" data-add-suggested-color-row>+ Add Color</button>
+                        </div>
+                    </div>
+                    <select name="suggested_filament" class="featured-filament-select" data-single-filament-select style="display: none;">
+                        <option value="">No suggestion</option>
+                        {% for f in filaments %}
+                        <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="hidden" name="suggested_colors" value="" data-suggested-colors-hidden>
+                </div>
+
+                <div class="featured-profile-builder" data-profile-builder="add">
+                    <label style="font-weight:700; color:#2a4a3a; margin-bottom:6px; display:block;">Profile Pricing Builder</label>
+                    <div class="featured-profile-list" data-profile-list></div>
+                    <button type="button" class="featured-add-part-btn" data-add-profile-btn="add">+ Add Profile</button>
+                    <input type="hidden" name="suggested_profile" data-profile-default-hidden>
+                    <input type="hidden" name="profile_options" data-profile-options-hidden>
+                    <input type="hidden" name="profile_pricing" data-profile-pricing-hidden>
                 </div>
 
                 <label>Targets (you can pick multiple users)</label>
@@ -2716,22 +3913,48 @@
         <div class="modal-box featured-modal-box">
             <h2 class="modal-title">Edit Suggested Print</h2>
             <form id="featured-edit-form" method="POST" class="modal-form">
-                <div class="form-grid-2">
-                    <input id="edit-title" type="text" name="title" placeholder="Title" required>
-                    <input id="edit-price" type="text" name="price" placeholder="Price (numbers)" required>
-                </div>
+                <input id="edit-title" type="text" name="title" placeholder="Title" required>
                 <input id="edit-image-url" type="text" name="image_url" placeholder="Image URL" required>
                 <input id="edit-makerworld-url" type="text" name="makerworld_url" placeholder="MakerWorld URL" required>
                 <textarea id="edit-description" name="description" placeholder="Short description" rows="2"></textarea>
 
-                <div class="form-grid-2">
-                    <input id="edit-suggested-filament" type="text" name="suggested_filament" placeholder="Suggested filament (e.g. PLA)">
-                    <input id="edit-suggested-colors" type="text" name="suggested_colors" placeholder="Suggested colors text (optional)">
+                <div class="featured-parts-builder" data-parts-builder="edit">
+                    <label style="font-weight:700; color:#2a4a3a; margin-bottom:6px; display:block;">Parts Builder</label>
+                    <div class="featured-parts-list" data-parts-list></div>
+                    <button type="button" class="featured-add-part-btn" data-add-part-btn="edit">+ Add Part</button>
                 </div>
 
-                <div class="form-grid-2">
-                    <input id="edit-suggested-profile" type="text" name="suggested_profile" placeholder="Default Profile (e.g. 1)">
-                    <input id="edit-profile-options" type="text" name="profile_options" placeholder="Profile options (comma-separated)">
+                <div class="featured-color-builder" data-featured-color-builder="edit">
+                    <label>Suggested Color(s)</label>
+                    <div class="featured-color-mode" style="display: none;">
+                        <label><input type="radio" name="edit_suggested_mode" value="single" checked> Single color</label>
+                        <label><input type="radio" name="edit_suggested_mode" value="multi"> Multi-color</label>
+                    </div>
+                    <div class="featured-color-row" data-single-color-row>
+                        <div class="featured-color-wrapper" data-color-swatches="edit"></div>
+                    </div>
+                    <div class="featured-color-row" data-multi-color-row hidden>
+                        <div class="featured-multi-list" data-multi-color-list></div>
+                        <div class="featured-multi-tools">
+                            <button type="button" class="featured-multi-add-btn" data-add-suggested-color-row>+ Add Color</button>
+                        </div>
+                    </div>
+                    <select id="edit-suggested-filament" name="suggested_filament" class="featured-filament-select" data-single-filament-select style="display: none;">
+                        <option value="">No suggestion</option>
+                        {% for f in filaments %}
+                        <option value="{{ f.name }}">{{ f.name }}{% if f.material %} ({{ f.material }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <input id="edit-suggested-colors" type="hidden" name="suggested_colors" value="" data-suggested-colors-hidden>
+                </div>
+
+                <div class="featured-profile-builder" data-profile-builder="edit">
+                    <label style="font-weight:700; color:#2a4a3a; margin-bottom:6px; display:block;">Profile Pricing Builder</label>
+                    <div class="featured-profile-list" data-profile-list></div>
+                    <button type="button" class="featured-add-part-btn" data-add-profile-btn="edit">+ Add Profile</button>
+                    <input id="edit-suggested-profile" type="hidden" name="suggested_profile" data-profile-default-hidden>
+                    <input id="edit-profile-options" type="hidden" name="profile_options" data-profile-options-hidden>
+                    <input type="hidden" name="profile_pricing" data-profile-pricing-hidden>
                 </div>
 
                 <label>Targets (you can pick multiple users)</label>
@@ -2770,6 +3993,12 @@
         </div>
     </div>
 
+    <div id="orderExpandModal" class="modal-overlay" onclick="if(event.target===this) closeOrderExpandModal();">
+        <div class="modal-box order-expand-modal-box">
+            <div id="order-expand-modal-body"></div>
+        </div>
+    </div>
+
     <script>
         (function () {
             const pageLoader = document.getElementById('page-loader');
@@ -2796,17 +4025,31 @@
             const filamentTotalInput = document.getElementById('filament-total-input');
             const filamentOutInput = document.getElementById('filament-out-input');
             const navLinks = Array.from(document.querySelectorAll('.top-nav a[data-view]'));
+            const notifBell = document.getElementById('notif-bell');
+            const notifPanel = document.getElementById('notif-panel');
+            const orderExpandModal = document.getElementById('orderExpandModal');
+            const orderExpandModalBody = document.getElementById('order-expand-modal-body');
+            const orderExpandTitle = document.getElementById('order-expand-title');
             const homeSection = document.getElementById('home-section');
             const ordersSection = document.getElementById('orders-section');
             const filamentsSection = document.getElementById('filaments-section');
             const suggestedSection = document.getElementById('suggested-section');
             const usersSection = document.getElementById('users-section');
+            const reportsSection = document.getElementById('reports-section');
             const settingsSection = document.getElementById('settings-section');
             const pricingConfigEl = document.getElementById('pricing-config');
             const baseServiceFee = Number(pricingConfigEl?.dataset.baseServiceFee || 0);
             const pricePerGram = Number(pricingConfigEl?.dataset.pricePerGram || 0);
             const powerCostPerHour = Number(pricingConfigEl?.dataset.powerCostPerHour || 0);
             const profitMargin = Number(pricingConfigEl?.dataset.profitMargin || 1.2);
+            const featuredFilamentChoices = (function () {
+                try {
+                    const parsed = JSON.parse(pricingConfigEl?.dataset.filaments || '[]');
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (error) {
+                    return [];
+                }
+            })();
             const rupiahFormatter = new Intl.NumberFormat('id-ID', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
@@ -2820,6 +4063,7 @@
             const featuredEditModal = document.getElementById('featured-edit-modal');
             const closeEditSuggestedModalBtn = document.getElementById('closeEditSuggestedModalBtn');
             const featuredEditForm = document.getElementById('featured-edit-form');
+            const featuredAddForm = document.getElementById('featured-add-form');
             const totalGramsDisplay = document.getElementById('total-grams-display');
             const totalGramsHiddenInput = document.getElementById('lifetime_total_plastic_used');
             const totalGramsEditor = document.getElementById('total-grams-editor');
@@ -2872,14 +4116,17 @@
                         ? 'suggested'
                         : (view === 'users'
                             ? 'users'
+                        : (view === 'reports'
+                            ? 'reports'
                         : (view === 'filaments'
                             ? 'filaments'
-                            : (view === 'settings' ? 'settings' : 'home'))));
+                            : (view === 'settings' ? 'settings' : 'home')))));
                 homeSection.classList.toggle('active', resolved === 'home');
                 ordersSection.classList.toggle('active', resolved === 'orders');
                 filamentsSection.classList.toggle('active', resolved === 'filaments');
                 suggestedSection.classList.toggle('active', resolved === 'suggested');
                 usersSection.classList.toggle('active', resolved === 'users');
+                reportsSection.classList.toggle('active', resolved === 'reports');
                 settingsSection.classList.toggle('active', resolved === 'settings');
                 navLinks.forEach(function (link) {
                     const isActive = (link.dataset.view || 'home') === resolved && (
@@ -2888,6 +4135,7 @@
                         (resolved === 'filaments' && link.getAttribute('href') === '#filaments-section') ||
                         (resolved === 'suggested' && link.getAttribute('href') === '#suggested-section') ||
                         (resolved === 'users' && link.getAttribute('href') === '#users-section') ||
+                        (resolved === 'reports' && link.getAttribute('href') === '#reports-section') ||
                         (resolved === 'settings' && link.getAttribute('href') === '#settings-section') ||
                         false
                     );
@@ -2910,6 +4158,280 @@
                 });
             });
 
+            notifBell?.addEventListener('click', function (event) {
+                event.stopPropagation();
+                notifPanel?.classList.toggle('open');
+            });
+
+            function bindFormNextField(formEl) {
+                if (!formEl) return;
+                let nextInput = formEl.querySelector('input[name="next"]');
+                if (!nextInput) {
+                    nextInput = document.createElement('input');
+                    nextInput.type = 'hidden';
+                    nextInput.name = 'next';
+                    formEl.appendChild(nextInput);
+                }
+                nextInput.value = window.location.pathname + '#orders-section';
+            }
+
+            function bindSuggestedPriceInForm(form) {
+                if (!form) return;
+                const weightInput = form.querySelector('[data-weight-input]');
+                const hoursInput = form.querySelector('[data-hours-input]');
+                if (!weightInput || !hoursInput) return;
+                weightInput.addEventListener('input', function () {
+                    refreshSuggestedPrice(form);
+                });
+                hoursInput.addEventListener('input', function () {
+                    refreshSuggestedPrice(form);
+                });
+                refreshSuggestedPrice(form);
+            }
+
+            window.closeOrderExpandModal = function () {
+                if (!orderExpandModal || !orderExpandModalBody) return;
+                orderExpandModal.style.display = 'none';
+                orderExpandModalBody.innerHTML = '';
+            };
+
+            function openOrderExpandModal(orderId) {
+                if (!orderExpandModal || !orderExpandModalBody) return;
+                const sourceRow = document.querySelector('tr[data-order-row="true"][data-order-id="' + orderId + '"]');
+                if (!sourceRow) return;
+                const tds = sourceRow.querySelectorAll('td');
+                if (tds.length < 5) return;
+                const baseIndex = tds.length >= 6 ? 1 : 0;
+
+                /* ── Extract source data ── */
+                const orderName       = tds[baseIndex].querySelector('strong')?.textContent?.trim() || 'Order';
+                const userSmall       = Array.from(tds[baseIndex].querySelectorAll('small')).find(function(el){ return el.textContent.includes('User:'); });
+                const userText        = userSmall?.textContent?.replace(/^User:\s*/, '').trim() || '';
+                const statusPillEl    = tds[baseIndex + 2].querySelector('.pill:not(.pill-new)');
+                const keepPillEl      = tds[baseIndex + 2].querySelector('.pill-new');
+                const mwLinkEl        = tds[baseIndex + 1].querySelector('a.makerworld-badge');
+                const colorContEl     = tds[baseIndex + 1].querySelector('.color-container');
+                const wfFormEl        = tds[baseIndex + 3].querySelector('form.workflow-form');
+                if (!wfFormEl) return;
+                const wfFormClone     = wfFormEl.cloneNode(true);
+                const actionFormEls   = Array.from(tds[baseIndex + 4].querySelectorAll('form'));
+
+                /* ── Header ── */
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'oem-header';
+
+                const titleCol = document.createElement('div');
+                titleCol.className = 'oem-title-col';
+
+                const nameEl = document.createElement('div');
+                nameEl.className = 'oem-order-name';
+                nameEl.textContent = orderName;
+                titleCol.appendChild(nameEl);
+
+                const metaRow = document.createElement('div');
+                metaRow.className = 'oem-meta-row';
+                const idBadge = document.createElement('span');
+                idBadge.className = 'oem-id-badge';
+                idBadge.textContent = '#' + orderId;
+                metaRow.appendChild(idBadge);
+                if (userText) {
+                    const userSpan = document.createElement('span');
+                    userSpan.className = 'oem-user-text';
+                    userSpan.textContent = '\u{1F464} ' + userText;
+                    metaRow.appendChild(userSpan);
+                }
+                if (statusPillEl) metaRow.appendChild(statusPillEl.cloneNode(true));
+                if (keepPillEl)   metaRow.appendChild(keepPillEl.cloneNode(true));
+                titleCol.appendChild(metaRow);
+
+                if (colorContEl) {
+                    const colorRow = document.createElement('div');
+                    colorRow.className = 'oem-color-row';
+                    colorRow.appendChild(colorContEl.cloneNode(true));
+                    titleCol.appendChild(colorRow);
+                }
+
+                const actionsCol = document.createElement('div');
+                actionsCol.className = 'oem-actions-col';
+                if (mwLinkEl) actionsCol.appendChild(mwLinkEl.cloneNode(true));
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'oem-close-btn';
+                closeBtn.textContent = '\u2715  Close';
+                closeBtn.onclick = closeOrderExpandModal;
+                actionsCol.appendChild(closeBtn);
+
+                headerDiv.appendChild(titleCol);
+                headerDiv.appendChild(actionsCol);
+
+                /* ── Extract inputs from cloned form ── */
+                const priceInput    = wfFormClone.querySelector('input[name="print_price"]');
+                const feeInput      = wfFormClone.querySelector('input[name="material_fee"]');
+                const weightInput   = wfFormClone.querySelector('input[name="print_weight_g"]');
+                const hoursInput    = wfFormClone.querySelector('input[name="estimated_print_hours"]');
+                const suggestedInp  = wfFormClone.querySelector('[data-suggested-price]');
+                const deliveryInput = wfFormClone.querySelector('input[name="delivery_time"]');
+                const statusSelect  = wfFormClone.querySelector('select[name="status"]');
+                const adminNoteTa   = wfFormClone.querySelector('textarea[name="admin_note"]');
+                const chatBtnEl     = wfFormClone.querySelector('button.msg-icon');
+
+                /* ── Rebuild form with labelled sections ── */
+                wfFormClone.innerHTML = '';
+                wfFormClone.style.cssText = '';
+
+                function oem_section(title) {
+                    var sec = document.createElement('div');
+                    sec.className = 'oem-section';
+                    if (title) {
+                        var h = document.createElement('div');
+                        h.className = 'oem-section-title';
+                        h.textContent = title;
+                        sec.appendChild(h);
+                    }
+                    return sec;
+                }
+                function oem_field(labelTxt, inputEl) {
+                    if (!inputEl) return null;
+                    var g = document.createElement('div');
+                    g.className = 'oem-field-group';
+                    var l = document.createElement('label');
+                    l.className = 'oem-field-label';
+                    l.textContent = labelTxt;
+                    g.appendChild(l);
+                    g.appendChild(inputEl);
+                    return g;
+                }
+
+                // Pricing section
+                var pricingSec  = oem_section('Pricing');
+                var pricingGrid = document.createElement('div');
+                pricingGrid.className = 'oem-fields-grid';
+                [
+                    ['Print Price (Rp)', priceInput],
+                    ['Material Fee (Rp)', feeInput],
+                    ['Weight (g)', weightInput],
+                    ['Print Time (hrs)', hoursInput],
+                    ['Suggested Price', suggestedInp],
+                ].forEach(function(pair) {
+                    var g = oem_field(pair[0], pair[1]);
+                    if (g) pricingGrid.appendChild(g);
+                });
+                pricingSec.appendChild(pricingGrid);
+                wfFormClone.appendChild(pricingSec);
+
+                // Status & Logistics section
+                var logSec  = oem_section('Status & Logistics');
+                var logGrid = document.createElement('div');
+                logGrid.className = 'oem-fields-grid';
+                [
+                    ['Estimated Delivery', deliveryInput],
+                    ['Order Status', statusSelect],
+                ].forEach(function(pair) {
+                    var g = oem_field(pair[0], pair[1]);
+                    if (g) logGrid.appendChild(g);
+                });
+                logSec.appendChild(logGrid);
+                wfFormClone.appendChild(logSec);
+
+                // Admin Note section
+                if (adminNoteTa) {
+                    var noteSec = oem_section('Admin Note');
+                    noteSec.appendChild(adminNoteTa);
+                    wfFormClone.appendChild(noteSec);
+                }
+
+                // Update button
+                var updateBtn = document.createElement('button');
+                updateBtn.type = 'submit';
+                updateBtn.className = 'oem-update-btn';
+                updateBtn.textContent = 'Update Order';
+                wfFormClone.appendChild(updateBtn);
+
+                bindFormNextField(wfFormClone);
+                bindSuggestedPriceInForm(wfFormClone);
+                wfFormClone.addEventListener('submit', function () { showLoader(); });
+
+                /* ── Body ── */
+                var bodyDiv = document.createElement('div');
+                bodyDiv.className = 'oem-body';
+                bodyDiv.appendChild(wfFormClone);
+
+                /* ── Footer with secondary action buttons ── */
+                var footerDiv = document.createElement('div');
+                footerDiv.className = 'oem-footer';
+
+                var footerLeft = document.createElement('div');
+                footerLeft.className = 'oem-footer-left';
+                if (chatBtnEl) {
+                    chatBtnEl.classList.remove('detail-only');
+                    chatBtnEl.style.cssText = '';
+                    footerLeft.appendChild(chatBtnEl);
+                }
+
+                var footerRight = document.createElement('div');
+                footerRight.className = 'oem-footer-right';
+                actionFormEls.forEach(function (form) {
+                    var fc = form.cloneNode(true);
+                    fc.classList.remove('detail-only');
+                    fc.querySelectorAll('button').forEach(function (btn) {
+                        btn.style.width = 'auto';
+                        btn.style.margin = '0';
+                    });
+                    footerRight.appendChild(fc);
+                });
+
+                footerDiv.appendChild(footerLeft);
+                footerDiv.appendChild(footerRight);
+
+                /* ── Assemble ── */
+                orderExpandModalBody.innerHTML = '';
+                orderExpandModalBody.appendChild(headerDiv);
+                orderExpandModalBody.appendChild(bodyDiv);
+                orderExpandModalBody.appendChild(footerDiv);
+                orderExpandModal.style.display = 'flex';
+            }
+
+            document.addEventListener('click', function (event) {
+                if (!notifPanel || !notifBell) return;
+                if (notifPanel.contains(event.target) || notifBell.contains(event.target)) return;
+                notifPanel.classList.remove('open');
+            });
+
+            function openOrderInDashboard(orderId) {
+                if (!orderId) return;
+                activateView('orders');
+                window.location.hash = '#orders-section';
+
+                var allTab = document.querySelector('.filter-tab[data-filter="all"]');
+                if (allTab) allTab.click();
+
+                var targetRow = document.querySelector('tr[data-order-row="true"][data-order-id="' + orderId + '"]');
+                if (!targetRow) return;
+
+                targetRow.style.display = '';
+                var expandBtn = targetRow.querySelector('[data-expand-order]');
+                if (expandBtn && expandBtn.getAttribute('aria-expanded') !== 'true') {
+                    expandBtn.click();
+                }
+
+                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                notifPanel?.classList.remove('open');
+            }
+
+            document.querySelectorAll('[data-open-order-id]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    openOrderInDashboard(btn.getAttribute('data-open-order-id') || '');
+                });
+            });
+
+            document.querySelectorAll('[data-expand-order]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    const orderId = btn.getAttribute('data-expand-order') || '';
+                    if (!orderId) return;
+                    openOrderExpandModal(orderId);
+                });
+            });
+
             if (window.location.hash === '#orders-section') {
                 activateView('orders');
             } else if (window.location.hash === '#filaments-section') {
@@ -2918,6 +4440,8 @@
                 activateView('suggested');
             } else if (window.location.hash === '#users-section') {
                 activateView('users');
+            } else if (window.location.hash === '#reports-section') {
+                activateView('reports');
             } else if (window.location.hash === '#settings-section') {
                 activateView('settings');
             } else {
@@ -3022,9 +4546,571 @@
             bindTargetGroup(document.querySelector('[data-target-group="add"]'));
             bindTargetGroup(document.querySelector('[data-target-group="edit"]'));
 
-            openSuggestedModalBtn?.addEventListener('click', function () {
-                featuredAddModal.style.display = 'flex';
+            function parseSuggestedColors(value) {
+                return String(value || '')
+                    .split('|')
+                    .map(function (segment) { return segment.trim(); })
+                    .filter(Boolean)
+                    .map(function (segment) {
+                        var idx = segment.lastIndexOf(':');
+                        return idx >= 0 ? segment.slice(idx + 1).trim() : segment;
+                    })
+                    .filter(Boolean);
+            }
+
+            function escapeHtml(text) {
+                return String(text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function getFeaturedFilamentOptionsHtml() {
+                let html = '<option value="">No suggestion</option>';
+                featuredFilamentChoices.forEach(function (f) {
+                    const name = String((f && f.name) || '').trim();
+                    if (!name) return;
+                    const material = String((f && f.material) || '').trim();
+                    const label = material ? `${name} (${material})` : name;
+                    html += `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+                });
+                return html;
+            }
+
+            function createMultiColorSelect(builderRoot, selectedValue) {
+                const row = document.createElement('div');
+                row.className = 'featured-multi-item';
+
+                const select = document.createElement('select');
+                select.name = 'suggested_color_list[]';
+                select.className = 'featured-filament-select';
+                select.innerHTML = getFeaturedFilamentOptionsHtml();
+                if (selectedValue) select.value = selectedValue;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'featured-multi-remove';
+                removeBtn.textContent = 'Remove';
+                removeBtn.addEventListener('click', function () {
+                    row.remove();
+                });
+
+                row.appendChild(select);
+                row.appendChild(removeBtn);
+                return row;
+            }
+
+            function setFeaturedColorMode(builderRoot, mode) {
+                if (!builderRoot) return;
+                const singleRow = builderRoot.querySelector('[data-single-color-row]');
+                const multiRow = builderRoot.querySelector('[data-multi-color-row]');
+                const singleSelect = builderRoot.querySelector('[data-single-filament-select]');
+                const addBtn = builderRoot.querySelector('[data-add-suggested-color-row]');
+                const list = builderRoot.querySelector('[data-multi-color-list]');
+                const isMulti = mode === 'multi';
+
+                if (singleRow) singleRow.hidden = isMulti;
+                if (multiRow) multiRow.hidden = !isMulti;
+                if (singleSelect) singleSelect.disabled = isMulti;
+                if (list) {
+                    list.querySelectorAll('select[name="suggested_color_list[]"]').forEach(function (selectEl) {
+                        selectEl.disabled = !isMulti;
+                    });
+                }
+
+                if (isMulti && list && !list.children.length) {
+                    list.appendChild(createMultiColorSelect(builderRoot, ''));
+                    list.appendChild(createMultiColorSelect(builderRoot, ''));
+                }
+
+                if (addBtn && !addBtn.dataset.bound) {
+                    addBtn.dataset.bound = 'true';
+                    addBtn.addEventListener('click', function () {
+                        if (!list) return;
+                        list.appendChild(createMultiColorSelect(builderRoot, ''));
+                    });
+                }
+            }
+
+            function getFilamentsByMaterial() {
+                const byMaterial = {};
+                featuredFilamentChoices.forEach(function (f) {
+                    const material = String((f && f.material) || 'OTHER').trim().toUpperCase() || 'OTHER';
+                    if (!byMaterial[material]) byMaterial[material] = [];
+                    byMaterial[material].push(f);
+                });
+                return byMaterial;
+            }
+
+            function renderFeaturedSwatchGrid(builderRoot, mode) {
+                if (!builderRoot) return;
+                const wrapper = builderRoot.querySelector('[data-color-swatches]');
+                if (!wrapper) return;
+                wrapper.innerHTML = '';
+                
+                const byMaterial = getFilamentsByMaterial();
+                const sortedMaterials = Object.keys(byMaterial).sort();
+                const singleSelect = builderRoot.querySelector('[data-single-filament-select]');
+                const selectedValue = singleSelect ? singleSelect.value : '';
+                
+                sortedMaterials.forEach(function (material) {
+                    const section = document.createElement('div');
+                    section.className = 'featured-color-section';
+                    
+                    const label = document.createElement('div');
+                    label.className = 'featured-material-label';
+                    label.textContent = material;
+                    section.appendChild(label);
+                    
+                    const grid = document.createElement('div');
+                    grid.className = 'featured-swatch-grid';
+                    
+                    byMaterial[material].forEach(function (filament) {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'featured-swatch-btn';
+                        btn.setAttribute('data-name', filament.name);
+                        btn.style.background = String((filament && filament.hex) || '#8b8b8b').trim();
+                        
+                        if (String(selectedValue).toLowerCase() === String(filament.name).toLowerCase()) {
+                            btn.classList.add('active');
+                        }
+                        
+                        btn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            if (singleSelect) singleSelect.value = filament.name;
+                            renderFeaturedSwatchGrid(builderRoot, 'single');
+                            applyFeaturedColorPayload(builderRoot);
+                        });
+                        
+                        grid.appendChild(btn);
+                    });
+                    
+                    section.appendChild(grid);
+                    wrapper.appendChild(section);
+                });
+            }
+
+            function parsePartsInput(text) {
+                return String(text || '').split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+            }
+
+            function renderMultiPartColorGrid(builderRoot, parts) {
+                if (!builderRoot) return;
+                const wrapper = builderRoot.querySelector('[data-color-swatches]');
+                if (!wrapper) return;
+                wrapper.innerHTML = '';
+
+                if (!parts || parts.length === 0) {
+                    return;
+                }
+
+                const byMaterial = getFilamentsByMaterial();
+                const sortedMaterials = Object.keys(byMaterial).sort();
+
+                parts.forEach(function (partName) {
+                    const partContainer = document.createElement('div');
+                    partContainer.style.borderTop = '1px solid #e0ebe5';
+                    partContainer.style.paddingTop = '12px';
+                    partContainer.style.marginTop = '12px';
+
+                    const partLabel = document.createElement('div');
+                    partLabel.className = 'featured-material-label';
+                    partLabel.textContent = partName.toUpperCase();
+                    partContainer.appendChild(partLabel);
+
+                    sortedMaterials.forEach(function (material) {
+                        const section = document.createElement('div');
+                        section.className = 'featured-color-section';
+                        section.style.marginTop = '8px';
+
+                        const materialLabel = document.createElement('div');
+                        materialLabel.className = 'featured-material-label';
+                        materialLabel.style.fontSize = '0.65rem';
+                        materialLabel.style.color = '#666';
+                        materialLabel.textContent = material;
+                        section.appendChild(materialLabel);
+
+                        const grid = document.createElement('div');
+                        grid.className = 'featured-swatch-grid';
+
+                        byMaterial[material].forEach(function (filament) {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'featured-swatch-btn';
+                            btn.setAttribute('data-name', filament.name);
+                            btn.setAttribute('data-part', partName);
+                            btn.style.background = String((filament && filament.hex) || '#8b8b8b').trim();
+
+                            btn.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                const currentWrapper = builderRoot.querySelector('[data-color-swatches]');
+                                const btnsForPart = currentWrapper.querySelectorAll('[data-part="' + partName + '"]');
+                                btnsForPart.forEach(function (b) { b.classList.remove('active'); });
+                                btn.classList.add('active');
+                                buildMultiPartColorPayload(builderRoot);
+                            });
+
+                            grid.appendChild(btn);
+                        });
+
+                        section.appendChild(grid);
+                        partContainer.appendChild(section);
+                    });
+
+                    wrapper.appendChild(partContainer);
+                });
+            }
+
+            function buildMultiPartColorPayload(builderRoot) {
+                if (!builderRoot) return;
+                const wrapper = builderRoot.querySelector('[data-color-swatches]');
+                if (!wrapper) return;
+
+                const parts = new Map();
+                wrapper.querySelectorAll('[data-part][data-name].active').forEach(function (btn) {
+                    const part = btn.getAttribute('data-part');
+                    const color = btn.getAttribute('data-name');
+                    parts.set(part, color);
+                });
+
+                const hiddenInput = builderRoot.querySelector('[data-suggested-colors-hidden]');
+                if (hiddenInput && parts.size > 0) {
+                    const payload = Array.from(parts.entries())
+                        .map(function (entry) { return entry[0] + ': ' + entry[1]; })
+                        .join(' | ');
+                    hiddenInput.value = payload;
+
+                    const singleSelect = builderRoot.querySelector('[data-single-filament-select]');
+                    if (singleSelect && parts.size > 0) {
+                        singleSelect.value = Array.from(parts.values())[0];
+                    }
+                }
+            }
+
+            function applyFeaturedColorPayload(builderRoot) {
+                if (!builderRoot) return true;
+                const modeRadio = builderRoot.querySelector('input[type="radio"][name$="_suggested_mode"]:checked');
+                const mode = modeRadio ? modeRadio.value : 'single';
+                const hiddenInput = builderRoot.querySelector('[data-suggested-colors-hidden]');
+                const singleSelect = builderRoot.querySelector('[data-single-filament-select]');
+
+                if (!hiddenInput) return true;
+
+                if (mode === 'multi') {
+                    const selected = Array.from(builderRoot.querySelectorAll('select[name="suggested_color_list[]"]'))
+                        .map(function (el) { return (el.value || '').trim(); })
+                        .filter(Boolean);
+                    if (selected.length < 2) {
+                        alert('Multi-color suggestions need at least 2 selected colors.');
+                        return false;
+                    }
+                    hiddenInput.value = selected.join(' | ');
+                    if (singleSelect) singleSelect.value = selected[0];
+                    return true;
+                }
+
+                const selectedSingle = (singleSelect?.value || '').trim();
+                hiddenInput.value = selectedSingle;
+                return true;
+            }
+
+            function initializeFeaturedColorBuilder(builderRoot, initialColors, initialFilament) {
+                if (!builderRoot) return;
+                const colors = parseSuggestedColors(initialColors || initialFilament || '');
+                const singleSelect = builderRoot.querySelector('[data-single-filament-select]');
+                const list = builderRoot.querySelector('[data-multi-color-list]');
+
+                if (singleSelect) {
+                    singleSelect.innerHTML = getFeaturedFilamentOptionsHtml();
+                    singleSelect.value = initialFilament || colors[0] || '';
+                }
+
+                if (list) list.innerHTML = '';
+
+                const mode = colors.length > 1 ? 'multi' : 'single';
+                const modeInput = builderRoot.querySelector('input[type="radio"][name$="_suggested_mode"][value="' + mode + '"]');
+                if (modeInput) modeInput.checked = true;
+                setFeaturedColorMode(builderRoot, mode);
+
+                if (mode === 'multi' && list) {
+                    list.innerHTML = '';
+                    colors.forEach(function (color) {
+                        list.appendChild(createMultiColorSelect(builderRoot, color));
+                    });
+                    if (colors.length < 2) {
+                        list.appendChild(createMultiColorSelect(builderRoot, ''));
+                    }
+                } else {
+                    renderFeaturedSwatchGrid(builderRoot, mode);
+                }
+
+                const hiddenInput = builderRoot.querySelector('[data-suggested-colors-hidden]');
+                if (hiddenInput) hiddenInput.value = (initialColors || initialFilament || '').trim();
+            }
+
+            document.querySelectorAll('[data-featured-color-builder]').forEach(function (builderRoot) {
+                builderRoot.querySelectorAll('input[type="radio"][name$="_suggested_mode"]').forEach(function (radio) {
+                    radio.addEventListener('change', function () {
+                        if (radio.checked) setFeaturedColorMode(builderRoot, radio.value);
+                    });
+                });
+                initializeFeaturedColorBuilder(builderRoot, '', '');
             });
+
+                function addPartCard(partsBuilder, partName, colorName) {
+                    if (!partsBuilder) return;
+                    const list = partsBuilder.querySelector('[data-parts-list]');
+                    if (!list) return;
+                    const card = document.createElement('div');
+                    card.className = 'featured-part-card';
+                    const header = document.createElement('div');
+                    header.className = 'featured-part-card-header';
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.className = 'featured-part-name-input';
+                    nameInput.placeholder = 'Part name (e.g. Body)';
+                    nameInput.value = partName || '';
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'featured-part-remove-btn';
+                    removeBtn.innerHTML = '&#x2715;';
+                    removeBtn.addEventListener('click', function () { card.remove(); });
+                    header.appendChild(nameInput);
+                    header.appendChild(removeBtn);
+                    card.appendChild(header);
+                    const swatchWrap = document.createElement('div');
+                    swatchWrap.className = 'featured-color-wrapper';
+                    const byMaterial = getFilamentsByMaterial();
+                    const sortedMaterials = Object.keys(byMaterial).sort();
+                    sortedMaterials.forEach(function (material) {
+                        const section = document.createElement('div');
+                        section.className = 'featured-color-section';
+                        const matLabel = document.createElement('div');
+                        matLabel.className = 'featured-material-label';
+                        matLabel.style.fontSize = '0.65rem';
+                        matLabel.textContent = material;
+                        section.appendChild(matLabel);
+                        const grid = document.createElement('div');
+                        grid.className = 'featured-swatch-grid';
+                        byMaterial[material].forEach(function (filament) {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'featured-swatch-btn';
+                            btn.setAttribute('data-name', filament.name);
+                            btn.style.background = String((filament && filament.hex) || '#8b8b8b').trim();
+                            if (String(colorName || '').toLowerCase() === filament.name.toLowerCase()) {
+                                btn.classList.add('active');
+                            }
+                            btn.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                card.querySelectorAll('.featured-swatch-btn').forEach(function (b) { b.classList.remove('active'); });
+                                btn.classList.add('active');
+                            });
+                            grid.appendChild(btn);
+                        });
+                        section.appendChild(grid);
+                        swatchWrap.appendChild(section);
+                    });
+                    card.appendChild(swatchWrap);
+                    list.appendChild(card);
+                }
+
+                document.querySelectorAll('[data-add-part-btn]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const partsBuilder = btn.closest('[data-parts-builder]');
+                        if (partsBuilder) addPartCard(partsBuilder, '', '');
+                    });
+                });
+
+                function addProfileCard(builderRoot, profileName, profilePrice, isDefault) {
+                    if (!builderRoot) return;
+                    const list = builderRoot.querySelector('[data-profile-list]');
+                    if (!list) return;
+                    const mode = builderRoot.getAttribute('data-profile-builder') || 'add';
+
+                    const card = document.createElement('div');
+                    card.className = 'featured-profile-card';
+
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.className = 'featured-profile-name';
+                    nameInput.placeholder = 'Profile name';
+                    nameInput.value = profileName || '';
+
+                    const priceInput = document.createElement('input');
+                    priceInput.type = 'number';
+                    priceInput.step = '1';
+                    priceInput.className = 'featured-profile-price';
+                    priceInput.placeholder = 'Price (Rp)';
+                    priceInput.value = Number(profilePrice || 0);
+
+                    const defaultWrap = document.createElement('label');
+                    defaultWrap.className = 'featured-profile-default';
+                    const defaultInput = document.createElement('input');
+                    defaultInput.type = 'radio';
+                    defaultInput.name = 'featured_profile_default_' + mode;
+                    defaultInput.checked = Boolean(isDefault);
+                    defaultWrap.appendChild(defaultInput);
+                    defaultWrap.appendChild(document.createTextNode('Default'));
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'featured-part-remove-btn';
+                    removeBtn.innerHTML = '&#x2715;';
+                    removeBtn.addEventListener('click', function () {
+                        const wasDefault = defaultInput.checked;
+                        card.remove();
+                        if (wasDefault) {
+                            const first = list.querySelector('.featured-profile-default input[type="radio"]');
+                            if (first) first.checked = true;
+                        }
+                    });
+
+                    card.appendChild(nameInput);
+                    card.appendChild(priceInput);
+                    card.appendChild(defaultWrap);
+                    card.appendChild(removeBtn);
+                    list.appendChild(card);
+
+                    const radios = list.querySelectorAll('.featured-profile-default input[type="radio"]');
+                    if (radios.length === 1 && !radios[0].checked) {
+                        radios[0].checked = true;
+                    }
+                }
+
+                function collectProfilePricing(builderRoot) {
+                    if (!builderRoot) {
+                        return { suggestedProfile: '', profileOptions: [], profilePricing: [] };
+                    }
+                    const cards = Array.from(builderRoot.querySelectorAll('.featured-profile-card'));
+                    const pricing = [];
+                    cards.forEach(function (card) {
+                        const name = String(card.querySelector('.featured-profile-name')?.value || '').trim();
+                        if (!name) return;
+                        const modifier = Number(card.querySelector('.featured-profile-price')?.value || 0);
+                        const isDefault = Boolean(card.querySelector('.featured-profile-default input[type="radio"]')?.checked);
+                        pricing.push({
+                            name: name,
+                            price: Number.isFinite(modifier) ? modifier : 0,
+                            is_default: isDefault,
+                        });
+                    });
+                    if (pricing.length > 0 && !pricing.some(function (p) { return p.is_default; })) {
+                        pricing[0].is_default = true;
+                    }
+                    return {
+                        suggestedProfile: pricing.find(function (p) { return p.is_default; })?.name || '',
+                        profileOptions: pricing.map(function (p) { return p.name; }),
+                        profilePricing: pricing,
+                    };
+                }
+
+                function applyProfilePricingHiddenFields(formEl, profileBuilderRoot) {
+                    if (!formEl || !profileBuilderRoot) return;
+                    const payload = collectProfilePricing(profileBuilderRoot);
+                    const defaultHidden = formEl.querySelector('[data-profile-default-hidden]');
+                    const optionsHidden = formEl.querySelector('[data-profile-options-hidden]');
+                    const pricingHidden = formEl.querySelector('[data-profile-pricing-hidden]');
+                    if (defaultHidden) defaultHidden.value = payload.suggestedProfile;
+                    if (optionsHidden) optionsHidden.value = payload.profileOptions.join(', ');
+                    if (pricingHidden) pricingHidden.value = JSON.stringify(payload.profilePricing);
+                }
+
+                document.querySelectorAll('[data-add-profile-btn]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const builderRoot = btn.closest('[data-profile-builder]');
+                        addProfileCard(builderRoot, '', 0, false);
+                    });
+                });
+
+                featuredAddForm?.addEventListener('submit', function (event) {
+                    const builder = featuredAddForm.querySelector('[data-featured-color-builder]');
+                    const partsBuilder = featuredAddForm.querySelector('[data-parts-builder="add"]');
+                    const profileBuilder = featuredAddForm.querySelector('[data-profile-builder="add"]');
+                    const cards = partsBuilder ? Array.from(partsBuilder.querySelectorAll('.featured-part-card')) : [];
+                    featuredAddForm.querySelectorAll('input[name="category_options"]').forEach(function (el) { el.remove(); });
+                    applyProfilePricingHiddenFields(featuredAddForm, profileBuilder);
+                    if (cards.length > 0) {
+                        const categoryOptions = [];
+                        cards.forEach(function (card) {
+                            const nameInput = card.querySelector('.featured-part-name-input');
+                            const activeBtn = card.querySelector('.featured-swatch-btn.active');
+                            const partName = nameInput ? nameInput.value.trim() : '';
+                            const colorName = activeBtn ? activeBtn.getAttribute('data-name') : '';
+                            if (partName) categoryOptions.push({ part: partName, suggested_filament: colorName || '' });
+                        });
+                        const hiddenColors = builder ? builder.querySelector('[data-suggested-colors-hidden]') : null;
+                        if (hiddenColors) {
+                            hiddenColors.value = categoryOptions
+                                .filter(function (o) { return o.suggested_filament; })
+                                .map(function (o) { return o.part + ': ' + o.suggested_filament; })
+                                .join(' | ');
+                        }
+                        const hiddenCategoryInput = document.createElement('input');
+                        hiddenCategoryInput.type = 'hidden';
+                        hiddenCategoryInput.name = 'category_options';
+                        hiddenCategoryInput.value = JSON.stringify(categoryOptions);
+                        featuredAddForm.appendChild(hiddenCategoryInput);
+                    } else {
+                        if (!applyFeaturedColorPayload(builder)) {
+                            event.preventDefault();
+                            return;
+                        }
+                    }
+                });
+
+                featuredEditForm?.addEventListener('submit', function (event) {
+                    const builder = featuredEditForm.querySelector('[data-featured-color-builder]');
+                    const partsBuilder = featuredEditForm.querySelector('[data-parts-builder="edit"]');
+                    const profileBuilder = featuredEditForm.querySelector('[data-profile-builder="edit"]');
+                    const cards = partsBuilder ? Array.from(partsBuilder.querySelectorAll('.featured-part-card')) : [];
+                    featuredEditForm.querySelectorAll('input[name="category_options"]').forEach(function (el) { el.remove(); });
+                    applyProfilePricingHiddenFields(featuredEditForm, profileBuilder);
+                    if (cards.length > 0) {
+                        const categoryOptions = [];
+                        cards.forEach(function (card) {
+                            const nameInput = card.querySelector('.featured-part-name-input');
+                            const activeBtn = card.querySelector('.featured-swatch-btn.active');
+                            const partName = nameInput ? nameInput.value.trim() : '';
+                            const colorName = activeBtn ? activeBtn.getAttribute('data-name') : '';
+                            if (partName) categoryOptions.push({ part: partName, suggested_filament: colorName || '' });
+                        });
+                        const hiddenColors = builder ? builder.querySelector('[data-suggested-colors-hidden]') : null;
+                        if (hiddenColors) {
+                            hiddenColors.value = categoryOptions
+                                .filter(function (o) { return o.suggested_filament; })
+                                .map(function (o) { return o.part + ': ' + o.suggested_filament; })
+                                .join(' | ');
+                        }
+                        const hiddenCategoryInput = document.createElement('input');
+                        hiddenCategoryInput.type = 'hidden';
+                        hiddenCategoryInput.name = 'category_options';
+                        hiddenCategoryInput.value = JSON.stringify(categoryOptions);
+                        featuredEditForm.appendChild(hiddenCategoryInput);
+                    } else {
+                        if (!applyFeaturedColorPayload(builder)) {
+                            event.preventDefault();
+                            return;
+                        }
+                    }
+                });
+
+                openSuggestedModalBtn?.addEventListener('click', function () {
+                    const addColorBuilder = featuredAddForm?.querySelector('[data-featured-color-builder="add"]');
+                    initializeFeaturedColorBuilder(addColorBuilder, '', '');
+                    const addPartsBuilder = featuredAddForm?.querySelector('[data-parts-builder="add"]');
+                    const addPartsList = addPartsBuilder?.querySelector('[data-parts-list]');
+                    const addProfileBuilder = featuredAddForm?.querySelector('[data-profile-builder="add"]');
+                    const addProfileList = addProfileBuilder?.querySelector('[data-profile-list]');
+                    if (addPartsList) addPartsList.innerHTML = '';
+                    if (addPartsBuilder) addPartCard(addPartsBuilder, '', '');
+                    if (addProfileList) addProfileList.innerHTML = '';
+                    if (addProfileBuilder) addProfileCard(addProfileBuilder, 'Standard', 0, true);
+                    featuredAddModal.style.display = 'flex';
+                });
 
             closeSuggestedModalBtn?.addEventListener('click', function () {
                 featuredAddModal.style.display = 'none';
@@ -3057,19 +5143,49 @@
 
                     featuredEditForm.action = `/dashboard/featured/edit/${item.id}`;
                     document.getElementById('edit-title').value = item.title || '';
-                    document.getElementById('edit-price').value = item.price || '';
                     document.getElementById('edit-image-url').value = item.image_url || '';
                     document.getElementById('edit-makerworld-url').value = item.makerworld_url || '';
                     document.getElementById('edit-description').value = item.description || '';
-                    document.getElementById('edit-suggested-filament').value = item.suggested_filament || '';
-                    document.getElementById('edit-suggested-colors').value = item.suggested_colors || '';
-                    document.getElementById('edit-suggested-profile').value = item.suggested_profile || '';
+                    const editColorBuilder = featuredEditForm.querySelector('[data-featured-color-builder="edit"]');
+                    initializeFeaturedColorBuilder(editColorBuilder, item.suggested_colors || '', item.suggested_filament || '');
 
-                    const profileOptions = item.profile_options;
-                    if (Array.isArray(profileOptions)) {
-                        document.getElementById('edit-profile-options').value = profileOptions.join(', ');
+                    const editProfileBuilder = featuredEditForm.querySelector('[data-profile-builder="edit"]');
+                    const editProfileList = editProfileBuilder ? editProfileBuilder.querySelector('[data-profile-list]') : null;
+                    if (editProfileList) editProfileList.innerHTML = '';
+                    const profilePricing = Array.isArray(item.profile_pricing) ? item.profile_pricing : [];
+                    if (profilePricing.length > 0 && editProfileBuilder) {
+                        profilePricing.forEach(function (p, idx) {
+                            const pname = String((p && p.name) || '').trim();
+                            if (!pname) return;
+                            addProfileCard(editProfileBuilder, pname, Number((p && (p.price !== undefined ? p.price : p.price_modifier)) || 0), Boolean(p.is_default));
+                        });
                     } else {
-                        document.getElementById('edit-profile-options').value = profileOptions || '';
+                        const fallbackOptions = Array.isArray(item.profile_options)
+                            ? item.profile_options
+                            : String(item.profile_options || '').split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+                        if (editProfileBuilder && fallbackOptions.length > 0) {
+                            fallbackOptions.forEach(function (name, idx) {
+                                const isDefault = String(name).trim().toLowerCase() === String(item.suggested_profile || '').trim().toLowerCase();
+                                addProfileCard(editProfileBuilder, String(name), 0, isDefault);
+                            });
+                        }
+                    }
+                    if (editProfileBuilder && editProfileBuilder.querySelectorAll('.featured-profile-card').length === 0) {
+                        addProfileCard(editProfileBuilder, 'Standard', 0, true);
+                    }
+
+                    const editPartsBuilder = featuredEditForm.querySelector('[data-parts-builder="edit"]');
+                    const editPartsList = editPartsBuilder ? editPartsBuilder.querySelector('[data-parts-list]') : null;
+                    if (editPartsList) editPartsList.innerHTML = '';
+                    if (item.category_options && Array.isArray(item.category_options)) {
+                        item.category_options.forEach(function (opt) {
+                            const partName = String(opt.part || opt.name || '').trim();
+                            const colorName = String(opt.suggested_filament || '').trim();
+                            if (partName && editPartsBuilder) addPartCard(editPartsBuilder, partName, colorName);
+                        });
+                    }
+                    if (editPartsBuilder && editPartsBuilder.querySelectorAll('.featured-part-card').length === 0) {
+                        addPartCard(editPartsBuilder, '', '');
                     }
 
                     const targetsRaw = Array.isArray(item.target_users) && item.target_users.length
@@ -3379,6 +5495,10 @@
             document.addEventListener('keydown', function (event) {
                 if (event.key === 'Escape' && filamentEditModal?.style.display === 'flex') {
                     closeFilamentEditModal();
+                    return;
+                }
+                if (event.key === 'Escape' && orderExpandModal?.style.display === 'flex') {
+                    closeOrderExpandModal();
                 }
             });
 
@@ -3408,50 +5528,144 @@
     </script>
 
     <script>
-        (function () {
-            document.querySelectorAll('[data-expand-order]').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var row = btn.closest('tr[data-order-row="true"]');
-                    if (!row) return;
-                    var expanded = row.classList.toggle('expanded');
-                    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                    btn.textContent = expanded ? 'Collapse ▲' : 'Expand ▼';
-                });
-            });
-        })();
-    </script>
-
-    <script>
         // Order filter tabs
         (function () {
             var tabs = Array.from(document.querySelectorAll('.filter-tab'));
             if (!tabs.length) return;
+            var rows = Array.from(document.querySelectorAll('.admin-table tbody tr[data-order-row="true"]'));
+            var bulkBar = document.getElementById('orders-bulk-bar');
+            var bulkCount = document.getElementById('orders-bulk-count');
+            var bulkHint = document.getElementById('orders-bulk-hint');
+            var selectAllBox = document.getElementById('select-all-orders');
+            var rowCheckboxes = Array.from(document.querySelectorAll('.order-select-checkbox'));
+            var activeFilter = 'needs-action';
+
+            function visibleCheckboxes() {
+                return rowCheckboxes.filter(function (checkbox) {
+                    var row = checkbox.closest('tr[data-order-row="true"]');
+                    return row && row.style.display !== 'none';
+                });
+            }
+
+            function selectedCheckboxes() {
+                return rowCheckboxes.filter(function (checkbox) {
+                    return checkbox.checked;
+                });
+            }
+
+            function clearSelections() {
+                rowCheckboxes.forEach(function (checkbox) {
+                    checkbox.checked = false;
+                    checkbox.closest('tr[data-order-row="true"]')?.classList.remove('row-selected');
+                });
+                if (selectAllBox) {
+                    selectAllBox.checked = false;
+                    selectAllBox.indeterminate = false;
+                }
+            }
+
+            function updateBulkMode() {
+                var deletedMode = activeFilter === 'deleted';
+                document.querySelectorAll('[data-bulk-mode]').forEach(function (form) {
+                    var mode = form.getAttribute('data-bulk-mode');
+                    form.hidden = deletedMode ? mode !== 'deleted' : mode !== 'standard';
+                });
+                if (bulkHint) {
+                    bulkHint.textContent = deletedMode
+                        ? 'Selected deleted orders will be permanently removed.'
+                        : 'Delete, archive, or decline the selected orders.';
+                }
+            }
+
+            function syncSelectionUi() {
+                var selected = selectedCheckboxes();
+                var visible = visibleCheckboxes();
+                var visibleChecked = visible.filter(function (checkbox) { return checkbox.checked; }).length;
+
+                rowCheckboxes.forEach(function (checkbox) {
+                    checkbox.closest('tr[data-order-row="true"]')?.classList.toggle('row-selected', checkbox.checked);
+                });
+
+                if (bulkCount) {
+                    bulkCount.textContent = selected.length === 1 ? '1 order selected' : selected.length + ' orders selected';
+                }
+
+                if (bulkBar) {
+                    bulkBar.hidden = selected.length === 0;
+                    bulkBar.classList.toggle('is-active', selected.length > 0);
+                }
+
+                if (selectAllBox) {
+                    selectAllBox.checked = visible.length > 0 && visibleChecked === visible.length;
+                    selectAllBox.indeterminate = visibleChecked > 0 && visibleChecked < visible.length;
+                }
+            }
+
+            function applyFilter(filter) {
+                activeFilter = filter;
+                rows.forEach(function (row) {
+                    var status = (row.dataset.orderStatus || '').toLowerCase();
+                    var isDeleted = row.dataset.deleted === 'true';
+                    var show = false;
+                    if (filter === 'all') {
+                        show = true;
+                    } else if (filter === 'cart') {
+                        show = !isDeleted && (status === 'in cart' || status === 'quoted' || status === 'pending quote');
+                    } else if (filter === 'needs-action') {
+                        show = !isDeleted && (status === 'requested' || status === 'in cart' || status === 'quoted' || status === 'pending quote' || status === 'waiting for approval');
+                    } else if (filter === 'printing') {
+                        show = !isDeleted && status === 'printing';
+                    } else if (filter === 'completed') {
+                        show = !isDeleted && (status === 'completed' || status === 'done' || status === 'delivered' || status === 'archived');
+                    } else if (filter === 'cancelled') {
+                        show = !isDeleted && (status === 'cancelled' || status === 'price denied' || status === 'declined');
+                    } else if (filter === 'deleted') {
+                        show = isDeleted;
+                    }
+                    row.style.display = show ? '' : 'none';
+                });
+                clearSelections();
+                updateBulkMode();
+                syncSelectionUi();
+            }
+
+            window.prepareBulkOrderAction = function (formElement, action, message) {
+                var selectedIds = selectedCheckboxes().map(function (checkbox) {
+                    return checkbox.value;
+                });
+                if (!selectedIds.length) return false;
+
+                var actionInput = formElement.querySelector('input[name="action"]');
+                var idsInput = formElement.querySelector('input[name="selected_order_ids"]');
+                var nextInput = formElement.querySelector('input[name="next"]');
+
+                if (actionInput) actionInput.value = action;
+                if (idsInput) idsInput.value = selectedIds.join(',');
+                if (nextInput) nextInput.value = window.location.pathname + '#orders-section';
+
+                showModal(formElement, message);
+                return false;
+            };
+
             tabs.forEach(function (tab) {
                 tab.addEventListener('click', function () {
                     tabs.forEach(function (t) { t.classList.remove('active'); });
                     tab.classList.add('active');
-                    var filter = tab.dataset.filter;
-                    document.querySelectorAll('.admin-table tbody tr[data-order-row="true"]').forEach(function (row) {
-                        var status = (row.dataset.orderStatus || '').toLowerCase();
-                        var isDeleted = row.dataset.deleted === 'true';
-                        var show = false;
-                        if (filter === 'all') {
-                            show = true;
-                        } else if (filter === 'cart') {
-                            show = !isDeleted && status === 'in cart';
-                        } else if (filter === 'needs-action') {
-                            show = !isDeleted && (status === 'in cart' || status === 'pending quote' || status === 'waiting for approval');
-                        } else if (filter === 'printing') {
-                            show = !isDeleted && (status === 'printing' || status === 'approved');
-                        } else if (filter === 'completed') {
-                            show = !isDeleted && (status === 'completed' || status === 'done' || status === 'delivered' || status === 'archived');
-                        } else if (filter === 'cancelled') {
-                            show = isDeleted || status === 'cancelled' || status === 'price denied' || status === 'declined';
-                        }
-                        row.style.display = show ? '' : 'none';
-                    });
+                    applyFilter(tab.dataset.filter);
                 });
             });
+
+            rowCheckboxes.forEach(function (checkbox) {
+                checkbox.addEventListener('change', syncSelectionUi);
+            });
+
+            selectAllBox?.addEventListener('change', function () {
+                visibleCheckboxes().forEach(function (checkbox) {
+                    checkbox.checked = selectAllBox.checked;
+                });
+                syncSelectionUi();
+            });
+
             var def = document.querySelector('.filter-tab[data-filter="needs-action"]');
             if (def) def.click();
         })();
