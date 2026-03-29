@@ -127,6 +127,32 @@
 
     .hero-dot.active { background: rgba(255,255,255,1); }
 
+    .featured-pagination {
+        margin: 10px 0 16px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .featured-pagination a {
+        text-decoration: none;
+        border: 1px solid #cfe2d7;
+        background: #f7fcf9;
+        color: #1f5940;
+        border-radius: 10px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .featured-pagination span {
+        font-size: 0.82rem;
+        color: #5b7268;
+        font-weight: 700;
+    }
+
     .hero-arrow {
         position: absolute;
         top: 50%;
@@ -658,6 +684,18 @@
     <div class="hero-dots" id="hero-dots"></div>
 </section>
 
+{% if featured_total_pages and featured_total_pages > 1 %}
+<div class="featured-pagination">
+    {% if featured_page > 1 %}
+    <a href="{{ url_for('index', featured_page=featured_page - 1) }}">Previous Prints</a>
+    {% endif %}
+    <span>Featured Page {{ featured_page }} of {{ featured_total_pages }}</span>
+    {% if featured_page < featured_total_pages %}
+    <a href="{{ url_for('index', featured_page=featured_page + 1) }}">More Prints</a>
+    {% endif %}
+</div>
+{% endif %}
+
 <div id="featured-order-modal" class="modal">
     <div class="modal-backdrop" id="featured-modal-backdrop"></div>
     <div class="config-modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
@@ -883,8 +921,18 @@
         parts: [],
         selections: {},
     };
-        modalState.profiles = [];
-        modalState.profileObj = null;
+    modalState.profiles = [];
+    modalState.profileObj = null;
+    let printProfilesPromise = null;
+
+    function getPrintProfiles() {
+        if (!printProfilesPromise) {
+            printProfilesPromise = fetch('/api/print-profiles')
+                .then(function (res) { return res.ok ? res.json() : []; })
+                .catch(function () { return []; });
+        }
+        return printProfilesPromise;
+    }
 
     function getFilamentCatalog() {
         let filaments = [];
@@ -1101,7 +1149,7 @@
 
         modalState.item = item;
         modalState.profile = '';
-            modalState.profileObj = null;
+        modalState.profileObj = null;
         modalState.parts = deriveParts(item);
         modalState.selections = {};
         modalState.parts.forEach(function (part) {
@@ -1112,35 +1160,32 @@
         modal.dataset.featuredId = item.id || '';
         modal.classList.add('open');
 
-            renderParts();
-            renderPrice();
+        renderParts();
+        renderPrice();
 
-            const itemProfiles = normalizeItemProfiles(item);
-            if (itemProfiles.length) {
-                modalState.profiles = itemProfiles;
+        const itemProfiles = normalizeItemProfiles(item);
+        if (itemProfiles.length) {
+            modalState.profiles = itemProfiles;
+            modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
+            modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+            renderProfiles();
+            renderPrice();
+        } else {
+            getPrintProfiles().then(function (profiles) {
+                const basePrice = Number((modalState.item && modalState.item.price) || 0);
+                const rawProfiles = Array.isArray(profiles) ? profiles : [];
+                modalState.profiles = rawProfiles.map(function (p) {
+                    return { name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
+                });
+                if (!modalState.profiles.length) {
+                    modalState.profiles = [{ name: 'Standard', price: basePrice, is_default: true }];
+                }
                 modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
                 modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
                 renderProfiles();
                 renderPrice();
-            } else {
-                fetch('/api/print-profiles')
-                    .then(function (res) { return res.ok ? res.json() : []; })
-                    .catch(function () { return []; })
-                    .then(function (profiles) {
-                        const basePrice = Number((modalState.item && modalState.item.price) || 0);
-                        const rawProfiles = Array.isArray(profiles) ? profiles : [];
-                        modalState.profiles = rawProfiles.map(function (p) {
-                            return { name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
-                        });
-                        if (!modalState.profiles.length) {
-                            modalState.profiles = [{ name: 'Standard', price: basePrice, is_default: true }];
-                        }
-                        modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
-                        modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
-                        renderProfiles();
-                        renderPrice();
-                    });
-            }
+            });
+        }
     }
 
     function closeFeaturedModal() {

@@ -2,6 +2,7 @@ import argparse
 import atexit
 import csv
 import io
+import math
 import os
 from pathlib import Path
 import random
@@ -21,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / '.env')
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = timedelta(days=30)
 
 # --- CONFIGURATION ---
 def _required_env(name):
@@ -298,6 +300,18 @@ def _to_float(value, default=0.0):
         return float(value)
     except Exception:
         return float(default)
+
+
+def _to_int(value, default=0, min_value=None, max_value=None):
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = int(default)
+    if min_value is not None:
+        parsed = max(int(min_value), parsed)
+    if max_value is not None:
+        parsed = min(int(max_value), parsed)
+    return parsed
 
 
 def _to_bool(value, default=False):
@@ -1109,7 +1123,7 @@ def _default_featured_items():
     ]
 
 
-def _build_user_portal_context(user_id, search_query=''):
+def _build_user_portal_context(user_id, search_query='', history_page=1, history_page_size=16, featured_page=1, featured_page_size=6):
     db = get_db()
     purged_ids = _purge_expired_soft_deletes(db)
     if purged_ids:
@@ -1156,12 +1170,26 @@ def _build_user_portal_context(user_id, search_query=''):
     else:
         filtered_orders = user_orders
 
+    history_page_size = _to_int(history_page_size, default=16, min_value=6, max_value=40)
+    history_total = len(filtered_orders)
+    history_total_pages = max(1, int(math.ceil(history_total / float(history_page_size))))
+    history_page = _to_int(history_page, default=1, min_value=1, max_value=history_total_pages)
+    history_start = (history_page - 1) * history_page_size
+    filtered_orders_page = filtered_orders[history_start:history_start + history_page_size]
+
     featured_items = [
         f for f in db.get('featured_prints', [])
         if _featured_item_visible_to_user(f, user_id)
     ]
     if not featured_items:
         featured_items = _default_featured_items()
+
+    featured_page_size = _to_int(featured_page_size, default=6, min_value=3, max_value=12)
+    featured_total = len(featured_items)
+    featured_total_pages = max(1, int(math.ceil(featured_total / float(featured_page_size))))
+    featured_page = _to_int(featured_page, default=1, min_value=1, max_value=featured_total_pages)
+    featured_start = (featured_page - 1) * featured_page_size
+    featured_items_page = featured_items[featured_start:featured_start + featured_page_size]
 
     in_stock_filaments = [
         f for f in filaments
@@ -1233,10 +1261,16 @@ def _build_user_portal_context(user_id, search_query=''):
         'db': db,
         'user': user,
         'filaments': filaments,
-        'featured_items': featured_items,
+        'featured_items': featured_items_page,
+        'featured_items_total': featured_total,
+        'featured_page': featured_page,
+        'featured_total_pages': featured_total_pages,
         'recent_orders': user_orders[:3],
         'all_orders': user_orders,
-        'filtered_orders': filtered_orders,
+        'filtered_orders': filtered_orders_page,
+        'history_orders_total': history_total,
+        'history_page': history_page,
+        'history_total_pages': history_total_pages,
         'cart_orders': cart_orders,
         'cart_count': len(cart_orders),
         'latest_order': user_orders[0] if user_orders else None,
@@ -1263,7 +1297,11 @@ def _build_user_portal_context(user_id, search_query=''):
 def index():
     if not session.get('user_id'):
         return redirect(url_for('user_login'))
-    context = _build_user_portal_context(session.get('user_id'))
+    featured_page = _to_int(request.args.get('featured_page'), default=1, min_value=1)
+    context = _build_user_portal_context(
+        session.get('user_id'),
+        featured_page=featured_page,
+    )
     return render_template('user_home.html', active_tab='home', **context)
 
 
@@ -1335,7 +1373,12 @@ def user_history():
     if not session.get('user_id'):
         return redirect(url_for('user_login'))
     q = (request.args.get('q') or '').strip()
-    context = _build_user_portal_context(session.get('user_id'), search_query=q)
+    history_page = _to_int(request.args.get('page'), default=1, min_value=1)
+    context = _build_user_portal_context(
+        session.get('user_id'),
+        search_query=q,
+        history_page=history_page,
+    )
     return render_template(
         'user_history.html',
         active_tab='history',
@@ -2039,10 +2082,45 @@ def user_updates_api():
     if not session.get('user_id'):
         return jsonify({'error': 'Unauthorized'}), 401
 
-    context = _build_user_portal_context(session.get('user_id'))
+    user_id = session.get('user_id')
+    user_rows = _execute("SELECT json FROM users WHERE id = %s", (user_id,), fetch=True) or []
+    user = None
+    if user_rows:
+        try:
+            user = json.loads(user_rows[0][0])
+        except Exception:
+            user = None
+
+    order_rows = _execute(
+        "SELECT json FROM orders WHERE (json::jsonb ->> 'owner') = %s",
+        (user_id,),
+        fetch=True,
+    ) or []
+    user_orders = []
+    for row in order_rows:
+        try:
+            parsed = json.loads(row[0])
+            if isinstance(parsed, dict):
+                user_orders.append(parsed)
+        except Exception:
+            continue
+
+    user_orders = sorted(
+        user_orders,
+        key=lambda o: _order_last_modified(o) or datetime.min,
+        reverse=True,
+    )
+    user_notifications = _build_user_notifications(user, user_orders)
+    unread_user_notification_count = sum(1 for n in user_notifications if n.get('is_unread'))
+    user_updates_token = ''
+    if user_orders:
+        last_dt = _order_last_modified(user_orders[0])
+        if last_dt is not None:
+            user_updates_token = last_dt.isoformat()
+
     return jsonify({
-        'latest_update_token': context.get('user_updates_token') or '',
-        'unread_notifications': int(context.get('unread_user_notification_count') or 0),
+        'latest_update_token': user_updates_token,
+        'unread_notifications': int(unread_user_notification_count or 0),
     })
 
 

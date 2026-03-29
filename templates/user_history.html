@@ -352,6 +352,32 @@
         line-height: 1.4;
     }
 
+    .history-pagination {
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .history-pagination a {
+        text-decoration: none;
+        border: 1px solid #cfe2d7;
+        background: #f7fcf9;
+        color: #1f5940;
+        border-radius: 10px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .history-pagination span {
+        font-size: 0.82rem;
+        color: #5b7268;
+        font-weight: 700;
+    }
+
     .modal-overlay {
         display: none;
         position: fixed;
@@ -560,6 +586,18 @@
         <h3>Your printer is idle! Start your first project today.</h3>
         <p>Browse featured prints and submit your first order.</p>
         <a class="browse-btn" href="/">Browse Prints</a>
+    </div>
+    {% endif %}
+
+    {% if history_total_pages and history_total_pages > 1 %}
+    <div class="history-pagination">
+        {% if history_page > 1 %}
+        <a href="{{ url_for('user_history', q=search_query, page=history_page - 1) }}">Previous Page</a>
+        {% endif %}
+        <span>Page {{ history_page }} of {{ history_total_pages }}</span>
+        {% if history_page < history_total_pages %}
+        <a href="{{ url_for('user_history', q=search_query, page=history_page + 1) }}">Next Page</a>
+        {% endif %}
     </div>
     {% endif %}
 </div>
