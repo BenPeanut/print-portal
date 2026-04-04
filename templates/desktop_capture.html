@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Desktop Capture</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='desktop_capture.css', v=request.args.get('_ts', '')) }}" />
+    <style>
+        .dc-host { padding: 16px !important; }
+        .dc-box {
+            padding: 20px !important;
+            background: #ffffff !important;
+            border: 1px solid #dfe4e1 !important;
+            border-radius: 12px !important;
+        }
+    </style>
+    <script>
+        // Report full content height to popup so iframe can match it (no independent scroll)
+        (function() {
+            function sendHeight() {
+                var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+                window.parent.postMessage({ type: 'dc_resize', height: h }, '*');
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    sendHeight();
+                    new ResizeObserver(sendHeight).observe(document.body);
+                });
+            } else {
+                sendHeight();
+                new ResizeObserver(sendHeight).observe(document.body);
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="dc-host">
+        <div class="dc-box">
+            <h2 class="modal-title">Add Suggested Print</h2>
+
+            <div id="global-status" class="status-bar hidden"></div>
+
+            <div id="capture-panel" class="modal-form">
+                <div class="model-card">
+                    <div id="model-thumb" class="model-thumb"></div>
+                    <div class="model-card-info">
+                        <input id="field-title" placeholder="Title" />
+                        <input id="field-link" placeholder="MakerWorld URL" />
+                    </div>
+                </div>
+
+                <button id="load-model-btn" class="btn-secondary" type="button">Load Model Data</button>
+
+                <textarea id="field-description" placeholder="Short description" rows="2"></textarea>
+
+                <label class="target-choice" style="grid-template-columns: 18px minmax(0,1fr); margin-top: 2px;">
+                    <input type="checkbox" id="field-show-in-slideshow" />
+                    <span>Show this model in homepage slideshow</span>
+                </label>
+
+                <input type="hidden" id="field-filament" />
+                <input type="hidden" id="field-suggested-colors" />
+
+                <div class="featured-profile-builder">
+                    <label style="font-weight:700; color:#2a4a3a; margin-bottom:6px; display:block;">Profile Pricing Builder</label>
+                    <div id="profile-rows" class="featured-profile-list"></div>
+                    <button id="add-profile-btn" class="featured-add-part-btn" type="button">+ Add Profile</button>
+                    <input type="hidden" id="field-profile" />
+                    <input type="hidden" id="field-profile-pricing" value="[]" />
+                </div>
+
+                <label>Targets (you can pick multiple users)</label>
+                <div class="target-grid" id="field-target-users-grid">
+                    <!-- populated by JS -->
+                </div>
+
+                <div class="form-grid-2">
+                    <label>
+                        Weight (g)
+                        <input type="number" id="field-weight" min="0" step="0.1" placeholder="0" />
+                    </label>
+                    <label>
+                        Print Time (hrs)
+                        <input type="number" id="field-hours" min="0" step="0.1" placeholder="0" />
+                    </label>
+                </div>
+
+                <input type="hidden" id="field-price" value="0" />
+
+                <details class="settings-details" id="settings-details">
+                    <summary class="settings-toggle">Settings</summary>
+                    <div class="settings-body">
+                        <div class="settings-group">
+                            <div class="settings-group-title">Connection</div>
+                            <label class="settings-label">API Base URL
+                                <input id="s-api-base" placeholder="http://127.0.0.1:5000" />
+                            </label>
+                            <label class="settings-label">API Key
+                                <input id="s-api-key" placeholder="Optional API key" type="password" />
+                            </label>
+                        </div>
+                        <div class="settings-group">
+                            <div class="settings-group-title">Pricing Overrides</div>
+                            <p class="settings-note">Leave blank to use current server-side pricing settings.</p>
+                            <label class="settings-label">Base Service Fee (Rp)
+                                <input id="s-base-fee" type="number" placeholder="e.g. 5000" min="0" />
+                            </label>
+                            <label class="settings-label">Price per Gram (Rp/g)
+                                <input id="s-price-per-gram" type="number" placeholder="e.g. 150" min="0" />
+                            </label>
+                            <label class="settings-label">Power Cost per Hour (Rp/hr)
+                                <input id="s-power-cost" type="number" placeholder="e.g. 500" min="0" />
+                            </label>
+                            <label class="settings-label">Profit Margin (multiplier)
+                                <input id="s-profit-margin" type="number" placeholder="e.g. 1.2" min="0" step="0.01" />
+                            </label>
+                        </div>
+                        <button id="save-settings-btn" class="btn-secondary" type="button">Save Settings</button>
+                        <p id="settings-status" class="status-text"></p>
+                    </div>
+                </details>
+
+                <div class="modal-actions">
+                    <button id="submit-btn" class="btn btn-primary" type="button">Save Featured Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='capture_shared.js', v=request.args.get('_ts', '')) }}"></script>
+    <script src="{{ url_for('static', filename='desktop_capture.js', v=request.args.get('_ts', '')) }}"></script>
+</body>
+</html>

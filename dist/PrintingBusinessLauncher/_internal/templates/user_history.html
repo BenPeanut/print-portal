@@ -1,0 +1,637 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'My Orders | Client Portal' %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+    .orders-page {
+        background: #ffffff;
+        font-family: 'Inter', sans-serif;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+        padding: 22px 24px 28px;
+        overflow: hidden;
+    }
+
+    .orders-shell {
+        max-width: 980px;
+        margin: 0 auto;
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    .orders-head {
+        margin-bottom: 16px;
+    }
+
+    .orders-head h2 {
+        margin: 0;
+        font-size: 1.45rem;
+        color: #1e293b;
+        font-weight: 800;
+    }
+
+    .orders-head p {
+        margin: 6px 0 0;
+        color: #64748b;
+        font-size: 0.94rem;
+    }
+
+    .status-badge.cancelled {
+        border-color: #ef4444;
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .status-badge.awaiting-deletion {
+        border-color: #d1d5db;
+        background: #f3f4f6;
+        color: #4b5563;
+    }
+
+    .search-form {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .order-card.cancelled {
+        background: #f8fafc;
+        border-color: #d1d5db;
+        box-shadow: none;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .order-card.cancelled::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(148, 163, 184, 0.28);
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    .order-card.cancelled > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    .order-card.cancelled .order-ref,
+    .order-card.cancelled .model-name,
+    .order-card.cancelled .order-total {
+        color: #6b7280;
+    }
+
+    .order-card.cancelled .order-date,
+    .order-card.cancelled .parts-text {
+        color: #9ca3af;
+    }
+
+    .search-form input {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-width: 260px;
+        background: #fff;
+        color: #1e293b;
+    }
+
+    .search-form button {
+        border: 1px solid #00ae42;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: #fff;
+        color: #00ae42;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .group-title {
+        margin: 22px 0 10px;
+        font-size: 0.86rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 800;
+    }
+
+    .order-list {
+        display: grid;
+        gap: 12px;
+    }
+
+    .order-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 18px;
+        color: #1e293b;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    .card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+    .order-ref {
+        font-weight: 800;
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
+        color: #1e293b;
+    }
+
+    .order-date {
+        margin-top: 2px;
+        color: #64748b;
+        font-size: 0.8rem;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid #bbf7d0;
+        background: #ecfdf5;
+        color: #166534;
+        padding: 5px 10px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        text-transform: capitalize;
+    }
+
+    .order-total {
+        font-size: 1.22rem;
+        font-weight: 900;
+        color: #1e293b;
+        white-space: nowrap;
+    }
+
+    .card-middle {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+        align-items: center;
+    }
+
+    .model-name {
+        margin: 1px 0 6px;
+        font-size: 1.01rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .parts-text {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #64748b;
+        line-height: 1.45;
+    }
+
+    .tracker {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+    }
+
+    .stage {
+        position: relative;
+        text-align: center;
+        font-size: 0.72rem;
+        color: #94a3b8;
+        font-weight: 700;
+        padding-top: 18px;
+    }
+
+    .stage::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 12px;
+        height: 12px;
+        box-sizing: border-box;
+        border-radius: 999px;
+        background: #ffffff;
+        border: 2px solid #cbd5e1;
+        z-index: 2;
+    }
+
+    .stage::after {
+        content: '';
+        position: absolute;
+        top: 4px;
+        left: -50%;
+        width: 100%;
+        height: 4px;
+        background: #e2e8f0;
+        z-index: 1;
+        border-radius: 999px;
+    }
+
+    .stage:first-child::after {
+        display: none;
+    }
+
+    .stage.done {
+        color: #00ae42;
+    }
+
+    .stage.done::before {
+        background: #00ae42;
+        border-color: #00ae42;
+    }
+
+    .stage.done::after {
+        background: #00ae42;
+    }
+
+    .stage.pulse::before {
+        animation: historyPulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes historyPulse {
+        0% { box-shadow: 0 0 0 0 rgba(0, 174, 66, 0.4); }
+        70% { box-shadow: 0 0 0 8px rgba(0, 174, 66, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(0, 174, 66, 0); }
+    }
+
+    .empty-state {
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 52px 36px;
+        text-align: center;
+    }
+
+    @media (max-width: 760px) {
+        .empty-state {
+            padding: 34px 22px;
+        }
+    }
+
+    .empty-state h3 {
+        margin: 0;
+        color: #1e293b;
+        font-size: 1.2rem;
+        font-weight: 800;
+    }
+
+    .empty-state p {
+        margin: 8px 0 16px;
+        color: #64748b;
+    }
+
+    .browse-btn {
+        display: inline-block;
+        border-radius: 12px;
+        padding: 11px 18px;
+        text-decoration: none;
+        background: #00ae42;
+        border: 1px solid #00963a;
+        color: #fff;
+        font-weight: 800;
+    }
+
+    .quick-actions {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .quick-actions a {
+        text-decoration: none;
+        font-size: 0.76rem;
+        border-radius: 8px;
+        padding: 7px 10px;
+        border: 1px solid #00ae42;
+        color: #00ae42;
+        background: #ffffff;
+        font-weight: 700;
+    }
+
+    .quick-actions form {
+        margin: 0;
+    }
+
+    .quick-actions button {
+        font-size: 0.76rem;
+        border-radius: 8px;
+        padding: 7px 10px;
+        border: 1px solid #dc2626;
+        color: #b91c1c;
+        background: #fff5f5;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .pending-delete-note {
+        margin-top: 10px;
+        border-radius: 10px;
+        border: 1px solid #d1d5db;
+        background: #f3f4f6;
+        color: #4b5563;
+        padding: 8px 10px;
+        font-size: 0.78rem;
+        line-height: 1.4;
+    }
+
+    .history-pagination {
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .history-pagination a {
+        text-decoration: none;
+        border: 1px solid #cfe2d7;
+        background: #f7fcf9;
+        color: #1f5940;
+        border-radius: 10px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .history-pagination span {
+        font-size: 0.82rem;
+        color: #5b7268;
+        font-weight: 700;
+    }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal-box {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        max-width: 420px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .modal-message {
+        margin: 0 0 25px 0;
+        font-size: 1.1em;
+        color: #333;
+        font-weight: bold;
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 10px;
+    }
+
+    .modal-btn {
+        flex: 1;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1em;
+        border: none;
+        transition: all 0.2s;
+    }
+
+    .modal-btn-cancel {
+        background: white;
+        color: #333;
+        border: 1px solid #ccc;
+    }
+
+    .modal-btn-cancel:hover {
+        background: #f0f0f0;
+    }
+
+    .modal-btn-confirm {
+        background: #d9534f;
+        color: white;
+    }
+
+    .modal-btn-confirm:hover {
+        background: #c9302c;
+    }
+
+    @media (max-width: 760px) {
+        .orders-page {
+            padding: 16px 14px 20px;
+            border-radius: 14px;
+        }
+
+        .orders-shell {
+            padding: 0;
+        }
+
+        .card-middle {
+            grid-template-columns: 1fr;
+        }
+
+        .order-total {
+            margin-top: 8px;
+        }
+    }
+</style>
+
+<section class="orders-page">
+<div class="orders-shell">
+    <div class="orders-head">
+        <h2>My Orders</h2>
+        <p>Track your current and completed prints in one view.</p>
+    </div>
+
+    <form class="search-form" action="/history" method="GET">
+        <input type="text" name="q" value="{{ search_query or '' }}" placeholder="Search by order ID, model, or status">
+        <button type="submit">Search</button>
+    </form>
+
+    {% if filtered_orders and filtered_orders|length > 0 %}
+    <h3 class="group-title">Current Prints</h3>
+    <div class="order-list">
+        {% for order in filtered_orders %}
+        {% set status_text = order.get('status_display') or order.status or 'Unknown' %}
+        {% set status_key = status_text|lower|trim|replace(' ', '-') %}
+        {% set is_past = status_key in ['completed', 'delivered', 'done', 'cancelled', 'awaiting-deletion'] %}
+        {% if not is_past %}
+        {% set total_price = (order.print_price|int) + (order.material_fee|int) %}
+        {% set color_text = order.get('selected_colors') or order.get('color') or 'Standard color setup' %}
+
+        {% set step_ordered = true %}
+        {% set step_confirmed = status_key in ['confirmed', 'printing', 'ready', 'shipped', 'completed', 'delivered', 'done'] %}
+        {% set step_printing = status_key in ['printing', 'ready', 'shipped', 'completed', 'delivered', 'done'] %}
+        {% set step_ready = status_key in ['ready', 'shipped', 'completed', 'delivered', 'done'] %}
+
+        <article class="order-card">
+            <div class="card-head">
+                <div>
+                    <div class="order-ref">#{{ (order.id or '000')|upper }}</div>
+                    <div class="order-date">{{ ((order.get('created_at') or order.get('submitted_at') or '')|string)[:10] or 'Date N/A' }}</div>
+                </div>
+                <div class="status-badge {{ status_key }}">{{ status_text }}</div>
+            </div>
+
+            <div class="card-middle">
+                <div>
+                    <h4 class="model-name">{{ order.name or order.product_name or 'Unnamed Model' }}</h4>
+                    <p class="parts-text">{{ color_text }}</p>
+                </div>
+
+                <div class="order-total">Rp {{ '{:,}'.format(total_price) }}</div>
+            </div>
+
+            <div class="tracker">
+                <div class="stage {% if step_ordered %}done{% endif %}">Placed</div>
+                <div class="stage {% if step_confirmed %}done{% endif %}">Confirmed</div>
+                <div class="stage {% if step_printing %}done{% endif %} {% if status_key == 'printing' %}pulse{% endif %}">Printing</div>
+                <div class="stage {% if step_ready %}done{% endif %}">Shipped</div>
+            </div>
+
+            <div class="quick-actions">
+                <a href="/order/{{ order.id }}" data-order-preview-url="/order/{{ order.id }}" data-order-preview-title="Order #{{ order.id }}">View Details</a>
+                <a href="/order/{{ order.id }}/invoice">Invoice</a>
+            </div>
+        </article>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <h3 class="group-title">Past Prints</h3>
+    <div class="order-list">
+        {% for order in filtered_orders %}
+        {% set status_text = order.get('status_display') or order.status or 'Unknown' %}
+        {% set status_key = status_text|lower|trim|replace(' ', '-') %}
+        {% set is_past = status_key in ['completed', 'delivered', 'done', 'cancelled', 'awaiting-deletion'] %}
+        {% if is_past %}
+        {% set total_price = (order.print_price|int) + (order.material_fee|int) %}
+        {% set color_text = order.get('selected_colors') or order.get('color') or 'Standard color setup' %}
+        {% set is_cancelled = status_key in ['cancelled', 'awaiting-deletion'] %}
+
+        <article class="order-card {% if is_cancelled %}cancelled{% endif %}">
+            <div class="card-head">
+                <div>
+                    <div class="order-ref">#{{ (order.id or '000')|upper }}</div>
+                    <div class="order-date">{{ ((order.get('created_at') or order.get('submitted_at') or '')|string)[:10] or 'Date N/A' }}</div>
+                </div>
+                <div class="status-badge {{ status_key }}">{{ status_text }}</div>
+            </div>
+
+            <div class="card-middle">
+                <div>
+                    <h4 class="model-name">{{ order.name or order.product_name or 'Unnamed Model' }}</h4>
+                    <p class="parts-text">{{ color_text }}</p>
+                </div>
+
+                <div class="order-total">Rp {{ '{:,}'.format(total_price) }}</div>
+            </div>
+
+            <div class="quick-actions">
+                <a href="/order/{{ order.id }}" data-order-preview-url="/order/{{ order.id }}" data-order-preview-title="Order #{{ order.id }}">View Details</a>
+                <a href="/order/{{ order.id }}/invoice">Invoice</a>
+                {% if status_key == 'cancelled' and not order.get('deleted_at') %}
+                <form action="/soft_delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order for deletion? It will be removed in 3 days unless restored.');">
+                    <input type="hidden" name="next" value="/history">
+                    <button type="submit">Delete</button>
+                </form>
+                {% endif %}
+            </div>
+            {% if not is_cancelled %}
+            <div class="tracker">
+                <div class="stage done">Placed</div>
+                <div class="stage done">Confirmed</div>
+                <div class="stage done">Printing</div>
+                <div class="stage done">Shipped</div>
+            </div>
+            {% endif %}
+            {% if order.get('deleted_at') %}
+            <div class="pending-delete-note">
+                Awaiting deletion. This order will be permanently removed {% if order.get('pending_delete_on') %}on {{ order.get('pending_delete_on') }}{% else %}within 3 days{% endif %}.
+            </div>
+            {% endif %}
+        </article>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>Your printer is idle! Start your first project today.</h3>
+        <p>Browse featured prints and submit your first order.</p>
+        <a class="browse-btn" href="/">Browse Prints</a>
+    </div>
+    {% endif %}
+
+    {% if history_total_pages and history_total_pages > 1 %}
+    <div class="history-pagination">
+        {% if history_page > 1 %}
+        <a href="{{ url_for('user_history', q=search_query, page=history_page - 1) }}">Previous Page</a>
+        {% endif %}
+        <span>Page {{ history_page }} of {{ history_total_pages }}</span>
+        {% if history_page < history_total_pages %}
+        <a href="{{ url_for('user_history', q=search_query, page=history_page + 1) }}">Next Page</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+</section>
+
+<div id="customModal" class="modal-overlay">
+    <div class="modal-box">
+        <p id="modalMessage" class="modal-message">Are you sure?</p>
+        <div class="modal-buttons">
+            <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn">Yes, Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    let pendingForm = null;
+
+    window.showModal = function (formElement, message) {
+        pendingForm = formElement;
+        document.getElementById('modalMessage').innerText = message;
+        document.getElementById('customModal').style.display = 'flex';
+    };
+
+    window.closeModal = function () {
+        pendingForm = null;
+        document.getElementById('customModal').style.display = 'none';
+    };
+
+    document.getElementById('modalConfirmBtn')?.addEventListener('click', function () {
+        if (pendingForm) pendingForm.submit();
+    });
+})();
+</script>
+
+{% endblock %}

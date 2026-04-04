@@ -3,6 +3,11 @@
 
 {% block content %}
 <style>
+    html.modal-open,
+    body.modal-open {
+        overflow: hidden;
+    }
+
     .order-shell {
         max-width: 1120px;
         margin: 0 auto;
@@ -186,13 +191,23 @@
         margin: 0;
     }
 
+    .muted-btn {
+        border: 1px solid #d8e6de;
+        background: #fbfefd;
+        color: #345f50;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-weight: 700;
+        width: auto;
+    }
+
     .modal {
         display: none;
         position: fixed;
         inset: 0;
         align-items: center;
         justify-content: center;
-        z-index: 1000;
+        z-index: 1200;
     }
 
     .modal.open { display: flex; }
@@ -200,44 +215,209 @@
     .modal-backdrop {
         position: absolute;
         inset: 0;
-        background: rgba(0,0,0,0.55);
+        background: rgba(0, 0, 0, 0.55);
         backdrop-filter: blur(6px);
         -webkit-backdrop-filter: blur(6px);
     }
 
-    .modal-content {
+    .config-modal-content {
         position: relative;
         background: #ffffff;
-        border-radius: 14px;
-        padding: 22px 24px;
-        width: min(480px, 90%);
-        box-shadow: 0 16px 36px rgba(0,0,0,0.25);
+        border-radius: 24px;
+        width: min(1120px, calc(100vw - 36px));
+        max-height: calc(100vh - 36px);
+        box-shadow: 0 20px 54px rgba(5, 32, 20, 0.35);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
     }
 
-    .modal-actions {
+    .config-media {
+        position: relative;
+        min-height: 520px;
+        background: radial-gradient(circle at 35% 20%, #ffffff 0%, #f1f7f4 58%, #e8f0ec 100%);
+        border-right: 1px solid #dbe8e1;
+    }
+
+    .config-media-image {
+        position: absolute;
+        inset: 24px;
+        border-radius: 18px;
+        background-size: cover;
+        background-position: center;
+        box-shadow: 0 14px 32px rgba(15, 55, 37, 0.2);
+    }
+
+    .config-form {
+        overflow-y: auto;
+        padding: 26px 24px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fcf9 100%);
+    }
+
+    .config-headline {
+        margin: 0;
+        font-size: 1.65rem;
+        line-height: 1.1;
+        color: #153e2f;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+    }
+
+    .config-copy {
+        margin: 10px 0 18px;
+        color: #557266;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .config-price {
+        margin: 0 0 20px;
+        font-size: 2rem;
+        color: #00ae42;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+    }
+
+    .config-section {
+        border: 1px solid #dce9e2;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px 14px 12px;
+        margin-bottom: 12px;
+    }
+
+    .config-section-title {
+        margin: 0 0 10px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: #2f5747;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .profile-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .profile-pill {
+        border: 1px solid #cfe0d7;
+        background: #f7fcf9;
+        color: #235743;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.85rem;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .profile-pill:hover {
+        background: #eef8f3;
+        border-color: #b9d8c9;
+    }
+
+    .profile-pill.active {
+        background: #00ae42;
+        color: #ffffff;
+        border-color: #00ae42;
+        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.26);
+    }
+
+    .parts-stack {
+        display: grid;
+        gap: 10px;
+        overflow: visible;
+    }
+
+    .part-card {
+        border: 1px solid #dce9e2;
+        border-radius: 14px;
+        background: #fafdfb;
+        padding: 10px 10px 12px;
+        position: relative;
+    }
+
+    .part-card:hover {
+        z-index: 2;
+    }
+
+    .part-title {
+        margin: 0 0 8px;
+        color: #1d4f39;
+        font-size: 0.92rem;
+        font-weight: 800;
+    }
+
+    .swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        gap: 8px;
+        overflow: visible;
+    }
+
+    .swatch-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid rgba(0, 0, 0, 0.08);
+        cursor: pointer;
+        position: relative;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+        justify-self: center;
+        z-index: 1;
+    }
+
+    .swatch-btn:hover {
+        transform: translateY(-1px);
+        z-index: 5;
+    }
+
+    .swatch-btn:focus-visible {
+        z-index: 5;
+    }
+
+    .swatch-btn.active {
+        transform: scale(1.06);
+        border-color: #1a553a;
+        box-shadow: 0 0 0 3px rgba(21, 85, 57, 0.16);
+        z-index: 4;
+    }
+
+    .swatch-btn.suggested {
+        box-shadow: 0 0 15px rgba(0, 174, 66, 0.6);
+        filter: saturate(1.08) blur(0.15px);
+    }
+
+    .swatch-btn::after {
+        content: attr(data-name);
+        position: absolute;
+        left: 50%;
+        top: calc(100% + 8px);
+        transform: translateX(-50%);
+        background: #143d2d;
+        color: #ffffff;
+        font-size: 0.68rem;
+        line-height: 1;
+        border-radius: 999px;
+        padding: 5px 8px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+        z-index: 9999;
+    }
+
+    .swatch-btn:hover::after,
+    .swatch-btn:focus-visible::after { opacity: 1; }
+
+    .config-actions {
         display: flex;
         justify-content: flex-end;
         gap: 10px;
         margin-top: 18px;
     }
-
-    #modal-cancel {
-        background: rgba(255,255,255,0.9);
-        border: 2px solid #d23a3a;
-        color: #d23a3a;
-        border-radius: 8px;
-        width: auto;
-        margin: 0;
-        padding: 10px 12px;
-    }
-
-    #modal-confirm {
-        width: auto;
-        margin: 0;
-        padding: 10px 14px;
-    }
-
-    #modal-cancel:hover { background: rgba(210, 58, 58, 0.12); }
 
     .price-estimate {
         display: inline-block;
@@ -290,6 +470,22 @@
         .submit-row {
             grid-template-columns: 1fr;
         }
+    }
+
+    @media (max-width: 980px) {
+        .config-modal-content {
+            grid-template-columns: 1fr;
+            width: min(760px, calc(100vw - 24px));
+        }
+
+        .config-media {
+            min-height: 280px;
+            border-right: none;
+            border-bottom: 1px solid #dbe8e1;
+        }
+
+        .config-media-image { inset: 14px; }
+        .config-form { padding: 18px 14px; }
     }
 </style>
 
@@ -500,9 +696,47 @@
     data-filaments='{{ filaments|tojson|safe }}'>
 </div>
 
+<div id="featured-order-modal" class="modal">
+    <div class="modal-backdrop" id="featured-modal-backdrop"></div>
+    <div class="config-modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
+        <div class="config-media">
+            <div id="featured-modal-image" class="config-media-image"></div>
+        </div>
+        <div class="config-form">
+            <h3 id="featured-modal-title" class="config-headline">Featured Print</h3>
+            <p id="featured-modal-description" class="config-copy"></p>
+            <p id="featured-modal-price" class="config-price">Rp0</p>
+
+            <section class="config-section">
+                <p class="config-section-title">Print Profile</p>
+                <div id="featured-modal-profile-pills" class="profile-pills"></div>
+            </section>
+
+            <section class="config-section">
+                <p class="config-section-title">Part Colors</p>
+                <div id="featured-modal-parts" class="parts-stack"></div>
+            </section>
+
+            <div class="config-actions">
+                <button type="button" id="featured-modal-cancel" class="muted-btn">Cancel</button>
+                <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Add To Cart</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function() {
     let addCartInProgress = false;
+    let modalConfirmInProgress = false;
+    const modalState = {
+        item: null,
+        profiles: [],
+        profile: '',
+        profileObj: null,
+        parts: [],
+        selections: {},
+    };
     const dataEl = document.getElementById('order-form-data');
     let filamentCatalog = [];
     try {
@@ -539,6 +773,242 @@
         } else {
             hint.textContent = "Looks feasible \u2014 we'll do our best to meet this date.";
         }
+    }
+
+    function titleFromLink(linkVal) {
+        let displayName = 'Unnamed Model';
+        try {
+            let normalized = linkVal;
+            if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
+            const url = new URL(normalized);
+            const segs = url.pathname.split('/').filter(Boolean);
+            const candidate = segs.find(function (s) { return /^\d+-/.test(s); }) || segs[segs.length - 1] || '';
+            if (candidate) {
+                const parts = candidate.split('-');
+                const slug = (parts[0].match(/^\d+$/) ? parts.slice(1) : parts).join(' ');
+                displayName = slug.trim().replace(/\b\w/g, function (c) { return c.toUpperCase(); }) || 'Unnamed Model';
+            }
+        } catch (e) {}
+        return displayName;
+    }
+
+    function collectRows() {
+        return Array.from(document.querySelectorAll('#color-mappings .swatch-row-card'));
+    }
+
+    function buildSelectionDraft() {
+        const linkInput = document.getElementById('makerworld_link');
+        const linkVal = (linkInput ? linkInput.value.trim() : '');
+        const allowedRe = /^(?:https?:\/\/)?(?:www\.)?(?:makerworld\.com|printables\.com)(?:[\/\:\?#]|$)/i;
+        if (!allowedRe.test(linkVal)) {
+            alert('Please enter a makerworld.com or printables.com link.');
+            linkInput?.focus();
+            return null;
+        }
+
+        const modeEl = document.querySelector('input[name="color_mode"]:checked');
+        const mode = modeEl ? modeEl.value : 'single';
+        const singleSelect = document.querySelector('select[name="single_filament"]');
+
+        if (mode === 'single' && singleSelect && !singleSelect.value) {
+            alert('Please choose a filament color.');
+            return null;
+        }
+
+        if (mode === 'multi') {
+            const rows = collectRows();
+            if (rows.length < 2) {
+                alert('Multi-color requires at least 2 mapped parts.');
+                return null;
+            }
+            for (const row of rows) {
+                const part = row.querySelector('input[name="model_part[]"]');
+                const fil = row.querySelector('input[name="mapped_filament[]"]');
+                if (!part || !part.value.trim() || !fil || !fil.value) {
+                    alert('Please fill out every part and filament when using multi-color.');
+                    return null;
+                }
+            }
+        }
+
+        const weightInput = document.getElementById('model_weight');
+        const weightRaw = weightInput ? weightInput.value.trim() : '';
+        const weightVal = weightRaw ? parseFloat(weightRaw) : 0;
+        const estimatedPrice = weightVal > 0 ? Math.ceil((weightVal * 154 * 2.5) / 5000) * 5000 : 0;
+        const displayName = titleFromLink(linkVal);
+
+        const profileInput = document.querySelector('input[name="print_profile"]');
+        const profileName = (profileInput?.value || '').trim() || 'Profile 1 (Default)';
+        const preferredDate = document.getElementById('preferred_delivery_date')?.value || '';
+
+        let filamentHex = '#888888';
+        let singleFilamentName = '';
+        let multiMappings = [];
+        let parts = [];
+
+        if (mode === 'single' && singleSelect) {
+            const selectedOption = singleSelect.options[singleSelect.selectedIndex];
+            const filamentName = singleSelect.value;
+            filamentHex = selectedOption?.getAttribute('data-hex') || getFilamentHex(filamentName);
+            singleFilamentName = filamentName;
+            parts = [{ name: 'Main Part', suggested: filamentName, key: 'part_0' }];
+        } else if (mode === 'multi') {
+            const rows = collectRows();
+            multiMappings = rows.map(function (row, idx) {
+                const partName = String(row.querySelector('input[name="model_part[]"]')?.value || '').trim();
+                const filamentName = String(row.querySelector('input[name="mapped_filament[]"]')?.value || '').trim();
+                return {
+                    part: partName,
+                    filament: filamentName,
+                    hex: getFilamentHex(filamentName),
+                    key: 'part_' + idx,
+                };
+            });
+            filamentHex = multiMappings[0]?.hex || '#888888';
+            singleFilamentName = multiMappings.map(function (m) { return m.filament; }).join(', ');
+            parts = multiMappings.map(function (m, idx) {
+                return {
+                    name: m.part || ('Part ' + (idx + 1)),
+                    suggested: m.filament,
+                    key: 'part_' + idx,
+                };
+            });
+        }
+
+        const cartItem = {
+            id: Math.random().toString(36).slice(2, 10),
+            displayName: displayName,
+            link: linkVal,
+            colorMode: mode,
+            singleFilament: singleFilamentName,
+            filamentHex: filamentHex,
+            multiMappings: multiMappings,
+            weight: weightVal || 0,
+            profile: profileName,
+            preferredDeliveryDate: preferredDate,
+            estimatedPrice: estimatedPrice,
+            addedAt: new Date().toISOString(),
+        };
+
+        const modalItem = {
+            title: displayName,
+            description: 'Configure your print setup before ordering.',
+            image_url: '',
+            profiles: [{ name: profileName, price: estimatedPrice, is_default: true }],
+            estimatedPrice: estimatedPrice,
+            parts: parts,
+            cartItem: cartItem,
+        };
+
+        return modalItem;
+    }
+
+    function renderModalPrice() {
+        const priceEl = document.getElementById('featured-modal-price');
+        if (!priceEl || !modalState.profileObj) return;
+        const total = Number(modalState.profileObj.price || 0);
+        priceEl.textContent = 'Rp' + total.toLocaleString('id-ID');
+    }
+
+    function renderModalProfiles() {
+        const wrap = document.getElementById('featured-modal-profile-pills');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+
+        modalState.profiles.forEach(function (profileObj) {
+            const profileName = profileObj.name || '';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'profile-pill' + (modalState.profile === profileName ? ' active' : '');
+            const profilePrice = Number(profileObj.price || 0);
+            const label = profilePrice > 0 ? profileName + ' - Rp' + profilePrice.toLocaleString('id-ID') : profileName;
+            btn.textContent = label;
+            btn.addEventListener('click', function () {
+                modalState.profile = profileName;
+                modalState.profileObj = profileObj;
+                renderModalProfiles();
+                renderModalPrice();
+            });
+            wrap.appendChild(btn);
+        });
+    }
+
+    function renderModalParts() {
+        const partsWrap = document.getElementById('featured-modal-parts');
+        if (!partsWrap) return;
+        partsWrap.innerHTML = '';
+
+        modalState.parts.forEach(function (part) {
+            const card = document.createElement('div');
+            card.className = 'part-card';
+
+            const title = document.createElement('p');
+            title.className = 'part-title';
+            title.textContent = part.name;
+            card.appendChild(title);
+
+            const grid = document.createElement('div');
+            grid.className = 'swatch-grid';
+
+            filamentCatalog.forEach(function (filament) {
+                const swatch = document.createElement('button');
+                swatch.type = 'button';
+                swatch.className = 'swatch-btn';
+                swatch.style.background = filament.hex || '#8b8b8b';
+                swatch.setAttribute('data-name', filament.name);
+                swatch.title = filament.name;
+
+                const selected = String(modalState.selections[part.key] || '').toLowerCase() === filament.name.toLowerCase();
+                if (selected) swatch.classList.add('active');
+                if (String(part.suggested || '').toLowerCase() === filament.name.toLowerCase()) swatch.classList.add('suggested');
+
+                swatch.addEventListener('click', function () {
+                    modalState.selections[part.key] = filament.name;
+                    renderModalParts();
+                });
+                grid.appendChild(swatch);
+            });
+
+            card.appendChild(grid);
+            partsWrap.appendChild(card);
+        });
+    }
+
+    function openOrderConfigModal(modalItem) {
+        const modal = document.getElementById('featured-order-modal');
+        const img = document.getElementById('featured-modal-image');
+        const desc = document.getElementById('featured-modal-description');
+        const title = document.getElementById('featured-modal-title');
+        if (!modal || !img || !desc || !title) return;
+
+        title.textContent = modalItem.title || 'Featured Print';
+        img.style.backgroundImage = modalItem.image_url ? "url('" + modalItem.image_url + "')" : 'none';
+        desc.textContent = modalItem.description || 'Configure your print setup before ordering.';
+
+        modalState.item = modalItem;
+        modalState.parts = Array.isArray(modalItem.parts) && modalItem.parts.length ? modalItem.parts : [{ name: 'Main Part', suggested: '', key: 'part_0' }];
+        modalState.selections = {};
+        modalState.parts.forEach(function (part) {
+            modalState.selections[part.key] = part.suggested || '';
+        });
+        modalState.profiles = Array.isArray(modalItem.profiles) && modalItem.profiles.length ? modalItem.profiles : [{ name: 'Standard', price: Number(modalItem.estimatedPrice || 0), is_default: true }];
+        modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
+        modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+
+        modal.classList.add('open');
+        document.documentElement.classList.add('modal-open');
+        document.body.classList.add('modal-open');
+        renderModalProfiles();
+        renderModalParts();
+        renderModalPrice();
+    }
+
+    function closeOrderConfigModal() {
+        const modal = document.getElementById('featured-order-modal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        document.documentElement.classList.remove('modal-open');
+        document.body.classList.remove('modal-open');
     }
 
     window.toggleInstructions = function () {
@@ -674,7 +1144,7 @@
 
     document.getElementById('preferred_delivery_date')?.addEventListener('change', updateDeliveryHint);
 
-    // Add To Cart — stores item in localStorage and opens the cart drawer
+    // Add To Cart now opens the same configuration popup used by featured prints
     document.getElementById('btn-add-cart')?.addEventListener('click', async function () {
         if (addCartInProgress) return;
         const addBtn = document.getElementById('btn-add-cart');
@@ -684,12 +1154,8 @@
             addBtn.setAttribute('data-prev-text', addBtn.textContent || 'Add To Cart');
             addBtn.textContent = 'Adding...';
         }
-        const linkInput = document.getElementById('makerworld_link');
-        const linkVal = (linkInput ? linkInput.value.trim() : '');
-        const allowedRe = /^(?:https?:\/\/)?(?:www\.)?(?:makerworld\.com|printables\.com)(?:[\/\:\?#]|$)/i;
-        if (!allowedRe.test(linkVal)) {
-            alert('Please enter a makerworld.com or printables.com link.');
-            linkInput?.focus();
+        const draft = buildSelectionDraft();
+        if (!draft) {
             if (addBtn) {
                 addBtn.disabled = false;
                 addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
@@ -697,102 +1163,9 @@
             addCartInProgress = false;
             return;
         }
-        const modeEl = document.querySelector('input[name="color_mode"]:checked');
-        const mode = modeEl ? modeEl.value : 'single';
-        const singleSelect = document.querySelector('select[name="single_filament"]');
-        if (mode === 'single' && singleSelect && !singleSelect.value) {
-            alert('Please choose a filament color.');
-            if (addBtn) {
-                addBtn.disabled = false;
-                addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
-            }
-            addCartInProgress = false;
-            return;
-        }
-        if (mode === 'multi') {
-            const rows = document.querySelectorAll('#color-mappings .swatch-row-card');
-            if (rows.length < 2) {
-                alert('Multi-color requires at least 2 mapped parts.');
-                if (addBtn) {
-                    addBtn.disabled = false;
-                    addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
-                }
-                addCartInProgress = false;
-                return;
-            }
-            for (const row of rows) {
-                const part = row.querySelector('input[name="model_part[]"]');
-                const fil = row.querySelector('input[name="mapped_filament[]"]');
-                if (!part || !part.value.trim() || !fil || !fil.value) {
-                    alert('Please fill out every part and filament when using multi-color.');
-                    if (addBtn) {
-                        addBtn.disabled = false;
-                        addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
-                    }
-                    addCartInProgress = false;
-                    return;
-                }
-            }
-        }
-        const weightInput = document.getElementById('model_weight');
-        const weightRaw = weightInput ? weightInput.value.trim() : '';
-        const weightVal = weightRaw ? parseFloat(weightRaw) : 0;
-        const estimatedPrice = weightVal > 0 ? Math.ceil((weightVal * 154 * 2.5) / 5000) * 5000 : 0;
-        let displayName = 'Unnamed Model';
-        try {
-            let normalized = linkVal;
-            if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
-            const url = new URL(normalized);
-            const segs = url.pathname.split('/').filter(Boolean);
-            const candidate = segs.find(function (s) { return /^\d+-/.test(s); }) || segs[segs.length - 1] || '';
-            if (candidate) {
-                const parts = candidate.split('-');
-                const slug = (parts[0].match(/^\d+$/) ? parts.slice(1) : parts).join(' ');
-                displayName = slug.trim().replace(/\b\w/g, function (c) { return c.toUpperCase(); }) || 'Unnamed Model';
-            }
-        } catch (e) {}
-        let filamentHex = '#888888';
-        let singleFilamentName = '';
-        let multiMappings = [];
-        if (mode === 'single' && singleSelect) {
-            const selectedOption = singleSelect.options[singleSelect.selectedIndex];
-            filamentHex = selectedOption?.getAttribute('data-hex') || getFilamentHex(singleSelect.value);
-            singleFilamentName = singleSelect.value;
-        } else if (mode === 'multi') {
-            const rows = Array.from(document.querySelectorAll('#color-mappings .swatch-row-card'));
-            multiMappings = rows.map(function (row) {
-                const filSel = row.querySelector('input[name="mapped_filament[]"]');
-                const hex = getFilamentHex(filSel?.value);
-                return { part: row.querySelector('input[name="model_part[]"]')?.value || '', filament: filSel?.value || '', hex: hex };
-            });
-            filamentHex = multiMappings[0]?.hex || '#888888';
-            singleFilamentName = multiMappings.map(function (m) { return m.filament; }).join(', ');
-        }
-        const profileInput = document.querySelector('input[name="print_profile"]');
-        const preferredDate = document.getElementById('preferred_delivery_date')?.value || '';
-        const item = {
-            id: Math.random().toString(36).slice(2, 10),
-            displayName: displayName,
-            link: linkVal,
-            colorMode: mode,
-            singleFilament: singleFilamentName,
-            filamentHex: filamentHex,
-            multiMappings: multiMappings,
-            weight: weightVal || 0,
-            profile: profileInput?.value || '1',
-            preferredDeliveryDate: preferredDate,
-            estimatedPrice: estimatedPrice,
-            addedAt: new Date().toISOString(),
-        };
-        if (window.addToCart) {
-            await window.addToCart(item);
-        } else {
-            try {
-                const cartData = JSON.parse(localStorage.getItem('bcart_v1') || '{"items":[]}');
-                cartData.items.push(item);
-                localStorage.setItem('bcart_v1', JSON.stringify(cartData));
-            } catch (e) {}
-        }
+
+        openOrderConfigModal(draft);
+
         if (addBtn) {
             addBtn.disabled = false;
             addBtn.textContent = addBtn.getAttribute('data-prev-text') || 'Add To Cart';
@@ -803,6 +1176,75 @@
     document.getElementById('order-form')?.addEventListener('submit', function(evt) {
         evt.preventDefault();
         document.getElementById('btn-add-cart')?.click();
+    });
+
+    document.getElementById('featured-modal-cancel')?.addEventListener('click', function () {
+        if (modalConfirmInProgress) return;
+        closeOrderConfigModal();
+    });
+
+    document.getElementById('featured-modal-backdrop')?.addEventListener('click', function () {
+        if (modalConfirmInProgress) return;
+        closeOrderConfigModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modalConfirmInProgress) closeOrderConfigModal();
+    });
+
+    document.getElementById('featured-modal-confirm')?.addEventListener('click', async function () {
+        if (modalConfirmInProgress) return;
+        const item = modalState.item || null;
+        if (!item || !item.cartItem) return;
+
+        modalConfirmInProgress = true;
+        const btn = document.getElementById('featured-modal-confirm');
+        const originalText = btn.textContent;
+        btn.textContent = 'Adding...';
+        btn.disabled = true;
+
+        try {
+            const selectedParts = (modalState.parts || []).map(function (part) {
+                return {
+                    part: part.name,
+                    filament: modalState.selections[part.key] || '',
+                };
+            });
+            const primaryFilament = selectedParts.length ? selectedParts[0].filament : '';
+            const dynamicPrice = modalState.profileObj ? Number(modalState.profileObj.price || 0) : Number(item.estimatedPrice || 0);
+
+            const cartItem = {
+                ...item.cartItem,
+                colorMode: selectedParts.length > 1 ? 'multi' : 'single',
+                singleFilament: primaryFilament,
+                multiMappings: selectedParts.map(function (entry) {
+                    return {
+                        part: entry.part,
+                        filament: entry.filament,
+                        hex: getFilamentHex(entry.filament),
+                    };
+                }),
+                profile: modalState.profile || item.cartItem.profile,
+                estimatedPrice: dynamicPrice,
+            };
+
+            if (window.addToCart) {
+                await window.addToCart(cartItem);
+            } else {
+                try {
+                    const cartData = JSON.parse(localStorage.getItem('bcart_v1') || '{"items":[]}');
+                    cartData.items.push(cartItem);
+                    localStorage.setItem('bcart_v1', JSON.stringify(cartData));
+                } catch (e) {}
+            }
+
+            closeOrderConfigModal();
+            if (window.openCartDrawer) window.openCartDrawer();
+        } finally {
+            modalConfirmInProgress = false;
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
     });
 
     initSingleColorSwatches();

@@ -4,24 +4,78 @@ import csv
 import io
 import math
 import os
+import sys
 from pathlib import Path
 import random
 import threading
 import uuid
 import json
+import importlib
+from dotenv import load_dotenv
 from urllib.parse import urlparse, unquote
 import re
 import psycopg2
-from dotenv import load_dotenv
+import requests
 from psycopg2.pool import ThreadedConnectionPool
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
 
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / '.env')
+try:
+    _playwright_sync = importlib.import_module('playwright.sync_api')
+    sync_playwright = getattr(_playwright_sync, 'sync_playwright', None)
+    PlaywrightTimeoutError = getattr(_playwright_sync, 'TimeoutError', Exception)
+except Exception:
+    sync_playwright = None
 
-app = Flask(__name__)
+    class PlaywrightTimeoutError(Exception):
+        pass
+
+try:
+    cloudscraper = importlib.import_module('cloudscraper')
+except Exception:
+    cloudscraper = None
+
+from model_capture_app.capture_blueprint import create_model_capture_blueprint
+
+def _resource_base_dir():
+    if getattr(sys, 'frozen', False):
+        return Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
+    return Path(__file__).resolve().parent
+
+
+def _working_base_dir():
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def _load_environment_file():
+    checked = []
+    for candidate in (
+        _working_base_dir() / '.env',
+        _resource_base_dir() / '.env',
+        Path.cwd() / '.env',
+    ):
+        if candidate in checked:
+            continue
+        checked.append(candidate)
+        if candidate.exists():
+            load_dotenv(candidate)
+            return candidate
+    return None
+
+
+BASE_DIR = _working_base_dir()
+RESOURCE_BASE_DIR = _resource_base_dir()
+ENV_PATH = _load_environment_file()
+
+app = Flask(
+    __name__,
+    template_folder=str(RESOURCE_BASE_DIR / 'templates'),
+    static_folder=str(RESOURCE_BASE_DIR / 'static'),
+)
+
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = timedelta(days=30)
 
 # --- CONFIGURATION ---
@@ -34,6 +88,7 @@ def _required_env(name):
 
 app.secret_key = _required_env('SECRET_KEY')
 ADMIN_PASSWORD = _required_env('ADMIN_PASSWORD')
+EXTENSION_API_KEY = (os.environ.get('EXTENSION_API_KEY') or '').strip()
 DB_POOL_MIN = int(os.environ.get('DB_POOL_MIN', '1'))
 DB_POOL_MAX = int(os.environ.get('DB_POOL_MAX', '10'))
 
@@ -57,6 +112,13 @@ MAX_SUPPORT_REPORTS = 400
 _DB_POOL = None
 _DB_POOL_LOCK = threading.Lock()
 _SCHEMA_READY = False
+_DESKTOP_CAPTURE_SIGNAL = {
+    'id': 0,
+    'model_url': '',
+    'source': '',
+    'triggered_at': '',
+}
+_DESKTOP_CAPTURE_SIGNAL_LOCK = threading.Lock()
 
 # --- DATABASE HELPERS ---
 
@@ -320,6 +382,952 @@ def _to_bool(value, default=False):
     if value is None:
         return default
     return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _safe_next_path(raw_path, fallback_endpoint):
+    fallback_path = url_for(fallback_endpoint)
+    candidate = str(raw_path or '').strip()
+    if not candidate:
+        return fallback_path
+
+    parsed = urlparse(candidate)
+    if parsed.scheme or parsed.netloc:
+        return fallback_path
+    if not candidate.startswith('/'):
+        return fallback_path
+    return candidate
+
+
+def _is_allowed_model_link(raw_link):
+    link = str(raw_link or '').strip()
+    if not link:
+        return False
+    parsed = urlparse(link)
+    host = parsed.netloc.lower()
+    if not host:
+        parsed = urlparse('http://' + link)
+        host = parsed.netloc.lower()
+    if host.startswith('www.'):
+        host = host[4:]
+    allowed = ('makerworld.com', 'printables.com')
+    return any(host == a or host.endswith('.' + a) for a in allowed)
+
+
+def _extension_api_authorized(payload):
+    if not EXTENSION_API_KEY:
+        return True
+    provided = str((payload or {}).get('api_key') or '').strip()
+    return bool(provided and provided == EXTENSION_API_KEY)
+
+
+def _extract_first_hours(text):
+    for pattern in (
+        re.compile(r'(\d+(?:\.\d+)?)\s*h(?:ours?)?(?:\s*(\d+)\s*m(?:in(?:ute)?s?)?)?', re.IGNORECASE),
+        re.compile(r'(\d+)\s*m(?:in(?:ute)?s?)?', re.IGNORECASE),
+    ):
+        match = pattern.search(text or '')
+        if not match:
+            continue
+        if len(match.groups()) >= 2 and match.group(2) is not None:
+            hours = float(match.group(1) or 0)
+            minutes = float(match.group(2) or 0)
+            return round(hours + (minutes / 60.0), 2)
+        value = float(match.group(1) or 0)
+        if 'm' in match.group(0).lower() and 'h' not in match.group(0).lower():
+            return round(value / 60.0, 2)
+        return round(value, 2)
+    return 0.0
+
+
+def _extract_grams_candidates(text):
+    candidates = []
+    for match in re.finditer(r'(\d+(?:\.\d+)?)\s*g\b', text or '', re.IGNORECASE):
+        try:
+            value = float(match.group(1))
+        except Exception:
+            continue
+        # Ignore absurd/obviously unrelated values.
+        if 1.0 <= value <= 5000.0:
+            candidates.append(value)
+    return candidates
+
+
+def _derive_weight_from_text_blocks(text_blocks):
+    if not text_blocks:
+        return None, None
+
+    # 1) Prefer designer profile style blocks.
+    designer_blocks = [
+        block for block in text_blocks
+        if re.search(r"designer(?:'s)?\s+profile|\bdesigner\b", block, re.IGNORECASE)
+    ]
+    for block in designer_blocks:
+        grams = _extract_grams_candidates(block)
+        if grams:
+            return max(grams), 'designer_profile'
+
+    # 2) General print profile blocks.
+    profile_blocks = [
+        block for block in text_blocks
+        if re.search(r'print\s*profile|plate|\bh\b', block, re.IGNORECASE)
+    ]
+    for block in profile_blocks:
+        grams = _extract_grams_candidates(block)
+        if grams:
+            return max(grams), 'print_profile'
+
+    # 3) BOM / description fallback.
+    bom_blocks = [
+        block for block in text_blocks
+        if re.search(r'bill\s+of\s+materials|\bbom\b|filament\s*used|grams', block, re.IGNORECASE)
+    ]
+    for block in bom_blocks:
+        grams = _extract_grams_candidates(block)
+        if grams:
+            return max(grams), 'bom_or_description'
+
+    return None, None
+
+
+def _extract_title_from_html(html_text, fallback='MakerWorld Model'):
+    match = re.search(r'<title>(.*?)</title>', html_text or '', re.IGNORECASE | re.DOTALL)
+    if not match:
+        return fallback
+    cleaned = re.sub(r'\s+', ' ', str(match.group(1) or '')).strip()
+    cleaned = re.sub(r'\s*[-|]\s*MakerWorld\s*$', '', cleaned, flags=re.IGNORECASE)
+
+    # Keep the main model title segment and drop profile/descriptive suffixes.
+    segments = [s.strip() for s in re.split(r'\s*[|\-]\s*', cleaned) if s and s.strip()]
+    if segments:
+        cleaned = segments[0]
+
+    cleaned = re.sub(
+        r'\s*[\[(][^\])]*(?:layer\s*height|infill|infill\s*density|nozzle|line\s*width|wall\s*count|supports?)\b[^\])]*[\])]',
+        '',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r'\s*(?:[,;/]|\s+-\s+)\s*(?:\d+(?:\.\d+)?\s*mm\b|\d{1,3}\s*%\s*infill\b|layer\s*height\b[^,;/\-]*)\s*$',
+        '',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' -|,;/')
+    return cleaned or fallback
+
+
+def _extract_balanced_json_chunk(text, start_index, open_char, close_char, max_scan=250000):
+    if start_index < 0 or start_index >= len(text or ''):
+        return ''
+    depth = 0
+    in_string = False
+    escaped = False
+    limit = min(len(text), start_index + max_scan)
+    for index in range(start_index, limit):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return text[start_index:index + 1]
+    return ''
+
+
+def _extract_makerworld_instances(html_text):
+    instances = []
+    for match in re.finditer(r'"instances"\s*:\s*\[', html_text or '', re.IGNORECASE):
+        array_text = _extract_balanced_json_chunk(html_text, match.end() - 1, '[', ']')
+        if not array_text:
+            continue
+        try:
+            parsed = json.loads(array_text)
+        except Exception:
+            continue
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, dict):
+                    instances.append(item)
+    return instances
+
+
+def _extract_model_image_urls(html_text, instances):
+    urls = []
+    allowed_model_keys = set()
+
+    def _normalize_image_url(raw):
+        u = str(raw or '').strip()
+        if not re.match(r'^https?://', u, re.IGNORECASE):
+            return ''
+        # Keep a stable variant to avoid duplicate x-oss-process forms.
+        return u.split('?')[0]
+
+    def _add(url):
+        u = str(url or '').strip()
+        if not u:
+            return
+        if not re.match(r'^https?://', u, re.IGNORECASE):
+            return
+        stable = _normalize_image_url(u)
+        if not stable:
+            return
+        if stable not in urls:
+            urls.append(stable)
+
+    def _register_model_key(url):
+        u = str(url or '').strip()
+        m = re.search(r'/makerworld/model/([^/]+)/', u, re.IGNORECASE)
+        if m:
+            allowed_model_keys.add(m.group(1))
+
+    for inst in (instances or []):
+        if not isinstance(inst, dict):
+            continue
+        _register_model_key(inst.get('cover'))
+
+        pictures = inst.get('pictures')
+        if isinstance(pictures, list):
+            for pic in pictures:
+                if isinstance(pic, dict):
+                    pic_url = pic.get('url') or pic.get('imageUrl') or pic.get('cover')
+                    _register_model_key(pic_url)
+                else:
+                    _register_model_key(pic)
+
+        model2d = inst.get('model2DInfo')
+        if isinstance(model2d, dict):
+            model2d_url = model2d.get('cover') or model2d.get('imageUrl')
+            _register_model_key(model2d_url)
+
+    html = str(html_text or '')
+    og_matches = re.findall(
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        html,
+        flags=re.IGNORECASE,
+    )
+    for m in og_matches:
+        _add(m)
+        _register_model_key(m)
+
+    tw_matches = re.findall(
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+        html,
+        flags=re.IGNORECASE,
+    )
+    for m in tw_matches:
+        _add(m)
+        _register_model_key(m)
+
+    # Gallery/design images shown in the main model page image strip.
+    # Only include design images that belong to this model key, to avoid related-model images.
+    design_matches = re.finditer(
+        r'(https://makerworld\.bblmw\.com/makerworld/model/([^/]+)/design/[^"\'\s)]+\.(?:png|jpg|jpeg|webp)(?:\?[^"\'\s)]*)?)',
+        html,
+        flags=re.IGNORECASE,
+    )
+    for m in design_matches:
+        full_url = m.group(1)
+        model_key = m.group(2)
+        if allowed_model_keys and model_key not in allowed_model_keys:
+            continue
+        _add(full_url)
+
+    return urls[:16]
+
+
+def _extract_instance_image_urls(instance):
+    urls = []
+
+    def _add(url):
+        u = str(url or '').strip()
+        if not u or not re.match(r'^https?://', u, re.IGNORECASE):
+            return
+        if u not in urls:
+            urls.append(u)
+
+    if not isinstance(instance, dict):
+        return urls
+
+    _add(instance.get('cover'))
+
+    pictures = instance.get('pictures')
+    if isinstance(pictures, list):
+        for pic in pictures:
+            if isinstance(pic, dict):
+                _add(pic.get('url') or pic.get('imageUrl') or pic.get('cover'))
+            else:
+                _add(pic)
+
+    return urls
+
+
+def _makerworld_instance_colors(instance):
+    """Extract per-color usage data from MakerWorld instance JSON.
+
+    MakerWorld payloads vary by model/version, so this scans nested dict/list nodes
+    and accepts multiple key aliases for color/name/used grams.
+    """
+    if not isinstance(instance, dict):
+        return []
+
+    bucket = []
+
+    def _as_hex(v):
+        h = str(v or '').strip()
+        if not h:
+            return ''
+        if not h.startswith('#'):
+            h = '#' + h
+        if re.fullmatch(r'#[0-9a-fA-F]{6}', h):
+            return h.lower()
+        return ''
+
+    def _as_float(v):
+        try:
+            return float(v)
+        except Exception:
+            return 0.0
+
+    def _extract_node(node):
+        if isinstance(node, dict):
+            color_hex = _as_hex(
+                node.get('color')
+                or node.get('colorHex')
+                or node.get('hex')
+                or node.get('color_code')
+            )
+            name = str(
+                node.get('colorName')
+                or node.get('filamentName')
+                or node.get('name')
+                or node.get('label')
+                or ''
+            ).strip()
+            used_g = _as_float(
+                node.get('usedG')
+                or node.get('used_g')
+                or node.get('materialWeight')
+                or node.get('weight_g')
+                or 0
+            )
+
+            if color_hex or name:
+                bucket.append({
+                    'name': name,
+                    'hex': color_hex or '#888888',
+                    'used_g': round(max(0.0, used_g), 2),
+                })
+
+            for v in node.values():
+                if isinstance(v, (dict, list)):
+                    _extract_node(v)
+
+        elif isinstance(node, list):
+            for item in node:
+                if isinstance(item, (dict, list)):
+                    _extract_node(item)
+
+    # Prefer explicit filament arrays first (most accurate, avoids duplicate nested hits).
+    for key in ('instanceFilaments', 'filaments'):
+        filaments = instance.get(key)
+        if isinstance(filaments, list) and filaments:
+            _extract_node(filaments)
+            break
+
+    # Fallback only if explicit arrays were not available.
+    if not bucket:
+        _extract_node(instance)
+
+    # Aggregate duplicates by (name, hex) and keep meaningful rows.
+    merged = {}
+    for row in bucket:
+        key = (str(row.get('name') or '').strip().lower(), str(row.get('hex') or '#888888').lower())
+        current = merged.get(key)
+        if current is None:
+            merged[key] = {
+                'name': str(row.get('name') or '').strip(),
+                'hex': str(row.get('hex') or '#888888').strip() or '#888888',
+                'used_g': round(float(row.get('used_g') or 0.0), 2),
+            }
+        else:
+            current['used_g'] = round(float(current.get('used_g') or 0.0) + float(row.get('used_g') or 0.0), 2)
+
+    cleaned = [
+        r for r in merged.values()
+        if (r.get('name') or r.get('hex')) and float(r.get('used_g') or 0.0) >= 0
+    ]
+    cleaned.sort(key=lambda x: float(x.get('used_g') or 0.0), reverse=True)
+    return cleaned
+
+
+def _makerworld_instance_weight(instance):
+    filaments = instance.get('filaments') if isinstance(instance, dict) else None
+    if isinstance(filaments, list):
+        total = 0.0
+        found = False
+        for filament in filaments:
+            if not isinstance(filament, dict):
+                continue
+            used_g = filament.get('usedG')
+            try:
+                value = float(used_g)
+            except Exception:
+                continue
+            if value >= 0:
+                total += value
+                found = True
+        if found and 1.0 <= total <= 5000.0:
+            return round(total, 2)
+
+    try:
+        fallback_weight = float(instance.get('weight') or 0)
+    except Exception:
+        fallback_weight = 0.0
+    if 1.0 <= fallback_weight <= 5000.0:
+        return round(fallback_weight, 2)
+    return None
+
+
+def _makerworld_instance_hours(instance):
+    try:
+        prediction = float(instance.get('prediction') or 0)
+    except Exception:
+        prediction = 0.0
+
+    if prediction <= 0:
+        return None
+
+    if prediction >= 600:
+        return round(prediction / 3600.0, 2)
+    if prediction >= 10:
+        return round(prediction / 60.0, 2)
+    return round(prediction, 2)
+
+
+def _pick_makerworld_instance(instances, target_profile_id=None):
+    if not instances:
+        return None
+
+    normalized_target = str(target_profile_id or '').strip()
+    if normalized_target:
+        for instance in instances:
+            if str(instance.get('id') or '').strip() == normalized_target:
+                return instance
+        for instance in instances:
+            if str(instance.get('profileId') or '').strip() == normalized_target:
+                return instance
+
+    for instance in instances:
+        if instance.get('authorsChoice'):
+            return instance
+
+    ordered = []
+    for instance in instances:
+        if _makerworld_instance_weight(instance) is not None:
+            ordered.append(instance)
+    if ordered:
+        return ordered[0]
+    return instances[0]
+
+
+def _makerworld_instance_name(instance, index):
+    if not isinstance(instance, dict):
+        return f'Profile {index}'
+
+    for key in ('name', 'profileName', 'title', 'displayName'):
+        value = str(instance.get(key) or '').strip()
+        if value:
+            return _normalize_makerworld_profile_name(value, index)
+
+    return f'Profile {index}'
+
+
+def _is_profile_technical_clause(clause):
+    text = re.sub(r'\s+', ' ', str(clause or '')).strip().lower()
+    if not text:
+        return False
+
+    # Common UI fragments around profile rows.
+    if re.search(r'^designer\b', text):
+        return True
+    if re.search(r'^\d+(?:\.\d+)?\s*h(?:ours?)?\b', text):
+        return True
+    if re.search(r'^\d+\s*plates?\b|^plate\b', text):
+        return True
+
+    has_token = bool(re.search(r'\b(layer\s*height|layer|infill|walls?|nozzle|supports?|line\s*width|speed|temperature|temp|plate)\b', text))
+    has_value = bool(re.search(r'(\d+(?:\.\d+)?\s*mm\b|\d{1,3}\s*%|\b\d+(?:\.\d+)?\b)', text))
+    return has_token and has_value
+
+
+def _normalize_makerworld_profile_name(raw_name, index):
+    cleaned = re.sub(r'\s+', ' ', str(raw_name or '')).strip()
+
+    # Collapse exact duplicated phrase patterns.
+    for separator in (r'\s*\|\s*', r'\s*/\s*', r'\s*[\-\u2013\u2014]\s*'):
+        parts = [p.strip() for p in re.split(separator, cleaned) if p.strip()]
+        if len(parts) == 2 and parts[0].lower() == parts[1].lower():
+            cleaned = parts[0]
+
+    # Drop known trailing UI artifacts (Designer, time, plates).
+    for marker in (
+        r'\bdesigner\b',
+        r'\b\d+(?:\.\d+)?\s*h(?:ours?)?\b',
+        r'\b\d+\s*plates?\b',
+        r'\bplate\b',
+    ):
+        match = re.search(marker, cleaned, re.IGNORECASE)
+        if match and match.start() > 0:
+            cleaned = cleaned[:match.start()].rstrip(' -|,;/')
+
+    # Typical MakerWorld pattern: <profile name> - <technical recipe>
+    parts = re.split(r'\s*[\-\u2013\u2014|:]\s*', cleaned, maxsplit=1)
+    if len(parts) == 2:
+        left, right = parts[0].strip(), parts[1].strip()
+        if left and right and _is_profile_technical_clause(right):
+            cleaned = left
+
+    # Remove technical clauses separated by commas/semicolons/bullets.
+    clauses = [c.strip() for c in re.split(r'\s*(?:,|;|\u2022)\s*', cleaned) if c.strip()]
+    kept_clauses = [c for c in clauses if not _is_profile_technical_clause(c)]
+    if kept_clauses:
+        cleaned = ', '.join(kept_clauses)
+
+    # Remove technical parenthetical suffixes.
+    cleaned = re.sub(
+        r'\s*[\[(][^\])]*(?:layer\s*height|infill|nozzle|wall|walls|supports?|line\s*width|speed|temperature|temp|mm|%)\b[^\])]*[\])]\s*$',
+        '',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # If technical tokens still leak in, keep only the prefix before first token.
+    token_match = re.search(r'\b(layer\s*height|layer|infill|walls?|nozzle|supports?|line\s*width|speed|temperature|temp|plate)\b', cleaned, re.IGNORECASE)
+    if token_match and token_match.start() > 0:
+        prefix = cleaned[:token_match.start()].rstrip(' -|,;/')
+        if prefix:
+            cleaned = prefix
+
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' -|,;/')
+    if _is_layer_height_only_profile_name(cleaned):
+        return 'Standard'
+    return cleaned or f'Profile {index}'
+
+
+def _is_layer_height_only_profile_name(name):
+    raw = str(name or '').strip().lower()
+    if not raw:
+        return False
+
+    text = re.sub(r'\b\d+(?:\.\d+)?\s*mm\b', ' ', raw)
+    text = re.sub(r'\b\d+(?:\.\d+)?\s*(?:micron|microns|um)\b', ' ', text)
+    text = re.sub(r'\b\d+(?:\.\d+)?\b', ' ', text)
+    text = re.sub(
+        r'\b(?:layer|height|profile|print|walls?|infill|nozzle|supports?|line\s*width|mm|um|micron|microns|lh)\b',
+        ' ',
+        text,
+    )
+    text = re.sub(r'[^a-z]+', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text == ''
+
+
+def _resolve_pricing_inputs(overrides=None):
+    cfg = _load_control_center_settings()
+    source = {
+        'base_fee': float(cfg.get('base_service_fee') or 0.0),
+        'price_per_gram': float(cfg.get('price_per_gram') or 0.0),
+        'power_cost_per_hour': float(cfg.get('power_cost_per_hour') or 0.0),
+        'profit_margin': float(cfg.get('profit_margin') or 1.2),
+    }
+    source['profit_margin'] = source['profit_margin'] if source['profit_margin'] > 0 else 1.2
+
+    incoming = overrides or {}
+
+    def _coerce_float(value, fallback):
+        try:
+            if value is None or str(value).strip() == '':
+                return float(fallback)
+            return float(value)
+        except Exception:
+            return float(fallback)
+
+    source['base_fee'] = max(0.0, _coerce_float(incoming.get('base_fee'), source['base_fee']))
+    source['price_per_gram'] = max(0.0, _coerce_float(incoming.get('price_per_gram'), source['price_per_gram']))
+    source['power_cost_per_hour'] = max(0.0, _coerce_float(incoming.get('power_cost_per_hour'), source['power_cost_per_hour']))
+    source['profit_margin'] = _coerce_float(incoming.get('profit_margin'), source['profit_margin'])
+    if source['profit_margin'] <= 0:
+        source['profit_margin'] = 1.0
+    return source
+
+
+def _calc_profile_price(weight_g, hours, pricing_inputs):
+    def _round_price_to_nearest_5000(amount):
+        value = max(0.0, float(amount or 0.0))
+        return float(int((value + 2500.0) // 5000.0) * 5000)
+
+    base_fee = float(pricing_inputs.get('base_fee') or 0.0)
+    ppg = float(pricing_inputs.get('price_per_gram') or 0.0)
+    power = float(pricing_inputs.get('power_cost_per_hour') or 0.0)
+    margin = float(pricing_inputs.get('profit_margin') or 1.0)
+    subtotal = base_fee + (max(0.0, float(weight_g or 0.0)) * ppg) + (max(0.0, float(hours or 0.0)) * power)
+    return _round_price_to_nearest_5000(subtotal * (margin if margin > 0 else 1.0))
+
+
+def _extract_model_profile_metrics(model_url, pricing_overrides=None):
+    quick = _quick_parse_model_page(model_url)
+    html_text = str(quick.get('html') or '')
+    title = str(quick.get('title') or 'MakerWorld Model')
+
+    profile_id_m = re.search(r'profileId[-_](\d+)', model_url, re.IGNORECASE)
+    target_profile_id = profile_id_m.group(1) if profile_id_m else ''
+
+    instances = _extract_makerworld_instances(html_text)
+    pricing_inputs = _resolve_pricing_inputs(pricing_overrides)
+    profiles = []
+    seen = set()
+    layer_only_price_index = {}
+
+    for index, instance in enumerate(instances, start=1):
+        profile_id = str(instance.get('profileId') or instance.get('id') or '').strip()
+        original_name = _makerworld_instance_name(instance, index)
+        layer_only_name = _is_layer_height_only_profile_name(original_name)
+        name = 'Standard' if layer_only_name else original_name
+
+        weight_g = _makerworld_instance_weight(instance)
+        hours = _makerworld_instance_hours(instance)
+
+        needs_review = False
+        if weight_g is None or float(weight_g) <= 0:
+            weight_g = 50.0
+            needs_review = True
+        if hours is None or float(hours) < 0:
+            hours = 0.0
+
+        price_value = _calc_profile_price(weight_g, hours, pricing_inputs)
+        is_default_match = bool(
+            (target_profile_id and target_profile_id in {str(instance.get('id') or ''), str(instance.get('profileId') or '')})
+            or instance.get('authorsChoice')
+        )
+
+        if layer_only_name:
+            layer_key = ('standard', int(round(float(price_value))))
+            existing_idx = layer_only_price_index.get(layer_key)
+            if existing_idx is not None:
+                if is_default_match:
+                    profiles[existing_idx]['is_default'] = True
+                continue
+            layer_only_price_index[layer_key] = len(profiles)
+
+        dedupe_key = (profile_id or name.lower(), round(float(weight_g), 2), round(float(hours), 2))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        profiles.append({
+            'id': profile_id,
+            'name': name,
+            'weight_g': round(float(weight_g), 2),
+            'estimated_print_hours': round(float(hours), 2),
+            'price': price_value,
+            'is_default': is_default_match,
+            'weight_needs_review': needs_review,
+            'source': 'instance_json',
+            'colors': _makerworld_instance_colors(instance),
+            'image_urls': _extract_instance_image_urls(instance),
+        })
+
+    if not profiles:
+        calc_result = _calculate_model_metrics(model_url)
+        fallback_weight = float(calc_result.get('weight') or 50.0)
+        fallback_hours = float(calc_result.get('hours') or 0.0)
+        profiles = [{
+            'id': '',
+            'name': 'Standard',
+            'weight_g': round(fallback_weight, 2),
+            'estimated_print_hours': round(fallback_hours, 2),
+            'price': _calc_profile_price(fallback_weight, fallback_hours, pricing_inputs),
+            'is_default': True,
+            'weight_needs_review': bool(calc_result.get('needs_review')),
+            'source': str(calc_result.get('source') or 'fallback_default'),
+            'colors': [],
+            'image_urls': [],
+        }]
+
+    if not any(bool(p.get('is_default')) for p in profiles):
+        profiles[0]['is_default'] = True
+
+    return {
+        'title': title,
+        'profiles': profiles,
+    }
+
+
+def _quick_parse_model_page(model_url):
+    # Fast parser: cloudscraper/requests + MakerWorld embedded JSON.
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        )
+    }
+
+    if cloudscraper is not None:
+        client = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+        response = client.get(model_url, headers=headers, timeout=30)
+    else:
+        response = requests.get(model_url, headers=headers, timeout=30)
+
+    if int(response.status_code or 0) >= 400:
+        raise RuntimeError(f'HTTP {response.status_code}')
+
+    html_text = str(response.text or '')
+    title = _extract_title_from_html(html_text)
+
+    # Extract the profileId from the URL hash (e.g. #profileId-2672331).
+    # MakerWorld uses this for either an instance id or a profile id depending on page state.
+    profile_id_m = re.search(r'profileId[-_](\d+)', model_url, re.IGNORECASE)
+    target_profile_id = profile_id_m.group(1) if profile_id_m else None
+
+    weight = None
+    hours = None
+    source = None
+
+    instances = _extract_makerworld_instances(html_text)
+    chosen_instance = _pick_makerworld_instance(instances, target_profile_id)
+    if chosen_instance is not None:
+        weight = _makerworld_instance_weight(chosen_instance)
+        hours = _makerworld_instance_hours(chosen_instance)
+        if weight is not None:
+            source = 'instance_json'
+
+    # Last-resort classic patterns (avoids the erroneous top-level "weight" key)
+    if weight is None:
+        for pattern in (
+            re.compile(r'"weight_g"\s*:\s*(\d+(?:\.\d+)?)', re.IGNORECASE),
+            re.compile(r'"filamentWeight"\s*:\s*(\d+(?:\.\d+)?)', re.IGNORECASE),
+            re.compile(r'(\d+(?:\.\d+)?)\s*g\b', re.IGNORECASE),
+        ):
+            m = pattern.search(html_text)
+            if not m:
+                continue
+            try:
+                parsed = float(m.group(1))
+            except Exception:
+                continue
+            if 1.0 <= parsed <= 5000.0:
+                weight = parsed
+                break
+
+    if hours is None:
+        for pattern in (
+            re.compile(r'"(?:estimatedPrintTime|printTime|print_time|costTime)"\s*:\s*"?(\d+(?:\.\d+)?)"?', re.IGNORECASE),
+            re.compile(r'"prediction"\s*:\s*(\d+(?:\.\d+)?)', re.IGNORECASE),
+        ):
+            match = pattern.search(html_text)
+            if not match:
+                continue
+            try:
+                raw_value = float(match.group(1))
+            except Exception:
+                continue
+            if raw_value <= 0:
+                continue
+            if raw_value >= 600:
+                hours = round(raw_value / 3600.0, 2)
+            elif raw_value >= 10:
+                hours = round(raw_value / 60.0, 2)
+            else:
+                hours = round(raw_value, 2)
+            source = source or 'instance_prediction'
+            break
+
+    return {'html': html_text, 'title': title, 'weight': weight, 'hours': hours, 'source': source}
+
+
+def _calculate_model_metrics(model_url, manual_weight=None, manual_hours=None):
+    control_settings = _load_control_center_settings()
+    price_per_kg = float(control_settings.get('price_per_gram') or 0.0) * 1000.0
+    markup = float(control_settings.get('profit_margin') or 1.0)
+    if markup <= 0:
+        markup = 1.0
+
+    result = {
+        'success': False,
+        'title': 'MakerWorld Model',
+        'weight': 0.0,
+        'hours': 0.0,
+        'raw_price': 0.0,
+        'formatted_price': 'Rp0',
+        'error': '',
+        'source': 'unknown',
+        'needs_review': False,
+    }
+
+    # 1) Prefer manual weight if provided.
+    try:
+        if manual_weight is not None:
+            parsed_manual = float(manual_weight)
+            if parsed_manual > 0:
+                result['weight'] = round(parsed_manual, 2)
+                result['source'] = 'manual'
+    except Exception:
+        pass
+
+    html_text = ''
+    if result['weight'] <= 0 and model_url:
+        try:
+            quick = _quick_parse_model_page(model_url)
+            html_text = quick.get('html') or ''
+            result['title'] = quick.get('title') or result['title']
+            parsed_weight = quick.get('weight')
+            if parsed_weight is not None and float(parsed_weight) > 0:
+                result['weight'] = round(float(parsed_weight), 2)
+                result['source'] = str(quick.get('source') or 'regex_html')
+            parsed_hours = quick.get('hours')
+            if parsed_hours is not None and float(parsed_hours) > 0:
+                result['hours'] = round(float(parsed_hours), 2)
+        except Exception as exc:
+            result['error'] = f'Quick parse failed: {exc}'
+
+    # 2) If still missing, try robust Playwright parser.
+    if result['weight'] <= 0 and model_url:
+        pw_metrics = _scrape_makerworld_metrics(model_url)
+        pw_weight = float(pw_metrics.get('weight_g') or 0.0)
+        if pw_weight > 0:
+            result['weight'] = round(pw_weight, 2)
+            result['source'] = str(pw_metrics.get('weight_source') or 'playwright')
+            result['needs_review'] = bool(pw_metrics.get('weight_needs_review'))
+        if float(pw_metrics.get('estimated_print_hours') or 0.0) > 0:
+            result['hours'] = round(float(pw_metrics.get('estimated_print_hours') or 0.0), 2)
+        if not result['error'] and pw_metrics.get('scrape_error'):
+            result['error'] = str(pw_metrics.get('scrape_error'))
+
+    # 3) Optional manual hours override.
+    try:
+        if manual_hours is not None:
+            h = float(manual_hours)
+            if h >= 0:
+                result['hours'] = round(h, 2)
+    except Exception:
+        pass
+
+    # 4) Final fallback default per requested behavior.
+    if result['weight'] <= 0:
+        result['weight'] = 50.0
+        result['source'] = 'fallback_default'
+        result['needs_review'] = True
+        if not result['error']:
+            result['error'] = 'Weight not found in profile/BOM/description; defaulted to 50g.'
+
+    # Price formula: cost = (weight_in_grams / 1000) * price_per_kg * markup
+    base_cost = (float(result['weight']) / 1000.0) * price_per_kg
+    total = int((max(0.0, base_cost * markup) + 2500.0) // 5000.0) * 5000
+    result['raw_price'] = float(total)
+    result['formatted_price'] = f"Rp{int(total):,}".replace(',', '.')
+    result['success'] = result['weight'] > 0
+
+    # If we got page HTML but no hours yet, do lightweight hours parse.
+    if result['hours'] <= 0 and html_text:
+        result['hours'] = _extract_first_hours(html_text)
+
+    return result
+
+
+def _scrape_makerworld_metrics(model_url):
+    # Required fallback behavior when we cannot scrape robustly.
+    fallback = {
+        'weight_g': 50.0,
+        'estimated_print_hours': 0.0,
+        'weight_source': 'fallback_default',
+        'weight_needs_review': True,
+        'scrape_error': '',
+    }
+
+    if sync_playwright is None:
+        fallback['scrape_error'] = 'playwright_not_installed'
+        return fallback
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=['--disable-blink-features=AutomationControlled'],
+            )
+            context = browser.new_context(
+                user_agent=(
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/124.0.0.0 Safari/537.36'
+                ),
+                viewport={'width': 1440, 'height': 900},
+                locale='en-US',
+            )
+            page = context.new_page()
+            page.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            )
+            page.goto(model_url, wait_until='domcontentloaded', timeout=45000)
+            try:
+                page.wait_for_selector('text=/Print\\s*Profile/i', timeout=15000)
+            except PlaywrightTimeoutError:
+                # Continue: some pages lazy-render or localize text differently.
+                pass
+
+            page.wait_for_timeout(1500)
+            page_text = page.locator('body').inner_text(timeout=10000)
+            block_texts = page.evaluate(
+                """
+                () => {
+                  const nodes = Array.from(document.querySelectorAll('section, article, div, li'));
+                  return nodes
+                    .map(n => (n && n.innerText ? n.innerText.trim() : ''))
+                    .filter(t => t.length >= 8 && t.length <= 360)
+                    .filter(t => /\d+(?:\.\d+)?\s*g\b/i.test(t) || /print\s*profile|designer|bill\s+of\s+materials|\bbom\b|filament\s*used/i.test(t));
+                }
+                """
+            )
+            context.close()
+            browser.close()
+    except Exception as exc:
+        fallback['scrape_error'] = str(exc)
+        return fallback
+
+    text_blocks = []
+    if isinstance(block_texts, list):
+        text_blocks.extend([str(t or '') for t in block_texts if str(t or '').strip()])
+    if page_text:
+        text_blocks.extend([line.strip() for line in str(page_text).splitlines() if line.strip()])
+
+    weight_g, source = _derive_weight_from_text_blocks(text_blocks)
+    hours = _extract_first_hours('\n'.join(text_blocks))
+
+    if weight_g is None:
+        fallback['estimated_print_hours'] = hours
+        fallback['weight_source'] = 'fallback_default'
+        fallback['weight_needs_review'] = True
+        return fallback
+
+    return {
+        'weight_g': round(float(weight_g), 2),
+        'estimated_print_hours': round(float(hours), 2),
+        'weight_source': source or 'print_profile',
+        'weight_needs_review': False,
+        'scrape_error': '',
+    }
 
 
 def _load_control_center_settings():
@@ -850,6 +1858,77 @@ def _normalize_target_users(raw_targets, fallback='ALL'):
     return normalized
 
 
+def _normalize_profile_pricing(profile_pricing_raw):
+    rows = profile_pricing_raw
+    if isinstance(profile_pricing_raw, str):
+        text = profile_pricing_raw.strip()
+        if not text:
+            rows = []
+        else:
+            try:
+                rows = json.loads(text)
+            except Exception:
+                rows = []
+
+    if not isinstance(rows, list):
+        return []
+
+    normalized = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        name = str(row.get('name') or '').strip()
+        if not name:
+            continue
+
+        try:
+            profile_price = float(row.get('price') or row.get('price_modifier') or 0)
+        except (TypeError, ValueError):
+            profile_price = 0.0
+
+        try:
+            weight_g = float(row.get('weight_g') or 0)
+        except (TypeError, ValueError):
+            weight_g = 0.0
+
+        try:
+            estimated_print_hours = float(row.get('estimated_print_hours') or 0)
+        except (TypeError, ValueError):
+            estimated_print_hours = 0.0
+
+        raw_colors = row.get('colors')
+        colors = []
+        if isinstance(raw_colors, list):
+            for c in raw_colors:
+                if not isinstance(c, dict):
+                    continue
+                try:
+                    used_g = float(c.get('used_g') or 0)
+                except (TypeError, ValueError):
+                    used_g = 0.0
+                colors.append({
+                    'name': str(c.get('name') or '').strip(),
+                    'hex': str(c.get('hex') or '#888888').strip(),
+                    'used_g': round(max(0.0, used_g), 2),
+                })
+
+        normalized.append({
+            'id': str(row.get('id') or '').strip(),
+            'name': name,
+            'price': profile_price,
+            'is_default': bool(row.get('is_default')),
+            'weight_g': max(0.0, weight_g),
+            'estimated_print_hours': max(0.0, estimated_print_hours),
+            'colors': colors,
+        })
+
+    if normalized and (not any(p.get('is_default') for p in normalized)):
+        normalized[0]['is_default'] = True
+
+    return normalized
+
+
 def _default_hex_for_name(name):
     palette = {
         'black': '#222222',
@@ -978,14 +2057,35 @@ def _purge_expired_soft_deletes(db):
             _execute("DELETE FROM orders WHERE id = %s", (order_id,))
 
 
-def _featured_item_visible_to_user(item, user_id):
+def _featured_target_matches_user(target, user_id, username=''):
+    candidate = str(target or '').strip()
+    if not candidate:
+        return False
+
+    if candidate == 'ALL':
+        return True
+
+    normalized_user_id = str(user_id or '').strip()
+    normalized_username = str(username or '').strip().lower()
+    candidate_lower = candidate.lower()
+
+    if normalized_user_id and candidate == normalized_user_id:
+        return True
+
+    if normalized_username and candidate_lower == normalized_username:
+        return True
+
+    return False
+
+
+def _featured_item_visible_to_user(item, user_id, username=''):
     targets = item.get('target_users')
     if not targets:
         legacy = item.get('target_user')
         targets = [legacy] if legacy else []
 
     targets = _normalize_target_users(targets, fallback='ALL')
-    return 'ALL' in targets or user_id in targets
+    return any(_featured_target_matches_user(target, user_id, username) for target in targets)
 
 
 def _compute_user_material_credits(user_obj, user_orders):
@@ -1177,10 +2277,48 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
     history_start = (history_page - 1) * history_page_size
     filtered_orders_page = filtered_orders[history_start:history_start + history_page_size]
 
-    featured_items = [
+    all_featured = [
         f for f in db.get('featured_prints', [])
-        if _featured_item_visible_to_user(f, user_id)
+        if _featured_item_visible_to_user(f, user_id, str((user or {}).get('username') or '').strip())
     ]
+    # Personal suggestions = items targeted specifically at THIS user (not ALL-user items)
+    personal_suggestions = [
+        f for f in all_featured
+        if 'ALL' not in _normalize_target_users(
+            f.get('target_users') or ([f.get('target_user')] if f.get('target_user') else []),
+            fallback='ALL'
+        )
+    ]
+    # General featured = ALL-targeted items only
+    all_targeted_items = [
+        f for f in all_featured
+        if 'ALL' in _normalize_target_users(
+            f.get('target_users') or ([f.get('target_user')] if f.get('target_user') else []),
+            fallback='ALL'
+        )
+    ]
+    # Browse catalog = all items visible to the user (ALL-targeted + personally targeted)
+    browse_items = list(all_featured)
+
+    # Home hero slideshow only includes suggestions explicitly opted in.
+    slideshow_items = [
+        f for f in all_featured
+        if _to_bool(f.get('show_in_slideshow'), default=False)
+    ]
+
+    hero_items = []
+    seen_hero_keys = set()
+    for item in slideshow_items:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get('id') or item.get('makerworld_url') or item.get('title') or '').strip()
+        if not key or key in seen_hero_keys:
+            continue
+        seen_hero_keys.add(key)
+        hero_items.append(item)
+
+    featured_items = list(all_featured)
+
     if not featured_items:
         featured_items = _default_featured_items()
 
@@ -1190,6 +2328,8 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
     featured_page = _to_int(featured_page, default=1, min_value=1, max_value=featured_total_pages)
     featured_start = (featured_page - 1) * featured_page_size
     featured_items_page = featured_items[featured_start:featured_start + featured_page_size]
+
+    browse_total = len(browse_items)
 
     in_stock_filaments = [
         f for f in filaments
@@ -1265,6 +2405,10 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
         'featured_items_total': featured_total,
         'featured_page': featured_page,
         'featured_total_pages': featured_total_pages,
+        'slideshow_items': hero_items,
+        'browse_items': browse_items,
+        'browse_items_total': browse_total,
+        'personal_suggestions': personal_suggestions,
         'recent_orders': user_orders[:3],
         'all_orders': user_orders,
         'filtered_orders': filtered_orders_page,
@@ -1303,6 +2447,13 @@ def index():
         featured_page=featured_page,
     )
     return render_template('user_home.html', active_tab='home', **context)
+
+
+@app.route('/desktop-capture')
+@app.route('/desktop-capture/')
+@app.route('/desktop_capture')
+def desktop_capture_page():
+    return render_template('desktop_capture.html')
 
 
 @app.route('/order')
@@ -1358,6 +2509,14 @@ def order_page():
         prefill_order_data=prefill_order_data,
         **context,
     )
+
+
+@app.route('/browse-models')
+def browse_models():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+    context = _build_user_portal_context(session.get('user_id'))
+    return render_template('browse_models.html', active_tab='browse', **context)
 
 
 @app.route('/cart')
@@ -1504,6 +2663,7 @@ def user_register():
 
 @app.route('/user_login', methods=['GET', 'POST'])
 def user_login():
+    next_path = _safe_next_path(request.values.get('next'), 'index')
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
@@ -1512,9 +2672,9 @@ def user_login():
         if user and check_password_hash(user.get('password_hash', ''), password):
             session['user_id'] = user['id']
             session['username'] = user['username']
-            return redirect(url_for('index'))
-        return render_template('user_login.html', error='Invalid credentials')
-    return render_template('user_login.html')
+            return redirect(next_path)
+        return render_template('user_login.html', error='Invalid credentials', next_path=next_path)
+    return render_template('user_login.html', next_path=next_path)
 
 
 @app.route('/user_logout')
@@ -2077,6 +3237,16 @@ def user_notifications_read_all():
     return redirect(url_for('index'))
 
 
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    try:
+        # Tiny query keeps the pooled DB connection active.
+        _execute("SELECT 1", fetch=True)
+        return jsonify({'status': 'alive', 'db': 'connected'})
+    except Exception:
+        return jsonify({'status': 'alive', 'db': 'disconnected'}), 503
+
+
 @app.route('/api/user/updates')
 def user_updates_api():
     if not session.get('user_id'):
@@ -2282,11 +3452,12 @@ def name_order(order_id):
 # --- ADMIN ROUTES ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    next_path = _safe_next_path(request.values.get('next'), 'dashboard')
     if request.method == 'POST':
         if request.form.get('password') == ADMIN_PASSWORD:
             session['logged_in'] = True
-            return redirect(url_for('dashboard'))
-    return render_template('login.html')
+            return redirect(next_path)
+    return render_template('login.html', next_path=next_path)
 
 @app.route('/dashboard')
 def dashboard():
@@ -2560,6 +3731,434 @@ def reset_financials():
     return jsonify({'ok': True})
 
 
+@app.route('/extension-api/desktop-capture/push', methods=['POST'])
+def extension_push_desktop_capture_link():
+    payload = request.get_json(silent=True) or {}
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized(payload)):
+        return jsonify({'ok': False, 'error': 'Unauthorized extension API key.'}), 401
+
+    model_url = str(payload.get('model_url') or payload.get('makerworld_link') or '').strip()
+    if not _is_allowed_model_link(model_url):
+        return jsonify({'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}), 400
+
+    source = str(payload.get('source') or '').strip()
+    triggered_at = str(payload.get('triggered_at') or '').strip()
+
+    with _DESKTOP_CAPTURE_SIGNAL_LOCK:
+        _DESKTOP_CAPTURE_SIGNAL['id'] = int(_DESKTOP_CAPTURE_SIGNAL.get('id') or 0) + 1
+        _DESKTOP_CAPTURE_SIGNAL['model_url'] = model_url
+        _DESKTOP_CAPTURE_SIGNAL['source'] = source
+        _DESKTOP_CAPTURE_SIGNAL['triggered_at'] = triggered_at
+        signal_id = _DESKTOP_CAPTURE_SIGNAL['id']
+
+    return jsonify({'ok': True, 'signal_id': signal_id, 'model_url': model_url})
+
+
+@app.route('/extension-api/desktop-capture/poll', methods=['GET'])
+def extension_poll_desktop_capture_link():
+    api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    try:
+        last_id = int(request.args.get('last_id') or 0)
+    except (TypeError, ValueError):
+        last_id = 0
+
+    with _DESKTOP_CAPTURE_SIGNAL_LOCK:
+        current = dict(_DESKTOP_CAPTURE_SIGNAL)
+
+    current_id = int(current.get('id') or 0)
+    if current_id <= last_id:
+        return jsonify({'ok': True, 'has_update': False, 'signal_id': current_id})
+
+    return jsonify({
+        'ok': True,
+        'has_update': True,
+        'signal_id': current_id,
+        'model_url': str(current.get('model_url') or ''),
+        'source': str(current.get('source') or ''),
+        'triggered_at': str(current.get('triggered_at') or ''),
+    })
+
+
+@app.route('/extension-api/confirm-capture', methods=['POST'])
+def extension_confirm_capture():
+    payload = request.get_json(silent=True) or {}
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized(payload)):
+        return jsonify({'ok': False, 'error': 'Unauthorized extension API key.'}), 401
+
+    target_user_id = str(payload.get('target_user_id') or '').strip()
+    target_username = str(payload.get('target_username') or '').strip()
+    target_users_raw = payload.get('target_users')
+
+    db = get_db()
+    users = db.get('users', [])
+
+    # Multi-user path: target_users array sent by desktop app
+    if isinstance(target_users_raw, list) and target_users_raw:
+        normalized = _normalize_target_users(target_users_raw, fallback='ALL')
+        if 'ALL' in normalized:
+            owner_user_id = 'ALL'
+            resolved_target_users = ['ALL']
+        else:
+            resolved_target_users = []
+            for uname in normalized:
+                matched = next(
+                    (u for u in users if str(u.get('username') or '').strip().lower() == str(uname).lower()),
+                    None,
+                )
+                if matched:
+                    resolved_target_users.append(str(matched.get('id') or '').strip())
+            if not resolved_target_users:
+                return jsonify({'ok': False, 'error': 'No valid target users found.'}), 400
+            owner_user_id = resolved_target_users[0]
+    else:
+        # Legacy single-user path
+        # Resolve user ID — only use target_user_id if it's non-empty AND actually exists
+        owner_user_id = ''
+        if target_user_id and any(str(u.get('id') or '').strip() == target_user_id for u in users):
+            owner_user_id = target_user_id
+        if not owner_user_id and target_username:
+            matched_user = next(
+                (u for u in users if str(u.get('username') or '').strip().lower() == target_username.lower()),
+                None,
+            )
+            if matched_user:
+                owner_user_id = str(matched_user.get('id') or '').strip()
+
+        if not owner_user_id:
+            return jsonify({'ok': False, 'error': 'Target user not found. Provide a valid target_username or target_user_id.'}), 400
+        resolved_target_users = [owner_user_id]
+
+    model_link = str(payload.get('makerworld_url') or payload.get('link') or '').strip()
+    if not _is_allowed_model_link(model_link):
+        return jsonify({'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}), 400
+
+    title = str(payload.get('title') or payload.get('name') or '').strip() or 'MakerWorld Model'
+    image_url = str(payload.get('image_url') or '').strip()
+    description = str(payload.get('description') or '').strip()
+
+    suggested_filament = str(payload.get('suggested_filament') or payload.get('color') or '').strip()
+    suggested_colors = str(payload.get('suggested_colors') or suggested_filament or '').strip()
+    suggested_profile = str(payload.get('suggested_profile') or '').strip()
+    show_in_slideshow = _to_bool(payload.get('show_in_slideshow'), default=False)
+
+    raw_insuf = payload.get('insufficient_filaments')
+    insufficient_filaments = [str(n).strip() for n in raw_insuf if str(n).strip()] if isinstance(raw_insuf, list) else []
+
+    raw_category_options = payload.get('category_options')
+    category_options = raw_category_options if isinstance(raw_category_options, list) else []
+    category_options = [
+        {
+            'part': str(item.get('part') or '').strip(),
+            'suggested_filament': str(item.get('suggested_filament') or '').strip(),
+        }
+        for item in category_options
+        if isinstance(item, dict)
+    ]
+
+    raw_parts_configuration = payload.get('parts_configuration')
+    parts_configuration = raw_parts_configuration if isinstance(raw_parts_configuration, list) else []
+    parts_configuration = [
+        {
+            'part': str(item.get('part') or '').strip(),
+            'suggested_filament': str(item.get('suggested_filament') or '').strip(),
+        }
+        for item in parts_configuration
+        if isinstance(item, dict)
+    ]
+
+    raw_profile_customizations = payload.get('profile_customizations')
+    profile_customizations = raw_profile_customizations if isinstance(raw_profile_customizations, list) else []
+    profile_customizations = [
+        {
+            'profile_id': str(item.get('profile_id') or '').strip(),
+            'profile_name': str(item.get('profile_name') or '').strip(),
+            'is_default': bool(item.get('is_default')),
+            'image_url': str(item.get('image_url') or '').strip(),
+            'suggested_filament': str(item.get('suggested_filament') or '').strip(),
+            'suggested_colors': str(item.get('suggested_colors') or '').strip(),
+            'sufficient_filaments_by_part': {
+                str(k).strip(): [
+                    str(n).strip()
+                    for n in (v if isinstance(v, list) else [])
+                    if str(n).strip()
+                ]
+                for k, v in ((item.get('sufficient_filaments_by_part') if isinstance(item.get('sufficient_filaments_by_part'), dict) else {}).items())
+                if str(k).strip()
+            },
+            'insufficient_filaments_by_part': {
+                str(k).strip(): [
+                    str(n).strip()
+                    for n in (v if isinstance(v, list) else [])
+                    if str(n).strip()
+                ]
+                for k, v in ((item.get('insufficient_filaments_by_part') if isinstance(item.get('insufficient_filaments_by_part'), dict) else {}).items())
+                if str(k).strip()
+            },
+            'insufficient_filaments': [
+                str(n).strip()
+                for n in (item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [])
+                if str(n).strip()
+            ],
+            'parts_configuration': [
+                {
+                    'part': str(p.get('part') or '').strip(),
+                    'suggested_filament': str(p.get('suggested_filament') or '').strip(),
+                }
+                for p in (item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [])
+                if isinstance(p, dict)
+            ],
+        }
+        for item in profile_customizations
+        if isinstance(item, dict)
+    ]
+
+    profile_pricing = _normalize_profile_pricing(payload.get('profile_pricing'))
+    if profile_pricing:
+        suggested_profile = next((p['name'] for p in profile_pricing if p.get('is_default')), suggested_profile)
+
+    profile_options = [p['name'] for p in profile_pricing]
+
+    try:
+        price_value = float(payload.get('price') or 0)
+    except (TypeError, ValueError):
+        price_value = 0.0
+
+    manual_weight = payload.get('print_weight_g', payload.get('printWeightG'))
+    manual_hours = payload.get('estimated_print_hours', payload.get('printHours'))
+    calc_result = _calculate_model_metrics(model_link, manual_weight=manual_weight, manual_hours=manual_hours)
+    base_weight = float(calc_result.get('weight') or 50.0)
+    estimated_print_hours = float(calc_result.get('hours') or 0.0)
+    weight_source = str(calc_result.get('source') or 'fallback_default')
+    weight_needs_review = bool(calc_result.get('needs_review'))
+
+    # If extension did not send a computed price, compute it server-side from current settings.
+    if price_value <= 0:
+        price_value = float(calc_result.get('raw_price') or 0.0)
+
+    featured_id = str(uuid.uuid4())[:10]
+    new_item = {
+        'id': featured_id,
+        'title': title,
+        'image_url': image_url,
+        'makerworld_url': model_link,
+        'description': description,
+        'price': price_value,
+        'suggested_filament': suggested_filament,
+        'suggested_colors': suggested_colors,
+        'suggested_profile': suggested_profile,
+        'profile_options': profile_options,
+        'profile_pricing': profile_pricing,
+        'category_options': category_options,
+        'parts_configuration': parts_configuration,
+        'profile_customizations': profile_customizations,
+        'show_in_slideshow': show_in_slideshow,
+        'target_user': owner_user_id,
+        'target_users': resolved_target_users,
+        'base_weight': base_weight,
+        'estimated_print_hours': estimated_print_hours,
+        'weight_source': weight_source,
+        'weight_needs_review': weight_needs_review,
+        'weight_scrape_error': str(calc_result.get('error') or ''),
+        'source': 'browser_extension',
+        'insufficient_filaments': insufficient_filaments,
+    }
+
+    db.setdefault('featured_prints', []).append(new_item)
+    save_db(db)
+    return jsonify({
+        'ok': True,
+        'featured_id': featured_id,
+        'base_weight': base_weight,
+        'estimated_print_hours': estimated_print_hours,
+        'weight_source': weight_source,
+        'weight_needs_review': weight_needs_review,
+        'weight_scrape_error': str(calc_result.get('error') or ''),
+        'auto_price_formatted': str(calc_result.get('formatted_price') or ''),
+    })
+
+
+@app.route('/extension-api/scrape-model-metrics', methods=['GET'])
+def extension_scrape_model_metrics():
+    api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    model_url = str(request.args.get('model_url') or '').strip()
+    if not _is_allowed_model_link(model_url):
+        return jsonify({'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}), 400
+
+    manual_weight = request.args.get('manual_weight')
+    calc_result = _calculate_model_metrics(model_url, manual_weight=manual_weight)
+
+    profile_metrics = {'title': str(calc_result.get('title') or 'MakerWorld Model'), 'profiles': []}
+    profile_extract_error = ''
+    try:
+        profile_metrics = _extract_model_profile_metrics(
+            model_url,
+            pricing_overrides={
+                'base_fee': request.args.get('base_fee'),
+                'price_per_gram': request.args.get('price_per_gram'),
+                'power_cost_per_hour': request.args.get('power_cost_per_hour'),
+                'profit_margin': request.args.get('profit_margin'),
+            },
+        )
+    except Exception as exc:
+        profile_extract_error = str(exc)
+
+    profiles = profile_metrics.get('profiles') or []
+    image_urls = _extract_model_image_urls(str(calc_result.get('html') or ''), _extract_makerworld_instances(str(calc_result.get('html') or '')))
+    if not image_urls:
+        try:
+            quick = _quick_parse_model_page(model_url)
+            quick_html = str(quick.get('html') or '')
+            quick_instances = _extract_makerworld_instances(quick_html)
+            image_urls = _extract_model_image_urls(quick_html, quick_instances)
+        except Exception:
+            image_urls = []
+    default_profile = next((p for p in profiles if p.get('is_default')), profiles[0] if profiles else None)
+
+    weight_g = float(default_profile.get('weight_g') or calc_result.get('weight') or 0.0) if default_profile else float(calc_result.get('weight') or 0.0)
+    estimated_print_hours = float(default_profile.get('estimated_print_hours') or calc_result.get('hours') or 0.0) if default_profile else float(calc_result.get('hours') or 0.0)
+    raw_price = float(default_profile.get('price') or calc_result.get('raw_price') or 0.0) if default_profile else float(calc_result.get('raw_price') or 0.0)
+
+    return jsonify({
+        'ok': bool(calc_result.get('success')),
+        'weight_g': weight_g,
+        'estimated_print_hours': estimated_print_hours,
+        'title': str(profile_metrics.get('title') or calc_result.get('title') or 'MakerWorld Model'),
+        'weight_source': str(calc_result.get('source') or 'unknown'),
+        'weight_needs_review': bool(calc_result.get('needs_review')),
+        'raw_price': raw_price,
+        'formatted_price': f"Rp{int(round(raw_price)):,}".replace(',', '.'),
+        'error': str(calc_result.get('error') or profile_extract_error or ''),
+        'profiles': profiles,
+        'image_urls': image_urls,
+        'image_url': image_urls[0] if image_urls else '',
+    })
+
+
+@app.route('/extension-api/debug-model-text', methods=['GET'])
+def extension_debug_model_text():
+    api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    model_url = str(request.args.get('model_url') or '').strip()
+    if not _is_allowed_model_link(model_url):
+        return jsonify({'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}), 400
+
+    try:
+        quick = _quick_parse_model_page(model_url)
+        html_text = str(quick.get('html') or '')
+
+        weight_key_hits = []
+        for m in re.finditer(r'"weight"\s*:\s*([^,}\]]+)', html_text, re.IGNORECASE):
+            s = max(0, m.start() - 120)
+            e = min(len(html_text), m.end() + 140)
+            weight_key_hits.append(html_text[s:e].replace('\n', ' '))
+            if len(weight_key_hits) >= 15:
+                break
+
+        usedg_hits = []
+        for m in re.finditer(r'"usedG"\s*:\s*"?(\d+(?:\.\d+)?)"?', html_text, re.IGNORECASE):
+            usedg_hits.append(float(m.group(1)))
+            if len(usedg_hits) >= 50:
+                break
+
+        grams_hits = []
+        for m in re.finditer(r'(\d+(?:\.\d+)?)\s*g\b', html_text, re.IGNORECASE):
+            grams_hits.append(float(m.group(1)))
+            if len(grams_hits) >= 80:
+                break
+
+        calc = _calculate_model_metrics(model_url)
+
+        return jsonify({
+            'ok': True,
+            'title': quick.get('title') or 'MakerWorld Model',
+            'regex_weight_value': quick.get('weight'),
+            'usedG_sample': usedg_hits[:25],
+            'grams_sample': grams_hits[:25],
+            'weight_key_context': weight_key_hits,
+            'calc_result': {
+                'success': bool(calc.get('success')),
+                'source': str(calc.get('source') or ''),
+                'weight': float(calc.get('weight') or 0.0),
+                'hours': float(calc.get('hours') or 0.0),
+                'formatted_price': str(calc.get('formatted_price') or ''),
+                'error': str(calc.get('error') or ''),
+                'needs_review': bool(calc.get('needs_review')),
+            },
+        })
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/extension-api/pricing-config', methods=['GET'])
+def extension_pricing_config():
+    api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    settings = _load_control_center_settings()
+    return jsonify({
+        'ok': True,
+        'base_service_fee': settings['base_service_fee'],
+        'price_per_gram': settings['price_per_gram'],
+        'power_cost_per_hour': settings['power_cost_per_hour'],
+        'profit_margin': settings['profit_margin'],
+    })
+
+
+@app.route('/extension-api/app-data', methods=['GET'])
+def extension_app_data():
+    api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    db = get_db()
+    users = [
+        {'id': str(u.get('id') or ''), 'username': str(u.get('username') or '')}
+        for u in db.get('users', [])
+        if u.get('id') and u.get('username')
+    ]
+    settings = db.get('settings', {})
+    filaments, _ = _normalize_filaments(settings)
+    filament_data = [
+        {
+            'name': f['name'],
+            'color_hex': f.get('color_hex') or f.get('hex') or '#888888',
+            'hex': f.get('hex') or f.get('color_hex') or '#888888',
+            'material': f.get('material', ''),
+            'remaining_g': int(f.get('remaining_g', f.get('total_g', 1000))),
+            'out_of_stock': bool(f.get('out_of_stock', False)),
+        }
+        for f in filaments
+    ]
+    try:
+        rows = _execute(
+            "SELECT id, name, price_modifier, is_default FROM print_profiles WHERE is_active = TRUE ORDER BY is_default DESC, name",
+            fetch=True
+        ) or []
+        profiles = [
+            {'id': r[0], 'name': r[1], 'price_modifier': float(r[2] or 0), 'is_default': bool(r[3])}
+            for r in rows
+        ]
+    except Exception:
+        profiles = []
+    if not any(p['is_default'] for p in profiles) and profiles:
+        profiles[0]['is_default'] = True
+    return jsonify({'ok': True, 'users': users, 'filaments': filament_data, 'profiles': profiles})
+
+
 @app.route('/dashboard/settings/update', methods=['POST'])
 def update_control_center_settings():
     if not session.get('logged_in'):
@@ -2570,7 +4169,7 @@ def update_control_center_settings():
     power_cost_per_hour = max(0.0, _to_float(request.form.get('power_cost_per_hour'), 0.0))
     profit_margin = max(0.0, _to_float(request.form.get('profit_margin'), CONTROL_SETTING_DEFAULTS['profit_margin']))
     lifetime_total = max(0.0, _to_float(request.form.get('lifetime_total_plastic_used'), 0.0))
-    lifetime_profit_override = max(0.0, _to_float(request.form.get('lifetime_profit'), _get_business_stat('lifetime_profit', 0.0)))
+    lifetime_profit_override = _to_float(request.form.get('lifetime_profit'), _get_business_stat('lifetime_profit', 0.0))
     announcement_message = (request.form.get('announcement_message') or '').strip()
     shop_open = request.form.get('shop_open') == 'on'
 
@@ -2831,32 +4430,9 @@ def add_featured_print():
     profile_options_raw = request.form.get('profile_options', '').strip() or ''
     profile_options = [p.strip() for p in profile_options_raw.split(',') if p.strip()]
     profile_pricing_raw = request.form.get('profile_pricing', '').strip() or ''
-    profile_pricing = []
-    if profile_pricing_raw:
-        try:
-            parsed_profile_pricing = json.loads(profile_pricing_raw)
-            if isinstance(parsed_profile_pricing, list):
-                for row in parsed_profile_pricing:
-                    if not isinstance(row, dict):
-                        continue
-                    name = str(row.get('name') or '').strip()
-                    if not name:
-                        continue
-                    try:
-                        profile_price = float(row.get('price') or row.get('price_modifier') or 0)
-                    except (TypeError, ValueError):
-                        profile_price = 0.0
-                    profile_pricing.append({
-                        'name': name,
-                        'price': profile_price,
-                        'is_default': bool(row.get('is_default')),
-                    })
-        except Exception:
-            profile_pricing = []
+    profile_pricing = _normalize_profile_pricing(profile_pricing_raw)
     price_value = 0.0
     if profile_pricing:
-        if not any(p.get('is_default') for p in profile_pricing):
-            profile_pricing[0]['is_default'] = True
         profile_options = [p['name'] for p in profile_pricing]
         suggested_profile = next((p['name'] for p in profile_pricing if p.get('is_default')), profile_options[0] if profile_options else '')
         price_value = next((p['price'] for p in profile_pricing if p.get('is_default')), profile_pricing[0]['price'] if profile_pricing else 0.0)
@@ -2883,6 +4459,7 @@ def add_featured_print():
         target_users = [request.form.get('target_user', 'ALL')]
     target_users = _normalize_target_users(target_users, fallback='ALL')
     target_user = 'ALL' if 'ALL' in target_users else target_users[0]
+    show_in_slideshow = _to_bool(request.form.get('show_in_slideshow'), default=True)
 
     if not (title and image_url and makerworld_url):
         return _redirect_back_to_dashboard('#suggested-section')
@@ -2901,8 +4478,10 @@ def add_featured_print():
         'profile_pricing': profile_pricing,
         'category_options': category_options,
         'parts_configuration': parts_configuration,
+        'show_in_slideshow': show_in_slideshow,
         'target_user': target_user,
         'target_users': target_users,
+        'source': 'dashboard',
     }
 
     db.setdefault('featured_prints', []).append(new_item)
@@ -2937,32 +4516,9 @@ def edit_featured_print(item_id):
     profile_options_raw = request.form.get('profile_options', '').strip() or ''
     profile_options = [p.strip() for p in profile_options_raw.split(',') if p.strip()]
     profile_pricing_raw = request.form.get('profile_pricing', '').strip() or ''
-    profile_pricing = []
-    if profile_pricing_raw:
-        try:
-            parsed_profile_pricing = json.loads(profile_pricing_raw)
-            if isinstance(parsed_profile_pricing, list):
-                for row in parsed_profile_pricing:
-                    if not isinstance(row, dict):
-                        continue
-                    name = str(row.get('name') or '').strip()
-                    if not name:
-                        continue
-                    try:
-                        profile_price = float(row.get('price') or row.get('price_modifier') or 0)
-                    except (TypeError, ValueError):
-                        profile_price = 0.0
-                    profile_pricing.append({
-                        'name': name,
-                        'price': profile_price,
-                        'is_default': bool(row.get('is_default')),
-                    })
-        except Exception:
-            profile_pricing = []
+    profile_pricing = _normalize_profile_pricing(profile_pricing_raw)
     price_value = float(item.get('price', 0) or 0)
     if profile_pricing:
-        if not any(p.get('is_default') for p in profile_pricing):
-            profile_pricing[0]['is_default'] = True
         profile_options = [p['name'] for p in profile_pricing]
         suggested_profile = next((p['name'] for p in profile_pricing if p.get('is_default')), profile_options[0] if profile_options else '')
         price_value = next((p['price'] for p in profile_pricing if p.get('is_default')), profile_pricing[0]['price'] if profile_pricing else 0.0)
@@ -2990,6 +4546,7 @@ def edit_featured_print(item_id):
         target_users = [request.form.get('target_user', 'ALL')]
     target_users = _normalize_target_users(target_users, fallback='ALL')
     target_user = 'ALL' if 'ALL' in target_users else target_users[0]
+    show_in_slideshow = _to_bool(request.form.get('show_in_slideshow'), default=_to_bool(item.get('show_in_slideshow'), default=False))
 
     if not (title and image_url and makerworld_url):
         return _redirect_back_to_dashboard('#suggested-section')
@@ -3006,6 +4563,7 @@ def edit_featured_print(item_id):
     item['profile_pricing'] = profile_pricing
     item['category_options'] = category_options
     item['parts_configuration'] = parts_configuration
+    item['show_in_slideshow'] = show_in_slideshow
     item['target_user'] = target_user
     item['target_users'] = target_users
 
@@ -3019,6 +4577,18 @@ def delete_featured_print(item_id):
     db['featured_prints'] = [f for f in db.get('featured_prints', []) if f.get('id') != item_id]
     save_db(db)
     return _redirect_back_to_dashboard('#suggested-section')
+
+@app.route('/dashboard/featured/toggle-slideshow/<item_id>', methods=['POST'])
+def toggle_featured_slideshow(item_id):
+    if not session.get('logged_in'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    db = get_db()
+    item = next((f for f in db.get('featured_prints', []) if f.get('id') == item_id), None)
+    if not item:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    item['show_in_slideshow'] = not bool(item.get('show_in_slideshow'))
+    save_db(db)
+    return jsonify({'ok': True, 'show_in_slideshow': item['show_in_slideshow']})
 
 @app.route('/api/print-profiles', methods=['GET'])
 def get_print_profiles():
@@ -3491,6 +5061,17 @@ def import_jsonbin_dump(path):
     print(f"Imported JSON data from {path} into Postgres database.")
 
 
+app.register_blueprint(
+    create_model_capture_blueprint(
+        {
+            'get_db': get_db,
+            'save_db': save_db,
+            'to_float': _to_float,
+        }
+    )
+)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run the 3D print orders app.')
     parser.add_argument('--import', dest='import_path', help='Import JSONBin dump (exported JSON) into Postgres (full replace).')
@@ -3500,4 +5081,4 @@ if __name__ == '__main__':
     if args.import_path:
         import_jsonbin_dump(args.import_path)
     else:
-        app.run(debug=True, port=args.port)
+        app.run(debug=True, port=args.port, use_reloader=False)

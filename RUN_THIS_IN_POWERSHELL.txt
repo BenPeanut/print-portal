@@ -1,0 +1,59 @@
+TEMPORARY DEV RUN (NO REBUILD)
+Use this while coding so changes apply immediately on restart.
+
+BACKGROUND FLASK SERVER (NO TERMINAL WINDOW)
+Run once now:
+.\start_flask_background.ps1
+
+AUTO-START FLASK AT WINDOWS LOGIN
+Enable:
+.\enable_flask_autostart.ps1
+
+Disable later if needed:
+.\disable_flask_autostart.ps1
+
+1) Go to project folder:
+cd "C:\Users\Benaiah\Documents\MyCode\MyPrintingBuisness\Client_Website"
+
+2) Start desktop app from source:
+.\run_desktop_dev.ps1
+
+WHEN YOU CHANGE CODE
+1) Close the desktop app window.
+2) Run this again:
+.\run_desktop_dev.ps1
+
+If a stale process is stuck, run this then retry:
+Stop-Process -Name PrintingBusinessApp -Force -ErrorAction SilentlyContinue
+Stop-Process -Name python -Force -ErrorAction SilentlyContinue
+.\run_desktop_dev.ps1
+
+FINAL EXE BUILD (ONLY WHEN READY)
+cd "C:\Users\Benaiah\Documents\MyCode\MyPrintingBuisness\Client_Website"
+Stop-Process -Name PrintingBusinessApp -Force -ErrorAction SilentlyContinue
+Stop-Process -Name python -Force -ErrorAction SilentlyContinue
+.\build_webview_exe.ps1
+.\dist\PrintingBusinessApp.exe --open-path /desktop-capture --port 5075
+
+If scripts are blocked, run once:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then build again:
+Stop-Process -Name PrintingBusinessApp -Force -ErrorAction SilentlyContinue
+Stop-Process -Name python -Force -ErrorAction SilentlyContinue
+.\build_webview_exe.ps1
+.\dist\PrintingBusinessApp.exe --open-path /desktop-capture --port 5075
+
+Normal launch after build:
+.\dist\PrintingBusinessApp.exe
+
+CURRENT IMPLEMENTATION TODO STATUS (AUTO-UPDATED BY COPILOT)
+[x] Audit popup and desktop deltas
+[x] Define shared capture behavior module
+[x] Implement shared module in static
+[x] Refactor desktop to shared module
+[x] Run endpoint and UI smoke tests
+[x] Apply shared behavior to dashboard modal JS
+[x] Apply shared behavior to extension popup JS
+[x] Run end-to-end parity QA pass (dashboard vs popup vs EXE)
+[x] Next: final release build + quick manual sanity check

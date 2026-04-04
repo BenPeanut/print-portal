@@ -2,7 +2,14 @@
 {% set page_title = 'Home | Client Portal' %}
 
 {% block content %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <style>
+    html.modal-open,
+    body.modal-open {
+        overflow: hidden;
+    }
+
     .hero-container {
         position: relative;
         overflow: hidden;
@@ -514,12 +521,93 @@
         gap: 8px;
     }
 
-    .profile-pill {
+    .profile-select-wrap {
+        display: none;
+    }
+
+    .profile-select {
+        width: 100%;
         border: 1px solid #cfe0d7;
         background: #f7fcf9;
         color: #235743;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 0.9rem;
+        font-weight: 700;
+    }
+
+    .ts-wrapper.single .ts-control {
+        border: 1px solid #cfe0d7;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #f9fdfb 0%, #f2faf6 100%);
+        padding: 9px 11px;
+        min-height: 44px;
+        box-shadow: 0 4px 12px rgba(21, 85, 57, 0.08);
+    }
+
+    .ts-wrapper.single .ts-control input {
+        color: #235743;
+    }
+
+    .ts-wrapper.single .ts-control .item {
+        color: #235743;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+    }
+
+    .ts-dropdown {
+        border: 1px solid #cfe0d7;
+        border-radius: 12px;
+        overflow: hidden;
+        z-index: 2400 !important;
+        box-shadow: 0 16px 30px rgba(10, 44, 31, 0.22);
+        margin-top: 6px;
+    }
+
+    .profile-option-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .profile-option-name {
+        color: #163f2f;
+        font-weight: 700;
+    }
+
+    .profile-option-price {
+        background: #e7f8ef;
+        color: #176241;
+        border: 1px solid #bfe7d0;
         border-radius: 999px;
-        padding: 8px 14px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        padding: 3px 8px;
+        white-space: nowrap;
+    }
+
+    .profile-item-chip {
+        background: #00ae42;
+        color: #ffffff !important;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        padding: 6px 16px;
+    }
+
+    .ts-dropdown .option.active {
+        background: #eef8f3;
+        color: #163f2f;
+    }
+
+    .profile-pill {
+        border: 1px solid #4caf80;
+        background: #4caf80;
+        color: #ffffff;
+        border-radius: 999px;
+        padding: 10px 20px;
         font-size: 0.85rem;
         font-weight: 800;
         cursor: pointer;
@@ -527,15 +615,15 @@
     }
 
     .profile-pill:hover {
-        background: #eef8f3;
-        border-color: #b9d8c9;
+        background: #3a9e6f;
+        border-color: #3a9e6f;
     }
 
     .profile-pill.active {
         background: #00ae42;
         color: #ffffff;
         border-color: #00ae42;
-        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.26);
+        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.3);
     }
 
     .parts-stack {
@@ -607,7 +695,8 @@
         content: attr(data-name);
         position: absolute;
         left: 50%;
-        top: calc(100% + 8px);
+        top: auto;
+        bottom: calc(100% + 8px);
         transform: translateX(-50%);
         background: #143d2d;
         color: #ffffff;
@@ -624,6 +713,30 @@
 
     .swatch-btn:hover::after,
     .swatch-btn:focus-visible::after { opacity: 1; }
+
+    .swatch-btn.swatch-insufficient {
+        overflow: visible;
+        cursor: not-allowed;
+    }
+
+    .swatch-btn.swatch-insufficient:disabled {
+        opacity: 1;
+    }
+
+    .swatch-btn.swatch-insufficient .swatch-insufficient-mark {
+        position: absolute;
+        inset: -9px;
+        pointer-events: none;
+        z-index: 6;
+    }
+
+    .swatch-btn.swatch-insufficient .swatch-insufficient-mark::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: center / 100% 100% no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cline x1='12' y1='12' x2='88' y2='88' stroke='%23ffffff' stroke-width='16' stroke-linecap='round'/%3E%3Cline x1='88' y1='12' x2='12' y2='88' stroke='%23ffffff' stroke-width='16' stroke-linecap='round'/%3E%3Cline x1='12' y1='12' x2='88' y2='88' stroke='%23d32f2f' stroke-width='10' stroke-linecap='round'/%3E%3Cline x1='88' y1='12' x2='12' y2='88' stroke='%23d32f2f' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E");
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+    }
 
     .config-actions {
         display: flex;
@@ -658,6 +771,7 @@
         .hero-price { font-size: 1.6rem; }
         .timeline { grid-template-columns: 1fr; }
     }
+
 </style>
 
 <div id="page-data" data-filaments='{{ filaments|tojson|safe }}' style="display:none;"></div>
@@ -665,7 +779,7 @@
 <section class="hero-container" id="hero-container">
     <button type="button" class="hero-arrow hero-arrow-left" aria-label="Previous slide">‹</button>
     <button type="button" class="hero-arrow hero-arrow-right" aria-label="Next slide">›</button>
-    {% for item in featured_items %}
+    {% for item in slideshow_items %}
     <article class="hero-slide {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}" data-item='{{ item | tojson }}'>
         <div class="hero-image" style="background-image:url('{{ item.image_url }}');"></div>
         <div class="hero-overlay"></div>
@@ -684,18 +798,6 @@
     <div class="hero-dots" id="hero-dots"></div>
 </section>
 
-{% if featured_total_pages and featured_total_pages > 1 %}
-<div class="featured-pagination">
-    {% if featured_page > 1 %}
-    <a href="{{ url_for('index', featured_page=featured_page - 1) }}">Previous Prints</a>
-    {% endif %}
-    <span>Featured Page {{ featured_page }} of {{ featured_total_pages }}</span>
-    {% if featured_page < featured_total_pages %}
-    <a href="{{ url_for('index', featured_page=featured_page + 1) }}">More Prints</a>
-    {% endif %}
-</div>
-{% endif %}
-
 <div id="featured-order-modal" class="modal">
     <div class="modal-backdrop" id="featured-modal-backdrop"></div>
     <div class="config-modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
@@ -710,6 +812,9 @@
             <section class="config-section">
                 <p class="config-section-title">Print Profile</p>
                 <div id="featured-modal-profile-pills" class="profile-pills"></div>
+                <div id="featured-modal-profile-select-wrap" class="profile-select-wrap">
+                    <select id="featured-modal-profile-select" class="profile-select"></select>
+                </div>
             </section>
 
             <section class="config-section">
@@ -921,6 +1026,7 @@
         parts: [],
         selections: {},
     };
+    let profileSelectControl = null;
     modalState.profiles = [];
     modalState.profileObj = null;
     let printProfilesPromise = null;
@@ -943,11 +1049,13 @@
         }
         return (filaments || []).map(function (f) {
             if (typeof f === 'string') {
-                return { name: f, hex: '#8b8b8b' };
+                return { name: f, hex: '#8b8b8b', remaining_g: 99999 };
             }
             return {
                 name: String((f && f.name) || '').trim(),
                 hex: String((f && f.hex) || '#8b8b8b').trim() || '#8b8b8b',
+                remaining_g: Number((f && f.remaining_g != null) ? f.remaining_g : 99999),
+                out_of_stock: Boolean(f && f.out_of_stock),
             };
         }).filter(function (f) { return f.name; });
     }
@@ -981,9 +1089,12 @@
                     const name = String((p && p.name) || '').trim();
                     if (!name) return null;
                     return {
+                        id: String((p && p.id) || '').trim(),
                         name: name,
                         price: Number((p && (p.price !== undefined ? p.price : p.price_modifier)) || 0),
                         is_default: Boolean(p && p.is_default),
+                        weight_g: Number((p && p.weight_g) || 0),
+                        colors: Array.isArray(p && p.colors) ? p.colors : [],
                     };
                 })
                 .filter(Boolean);
@@ -1002,11 +1113,30 @@
         const suggested = String(item.suggested_profile || '').trim().toLowerCase();
         return options.map(function (name, idx) {
             return {
+                id: '',
                 name: String(name),
                 price: Number(item.price || 0),
                 is_default: suggested ? String(name).trim().toLowerCase() === suggested : idx === 0,
             };
         });
+    }
+
+    function getProfileCustomization(item, profileObj) {
+        if (!item || !profileObj) return null;
+        const customizations = Array.isArray(item.profile_customizations) ? item.profile_customizations : [];
+        const profileId = String(profileObj.id || '').trim();
+        const profileName = String(profileObj.name || '').trim().toLowerCase();
+
+        if (profileId) {
+            const byId = customizations.find(function (entry) {
+                return String(entry && entry.profile_id || '').trim() === profileId;
+            });
+            if (byId) return byId;
+        }
+
+        return customizations.find(function (entry) {
+            return String(entry && entry.profile_name || '').trim().toLowerCase() === profileName;
+        }) || null;
     }
 
     function deriveParts(item) {
@@ -1049,6 +1179,56 @@
         return parts;
     }
 
+    function derivePartsForProfile(item, profileObj) {
+        const profileCustomization = getProfileCustomization(item, profileObj);
+        const customParts = Array.isArray(profileCustomization && profileCustomization.parts_configuration)
+            ? profileCustomization.parts_configuration
+            : [];
+
+        if (customParts.length) {
+            return customParts
+                .map(function (part, idx) {
+                    const name = String(part && (part.part || part.name || part.label || part.title) || '').trim();
+                    if (!name) return null;
+                    return {
+                        name: name,
+                        suggested: String(part && (part.suggested_filament || part.filament || part.color) || '').trim(),
+                        key: 'part_' + idx,
+                    };
+                })
+                .filter(Boolean);
+        }
+
+        return deriveParts(item);
+    }
+
+    function getProfileImage(item, profileObj) {
+        const profileCustomization = getProfileCustomization(item, profileObj);
+        const customUrl = String(profileCustomization && profileCustomization.image_url || '').trim();
+        return customUrl || String(item && item.image_url || '').trim();
+    }
+
+    function applySelectedProfileConfiguration() {
+        if (!modalState.item) return;
+        const profileObj = modalState.profileObj || null;
+        modalState.parts = derivePartsForProfile(modalState.item, profileObj);
+        if (!modalState.parts.length) {
+            modalState.parts = [{ name: 'Main Part', suggested: '', key: 'part_0' }];
+        }
+        modalState.selections = {};
+        modalState.parts.forEach(function (part) {
+            modalState.selections[part.key] = part.suggested || '';
+        });
+
+        const img = document.getElementById('featured-modal-image');
+        if (img) {
+            const imageUrl = getProfileImage(modalState.item, profileObj);
+            img.style.backgroundImage = imageUrl ? "url('" + imageUrl + "')" : 'none';
+        }
+
+        renderParts();
+    }
+
     function renderPrice() {
         const priceEl = document.getElementById('featured-modal-price');
         if (!priceEl || !modalState.item) return;
@@ -1058,30 +1238,103 @@
 
     function renderProfiles() {
         const wrap = document.getElementById('featured-modal-profile-pills');
-        if (!wrap || !modalState.item) return;
-            const profiles = modalState.profiles || [];
-            if (!modalState.profileObj && profiles.length) {
-                modalState.profileObj = profiles.find(function (p) { return p.is_default; }) || profiles[0];
-                modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
-            }
+        const selectWrap = document.getElementById('featured-modal-profile-select-wrap');
+        const selectEl = document.getElementById('featured-modal-profile-select');
+        if (!wrap || !selectWrap || !selectEl || !modalState.item) return;
+        const profiles = modalState.profiles || [];
+        if (!modalState.profileObj && profiles.length) {
+            modalState.profileObj = profiles.find(function (p) { return p.is_default; }) || profiles[0];
+            modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+        }
         wrap.innerHTML = '';
 
-            profiles.forEach(function (profileObj) {
-                const profileName = profileObj.name || '';
+        if (profileSelectControl) {
+            profileSelectControl.destroy();
+            profileSelectControl = null;
+        }
+        selectEl.innerHTML = '';
+
+        const useDropdown = profiles.length > 4;
+        wrap.style.display = useDropdown ? 'none' : 'flex';
+        selectWrap.style.display = useDropdown ? 'block' : 'none';
+
+        profiles.forEach(function (profileObj) {
+            const profileName = profileObj.name || '';
+            const profilePrice = Number(profileObj.price || 0);
+            const label = profilePrice > 0 ? profileName + ' — Rp' + profilePrice.toLocaleString('id-ID') : profileName;
+
+            if (useDropdown) {
+                const opt = document.createElement('option');
+                opt.value = profileName;
+                opt.textContent = label;
+                opt.selected = modalState.profile === profileName;
+                selectEl.appendChild(opt);
+                return;
+            }
+
             const btn = document.createElement('button');
             btn.type = 'button';
-                btn.className = 'profile-pill' + (modalState.profile === profileName ? ' active' : '');
-                const profilePrice = Number(profileObj.price || 0);
-                const label = profilePrice > 0 ? profileName + ' — Rp' + profilePrice.toLocaleString('id-ID') : profileName;
-                btn.textContent = label;
+            btn.className = 'profile-pill' + (modalState.profile === profileName ? ' active' : '');
+            btn.textContent = label;
             btn.addEventListener('click', function () {
                 modalState.profile = profileName;
-                    modalState.profileObj = profileObj;
+                modalState.profileObj = profileObj;
+                applySelectedProfileConfiguration();
                 renderProfiles();
                 renderPrice();
             });
             wrap.appendChild(btn);
         });
+
+        if (useDropdown) {
+            selectEl.onchange = function () {
+                const chosen = String(selectEl.value || '').trim();
+                const matched = profiles.find(function (p) { return String(p.name || '').trim() === chosen; }) || profiles[0] || null;
+                if (!matched) return;
+                modalState.profile = matched.name;
+                modalState.profileObj = matched;
+                applySelectedProfileConfiguration();
+                renderPrice();
+            };
+
+            if (typeof window.TomSelect === 'function') {
+                profileSelectControl = new window.TomSelect(selectEl, {
+                    create: false,
+                    maxItems: 1,
+                    controlInput: null,
+                    searchField: ['text'],
+                    sortField: { field: 'text', direction: 'asc' },
+                    dropdownParent: 'body',
+                    render: {
+                        option: function (data, escape) {
+                            const raw = String(data.text || '');
+                            const parts = raw.split(' — ');
+                            const name = escape(parts[0] || raw);
+                            const price = parts[1] ? escape(parts[1]) : '';
+                            return '<div class="profile-option-row">'
+                                + '<span class="profile-option-name">' + name + '</span>'
+                                + (price ? '<span class="profile-option-price">' + price + '</span>' : '')
+                                + '</div>';
+                        },
+                        item: function (data, escape) {
+                            const raw = String(data.text || '');
+                            const parts = raw.split(' — ');
+                            const name = escape(parts[0] || raw);
+                            return '<div class="profile-item-chip">' + name + '</div>';
+                        },
+                    },
+                });
+                profileSelectControl.on('change', function (value) {
+                    const chosen = String(value || '').trim();
+                    const matched = profiles.find(function (p) { return String(p.name || '').trim() === chosen; }) || profiles[0] || null;
+                    if (!matched) return;
+                    modalState.profile = matched.name;
+                    modalState.profileObj = matched;
+                    applySelectedProfileConfiguration();
+                    renderPrice();
+                });
+            }
+        }
     }
 
     function renderParts() {
@@ -1090,7 +1343,37 @@
         const filaments = getFilamentCatalog();
         partsWrap.innerHTML = '';
 
+        const _profileCustomization = getProfileCustomization(modalState.item, modalState.profileObj);
+        const profileInsufficient = Array.isArray(_profileCustomization && _profileCustomization.insufficient_filaments)
+            ? _profileCustomization.insufficient_filaments
+            : (Array.isArray(modalState.item && modalState.item.insufficient_filaments) ? modalState.item.insufficient_filaments : []);
+        const profileInsufficientByPart = (_profileCustomization && typeof _profileCustomization.insufficient_filaments_by_part === 'object')
+            ? _profileCustomization.insufficient_filaments_by_part
+            : {};
+        const profileSufficientByPart = (_profileCustomization && typeof _profileCustomization.sufficient_filaments_by_part === 'object')
+            ? _profileCustomization.sufficient_filaments_by_part
+            : {};
+        const hasAnyByPartManual = Object.keys(profileInsufficientByPart).length > 0 || Object.keys(profileSufficientByPart).length > 0;
+        let _profileColors = Array.isArray(modalState.profileObj && modalState.profileObj.colors) ? modalState.profileObj.colors : [];
+        const _profileTotalWg = Number((modalState.profileObj && modalState.profileObj.weight_g) || (modalState.item && (modalState.item.base_weight || modalState.item.weight_g || modalState.item.model_weight)) || 0);
+        
+        // Ensure we have a color entry for each part (create synthetic ones if needed)
+        if (modalState.parts.length > _profileColors.length) {
+            // Pad with synthetic entries split from total weight
+            const partsNeeded = modalState.parts.length - _profileColors.length;
+            const remainingWg = _profileTotalWg / (modalState.parts.length || 1);
+            for (var i = 0; i < partsNeeded; i++) {
+                _profileColors.push({ name: 'Filler ' + (i + 1), used_g: remainingWg });
+            }
+            console.warn('Padded _profileColors: now has', _profileColors.length, 'entries for', modalState.parts.length, 'parts');
+        }
+
         modalState.parts.forEach(function (part, partIndex) {
+            // Per-slot weight: use colors[partIndex].used_g so each part checks its own weight requirement
+            // Now guaranteed to have a color entry for this part
+            var slotWg = (_profileColors[partIndex] && Number(_profileColors[partIndex].used_g || 0) > 0)
+                ? Number(_profileColors[partIndex].used_g)
+                : _profileTotalWg;
             const card = document.createElement('div');
             card.className = 'part-card';
 
@@ -1110,11 +1393,39 @@
                 swatch.setAttribute('data-name', filament.name);
                 swatch.title = filament.name;
 
+                // Show X if filament stock is insufficient for this slot's weight, or manually flagged
+                var partKey = 'part_' + partIndex;
+                var partManualList = Array.isArray(profileInsufficientByPart[partKey]) ? profileInsufficientByPart[partKey] : null;
+                var partAllowList = Array.isArray(profileSufficientByPart[partKey]) ? profileSufficientByPart[partKey] : [];
+                var _manualAllow = partAllowList.some(function (n) {
+                    return String(n || '').toLowerCase() === filament.name.toLowerCase();
+                });
+                var _manualInsuf = ((partManualList || (hasAnyByPartManual ? [] : profileInsufficient))).some(function (n) {
+                    return String(n || '').toLowerCase() === filament.name.toLowerCase();
+                });
+                var _autoInsuf = Boolean(filament.out_of_stock) || (slotWg > 0 && filament.remaining_g < slotWg);
+                var _isInsuf = _manualInsuf || (!_manualAllow && _autoInsuf);
+                if (_isInsuf) {
+                    swatch.classList.add('swatch-insufficient');
+                    swatch.title = filament.name + ' — Not enough available filament';
+                    swatch.disabled = true;
+                    swatch.setAttribute('aria-disabled', 'true');
+                    var mark = document.createElement('span');
+                    mark.className = 'swatch-insufficient-mark';
+                    mark.setAttribute('aria-hidden', 'true');
+                    swatch.appendChild(mark);
+                }
+
                 const selected = String(modalState.selections[part.key] || '').toLowerCase() === filament.name.toLowerCase();
-                if (selected) swatch.classList.add('active');
+                if (selected && _isInsuf) {
+                    delete modalState.selections[part.key];
+                } else if (selected) {
+                    swatch.classList.add('active');
+                }
                 if (String(part.suggested || '').toLowerCase() === filament.name.toLowerCase()) swatch.classList.add('suggested');
 
                 swatch.addEventListener('click', function () {
+                    if (_isInsuf) return;
                     modalState.selections[part.key] = filament.name;
                     renderParts();
                 });
@@ -1136,7 +1447,15 @@
             item = {};
         }
         if (!item || !item.title) return;
+        _openModal(item);
+    }
 
+    function openFeaturedModalWithItem(item) {
+        if (!item || !item.title) return;
+        _openModal(item);
+    }
+
+    function _openModal(item) {
         const modal = document.getElementById('featured-order-modal');
         const img = document.getElementById('featured-modal-image');
         const desc = document.getElementById('featured-modal-description');
@@ -1150,24 +1469,21 @@
         modalState.item = item;
         modalState.profile = '';
         modalState.profileObj = null;
-        modalState.parts = deriveParts(item);
+        modalState.parts = [];
         modalState.selections = {};
-        modalState.parts.forEach(function (part) {
-            modalState.selections[part.key] = part.suggested || '';
-        });
 
-        modal.dataset.featuredIndex = String(index);
+        modal.dataset.featuredIndex = '';
         modal.dataset.featuredId = item.id || '';
         modal.classList.add('open');
-
-        renderParts();
-        renderPrice();
+        document.documentElement.classList.add('modal-open');
+        document.body.classList.add('modal-open');
 
         const itemProfiles = normalizeItemProfiles(item);
         if (itemProfiles.length) {
             modalState.profiles = itemProfiles;
             modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
             modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+            applySelectedProfileConfiguration();
             renderProfiles();
             renderPrice();
         } else {
@@ -1175,13 +1491,14 @@
                 const basePrice = Number((modalState.item && modalState.item.price) || 0);
                 const rawProfiles = Array.isArray(profiles) ? profiles : [];
                 modalState.profiles = rawProfiles.map(function (p) {
-                    return { name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
+                    return { id: String(p.id || '').trim(), name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
                 });
                 if (!modalState.profiles.length) {
-                    modalState.profiles = [{ name: 'Standard', price: basePrice, is_default: true }];
+                    modalState.profiles = [{ id: '', name: 'Standard', price: basePrice, is_default: true }];
                 }
                 modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
                 modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
+                applySelectedProfileConfiguration();
                 renderProfiles();
                 renderPrice();
             });
@@ -1192,6 +1509,8 @@
         const modal = document.getElementById('featured-order-modal');
         if (!modal) return;
         modal.classList.remove('open');
+        document.documentElement.classList.remove('modal-open');
+        document.body.classList.remove('modal-open');
     }
 
     document.querySelectorAll('.featured-order-btn').forEach(function (btn) {
@@ -1200,6 +1519,22 @@
             const slide = btn.closest('.hero-slide');
             const index = slide ? parseInt(slide.dataset.index || '0', 10) : 0;
             openFeaturedModal(index);
+        });
+    });
+
+    // Event listeners for personal suggestion cards
+    document.querySelectorAll('.personal-suggestion-order-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            let item = {};
+            try {
+                item = JSON.parse(btn.dataset.item || '{}');
+            } catch (error) {
+                item = {};
+            }
+            if (item && item.title) {
+                openFeaturedModalWithItem(item);
+            }
         });
     });
 
@@ -1219,12 +1554,68 @@
         if (!item || !item.title) return;
 
         const profile = modalState.profile || '';
-        const selectedParts = (modalState.parts || []).map(function (part) {
+        const selectedParts = (modalState.parts || []).map(function (part, idx) {
             return {
                 part: part.name,
                 filament: modalState.selections[part.key] || '',
+                partIdx: idx,
             };
         });
+        const hasUnselectedPart = selectedParts.some(function (entry) {
+            return !String(entry.filament || '').trim();
+        });
+        if (hasUnselectedPart) {
+            alert('Please select an available color for every part before adding to cart.');
+            return;
+        }
+
+        const activeCustomization = getProfileCustomization(item, modalState.profileObj);
+        const manualInsufficient = new Set(
+            (Array.isArray(activeCustomization && activeCustomization.insufficient_filaments)
+                ? activeCustomization.insufficient_filaments
+                : (Array.isArray(item.insufficient_filaments) ? item.insufficient_filaments : []))
+                .map(function (n) { return String(n || '').trim().toLowerCase(); })
+                .filter(Boolean)
+        );
+        const manualInsufficientByPart = (activeCustomization && typeof activeCustomization.insufficient_filaments_by_part === 'object')
+            ? activeCustomization.insufficient_filaments_by_part
+            : {};
+        const manualSufficientByPart = (activeCustomization && typeof activeCustomization.sufficient_filaments_by_part === 'object')
+            ? activeCustomization.sufficient_filaments_by_part
+            : {};
+        const hasAnyByPart = Object.keys(manualInsufficientByPart).length > 0 || Object.keys(manualSufficientByPart).length > 0;
+        const catalog = getFilamentCatalog();
+        const _valProfileColors = Array.isArray(modalState.profileObj && modalState.profileObj.colors) ? modalState.profileObj.colors : [];
+        const _valTotalWg = Number((modalState.profileObj && modalState.profileObj.weight_g) || (item && (item.base_weight || item.weight_g || item.model_weight)) || 0);
+        const picksUnavailable = selectedParts.some(function (entry) {
+            const key = String(entry.filament || '').trim().toLowerCase();
+            if (!key) return true;
+            const partKey = 'part_' + Number(entry.partIdx || 0);
+            const partManualSet = new Set(
+                (Array.isArray(manualInsufficientByPart[partKey]) ? manualInsufficientByPart[partKey] : [])
+                    .map(function (n) { return String(n || '').trim().toLowerCase(); })
+                    .filter(Boolean)
+            );
+            const partAllowSet = new Set(
+                (Array.isArray(manualSufficientByPart[partKey]) ? manualSufficientByPart[partKey] : [])
+                    .map(function (n) { return String(n || '').trim().toLowerCase(); })
+                    .filter(Boolean)
+            );
+            if ((partManualSet.size ? partManualSet : (hasAnyByPart ? new Set() : manualInsufficient)).has(key)) return true;
+            const filament = catalog.find(function (f) { return String(f.name || '').toLowerCase() === key; });
+            if (!filament) return true;
+            if (!partAllowSet.has(key) && Boolean(filament.out_of_stock)) return true;
+            const slotWg = (_valProfileColors[entry.partIdx] && Number(_valProfileColors[entry.partIdx].used_g || 0) > 0)
+                ? Number(_valProfileColors[entry.partIdx].used_g)
+                : _valTotalWg;
+            return !partAllowSet.has(key) && slotWg > 0 && Number(filament.remaining_g || 0) < slotWg;
+        });
+        if (picksUnavailable) {
+            alert('One or more selected colors are unavailable. Please pick colors without a red X.');
+            renderParts();
+            return;
+        }
+
         const suggestedColors = selectedParts
             .map(function (entry) { return entry.part + ': ' + entry.filament; })
             .join(' | ');

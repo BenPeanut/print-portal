@@ -1,0 +1,103 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Materials | Client Portal' %}
+
+{% block content %}
+<style>
+    .materials-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .material-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px;
+        box-shadow: 0 10px 24px rgba(14, 42, 32, 0.08);
+    }
+
+    .material-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .material-name {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 800;
+    }
+
+    .circle {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid rgba(0,0,0,0.12);
+    }
+
+    .meta {
+        margin: 0;
+        color: #5f746a;
+        font-size: 0.9rem;
+    }
+
+    .badge {
+        margin-top: 10px;
+        display: inline-block;
+        border-radius: 999px;
+        border: 1px solid #cfe6da;
+        background: #eef9f2;
+        color: #205a46;
+        padding: 5px 10px;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+    .badge.out {
+        border-color: #fecaca;
+        background: #fff5f5;
+        color: #a31f1f;
+    }
+
+    @media (max-width: 980px) {
+        .materials-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<section class="card">
+    <div class="card-body">
+        <h2 class="section-title">Material Catalog</h2>
+        <p class="section-copy">Browse every filament color and material currently registered in the shop.</p>
+
+        <div class="materials-grid" style="margin-top:12px;">
+            {% for f in filaments %}
+            <article class="material-card">
+                <div class="material-head">
+                    <h3 class="material-name">{{ f.name }}</h3>
+                    <span class="circle" data-color="{{ f.hex or '#8b8b8b' }}"></span>
+                </div>
+                <p class="meta">{{ f.material }} · {{ f.brand }}</p>
+                <p class="meta">{{ f.remaining_g }}g remaining of {{ f.total_g }}g</p>
+                <span class="badge {% if f.out_of_stock %}out{% endif %}">{% if f.out_of_stock %}Out of Stock{% else %}In Stock{% endif %}</span>
+            </article>
+            {% else %}
+            <article class="material-card">
+                <p class="meta">No filament inventory has been configured yet.</p>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    document.querySelectorAll('[data-color]').forEach(function (el) {
+        const color = (el.getAttribute('data-color') || '#8b8b8b').trim();
+        el.style.background = color;
+    });
+})();
+</script>
+{% endblock %}

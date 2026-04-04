@@ -1,0 +1,246 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Help | Client Portal' %}
+
+{% block content %}
+<style>
+    .help-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .help-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px;
+    }
+
+    .help-card h3 {
+        margin: 0 0 8px;
+        font-size: 1.02rem;
+    }
+
+    .help-card p,
+    .help-card li {
+        color: #5f746a;
+        line-height: 1.5;
+        font-size: 0.92rem;
+    }
+
+    .help-card ul { margin: 0; padding-left: 18px; }
+
+    .guide-visuals {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .guide-shot {
+        border: 1px solid #dbe9e1;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f8fcfa;
+    }
+
+    .guide-shot img {
+        display: block;
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        background: #eef5f1;
+    }
+
+    .guide-shot figcaption {
+        padding: 8px 10px;
+        font-size: 0.82rem;
+        color: #436054;
+        line-height: 1.4;
+    }
+
+    @media (max-width: 980px) {
+        .help-grid { grid-template-columns: 1fr; }
+        .guide-visuals { grid-template-columns: 1fr; }
+    }
+
+    .report-card {
+        border: 1px solid #d8e6de;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fcfa 100%);
+        padding: 16px;
+        margin-top: 14px;
+    }
+
+    .report-card h3 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+    }
+
+    .report-copy {
+        margin: 0 0 12px;
+        color: #5f746a;
+        font-size: 0.92rem;
+        line-height: 1.5;
+    }
+
+    .report-form {
+        display: grid;
+        gap: 10px;
+    }
+
+    .report-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .report-form input,
+    .report-form select,
+    .report-form textarea {
+        width: 100%;
+        border: 1px solid #d5e4dc;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.92rem;
+        color: #1f3d30;
+        background: #ffffff;
+        box-sizing: border-box;
+    }
+
+    .report-form textarea {
+        min-height: 94px;
+        resize: vertical;
+    }
+
+    .report-form button {
+        border: none;
+        border-radius: 10px;
+        background: #00ae42;
+        color: #fff;
+        font-size: 0.92rem;
+        font-weight: 800;
+        padding: 10px 14px;
+        cursor: pointer;
+        justify-self: start;
+    }
+
+    .report-note {
+        margin: 0;
+        color: #688277;
+        font-size: 0.8rem;
+    }
+
+    .report-alert {
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.88rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .report-alert.success {
+        border: 1px solid #bfe7cf;
+        background: #edf9f2;
+        color: #1c5a3b;
+    }
+
+    .report-alert.error {
+        border: 1px solid #f3b9bf;
+        background: #fff1f2;
+        color: #9f2436;
+    }
+
+    @media (max-width: 980px) {
+        .report-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<section class="card">
+    <div class="card-body">
+        <h2 class="section-title">Help & Guides</h2>
+        <p class="section-copy">Quick references for preparing clean print requests and estimating accurate pricing.</p>
+
+        <div class="help-grid" style="margin-top:12px;">
+            <article class="help-card">
+                <h3>How to find model weight</h3>
+                <ul>
+                    <li>Open the model page on MakerWorld or Printables.</li>
+                    <li>Copy the specs area that includes weight and estimated print time.</li>
+                    <li>Use the Auto-Fill Assist on the Order page to populate fields quickly.</li>
+                </ul>
+                <div class="guide-visuals" aria-label="Weight guide screenshots">
+                    <figure class="guide-shot" style="margin:0;">
+                        <img src="{{ url_for('static', filename='weight-step1.png') }}" alt="Model page showing where the print weight appears in the specifications panel.">
+                        <figcaption>Step 1: Find the model's specification area.</figcaption>
+                    </figure>
+                    <figure class="guide-shot" style="margin:0;">
+                        <img src="{{ url_for('static', filename='weight-step2.png') }}" alt="Example of weight and print-time values to copy into the order form.">
+                        <figcaption>Step 2: Copy weight and time into your order request.</figcaption>
+                    </figure>
+                </div>
+            </article>
+
+            <article class="help-card">
+                <h3>Choosing filament colors</h3>
+                <ul>
+                    <li>Visit the Materials tab to preview available colors.</li>
+                    <li>If your first choice is unavailable, select the nearest backup color.</li>
+                    <li>For multi-color jobs, mention extra details in your project name.</li>
+                </ul>
+            </article>
+
+            <article class="help-card">
+                <h3>Order lifecycle</h3>
+                <p>Orders move through: In Cart, Quoted, Requested, then Printing, Quality Check, and Delivered. Only quoted cart items can be submitted from checkout.</p>
+            </article>
+
+            <article class="help-card">
+                <h3>Need support?</h3>
+                <p>Open any order and use the built-in message thread for revisions, clarifications, or timeline updates.</p>
+            </article>
+        </div>
+
+        <section class="report-card" aria-labelledby="report-card-title">
+            <h3 id="report-card-title">Report A Bug Or Suggestion</h3>
+            <p class="report-copy">Share issues and ideas in one place. Your report goes directly to the admin dashboard for review and follow-up.</p>
+
+            {% if report_sent %}
+            <div class="report-alert success">Thanks. Your report was sent successfully and is now in the admin review queue.</div>
+            {% endif %}
+            {% if report_error %}
+            <div class="report-alert error">Please complete the title and details fields before submitting.</div>
+            {% endif %}
+
+            <form class="report-form" action="/help/report" method="POST">
+                <div class="report-grid">
+                    <select name="report_type" required>
+                        <option value="bug">Bug Report</option>
+                        <option value="suggestion">Suggestion</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <select name="severity" required>
+                        <option value="medium">Priority: Medium</option>
+                        <option value="low">Priority: Low</option>
+                        <option value="high">Priority: High</option>
+                        <option value="critical">Priority: Critical</option>
+                    </select>
+                </div>
+                <input type="text" name="title" maxlength="140" placeholder="Short title (e.g. Cart total not updating when quantity changes)" required>
+                <textarea name="details" maxlength="2400" placeholder="What happened? Include enough detail so the admin can reproduce it." required></textarea>
+                <div class="report-grid">
+                    <textarea name="steps" maxlength="1200" placeholder="Repro steps (optional): 1) ... 2) ..."></textarea>
+                    <textarea name="expected" maxlength="1200" placeholder="Expected result (optional)"></textarea>
+                </div>
+                <textarea name="actual" maxlength="1200" placeholder="Actual result (optional)"></textarea>
+                <div class="report-grid">
+                    <input type="url" name="page_url" placeholder="Page URL where issue happened (optional)">
+                    <input type="url" name="screenshot_url" placeholder="Screenshot URL (optional)">
+                </div>
+                <button type="submit">Submit Report</button>
+                <p class="report-note">Tip: For time-sensitive issues, set priority to High or Critical and include exact steps.</p>
+            </form>
+        </section>
+    </div>
+</section>
+{% endblock %}

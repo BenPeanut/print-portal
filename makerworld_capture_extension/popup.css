@@ -1,0 +1,91 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 480px;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #eef4f0;
+  color: #1f3328;
+}
+
+.shell {
+  width: 100%;
+  height: auto;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 2px;
+  padding: 10px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid #d5e5dc;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: #4a6a5a;
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #17382a;
+}
+
+.reload-btn {
+  border: 1px solid #b7d6c4;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #f6fcf8;
+  color: #1b5e3c;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reload-btn:hover {
+  background: #ecf8f0;
+}
+
+.app-frame {
+  width: 100%;
+  height: 300px; /* grows via JS postMessage resize */
+  margin-top: 0;
+  border: 1px solid #d5e5dc;
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+body.embedded-mode {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: 100%;
+  min-height: 100%;
+  background: transparent;
+  overflow: auto;
+}
+
+body.embedded-mode .shell {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  padding: 8px;
+}

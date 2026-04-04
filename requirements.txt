@@ -3,3 +3,6 @@ requests
 gunicorn
 psycopg2-binary
 python-dotenv
+playwright
+cloudscraper
+pywebview

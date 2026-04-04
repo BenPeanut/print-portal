@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Print Request | Benaiah's Prints</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
+    <style>
+        :root {
+            --bambu-green: #00ae42;
+            --carbon: #2c2c2c;
+            --bg: #f4f4f4;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; text-align: center; background-color: var(--bg); color: var(--carbon); }
+        input, select, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; }
+        
+        .box { background: var(--white); border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; border-top: 5px solid var(--bambu-green); text-align: left; }
+        h1, h3 { text-align: center; margin-top: 0; }
+        h1 { color: var(--bambu-green); }
+
+        .btn-primary { background-color: var(--bambu-green); color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-primary:hover { background-color: #008f36; }
+        
+        .btn-secondary { background: var(--carbon); color: white; border: none; font-size: 12px; padding: 5px 10px; width: auto; cursor: pointer; border-radius: 4px; }
+        /* search toggle icon */
+        #search-toggle { color: var(--carbon); }
+        #search-container input { border: 1px solid #ccc; }
+        
+        .instruction-box { background: #fffbe6; border: 1px solid #ffe58f; padding: 15px; border-radius: 8px; font-size: 0.85em; margin: 10px 0; color: #856404; display: none; }
+        
+        .mapping-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .delete-btn { width: 35px; background: #ff4444; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 6px; }
+
+        /* Tutorial Styling */
+        .driver-popover-title { color: var(--bambu-green) !important; font-weight: bold !important; }
+        .driver-popover-next-btn { background-color: var(--bambu-green) !important; text-shadow: none !important; color: white !important; }
+    </style>
+</head>
+<body>
+    <h1 id="welcome-header">Benaiah's 3D Printing Service</h1>
+    <div id="page-data" data-filaments='{{ filaments|tojson|safe }}' style="display:none;"></div>
+
+    <div class="box" id="featured-section">
+        <h3>Hand-Picked Favorites</h3>
+        <div class="hero-container" id="hero-container">
+            <button type="button" class="hero-arrow hero-arrow-left" aria-label="Previous slide">‹</button>
+            <button type="button" class="hero-arrow hero-arrow-right" aria-label="Next slide">›</button>
+            {% for item in featured_items %}
+            <div class="hero-slide" data-index="{{ loop.index0 }}" data-item='{{ item | tojson }}'>
+                <div class="hero-image" style="background-image: url('{{ item.image_url }}');"></div>
+                <div class="hero-overlay"></div>
+                <div class="hero-meta">
+                    <div>
+                        <div class="hero-title">{{ item.title }}</div>
+                        <div class="hero-desc">{{ item.description }}</div>
+                    </div>
+                    <div class="hero-bottom">
+                        <div class="hero-price">Rp{{ "{:,}".format(item.price|int) }}</div>
+                        <button type="button" class="btn-primary featured-order-btn" data-slide-index="{{ loop.index0 }}">Order Now</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            <div class="hero-dots" id="hero-dots"></div>
+        </div>
+    </div>
+
+    <div class="box">
+        <h3>Request a New Print</h3>
+        <form id="order-form" action="/submit_order" method="POST">
+            {% if announcement_message %}
+            <div class="instruction-box" style="display:block; background:#e8f7ee; border:1px solid #bde7cb; color:#1f5c33;">
+                <strong>Announcement:</strong> {{ announcement_message }}
+            </div>
+            {% endif %}
+            {% if not shop_open %}
+            <div class="instruction-box" style="display:block; background:#fff3cd; border:1px solid #ffe69c; color:#7a5a00;">
+                <strong>{{ capacity_message or 'We are currently at capacity!' }}</strong>
+            </div>
+            {% endif %}
+            {% if error %}
+            <div class="instruction-box" style="display:block; background:#ffe6e6; border:1px solid #ffb3b3; color:#661010;">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            {% endif %}
+            <fieldset {% if not shop_open %}disabled{% endif %} style="border:0; padding:0; margin:0;">
+            <div id="step-link">
+                <label><strong>Link to Model (MakerWorld or Printables):</strong></label>
+                <input id="makerworld_link" type="text" name="makerworld_link" required placeholder="makerworld.com/... or printables.com/..."
+                    pattern="^(https?:\/\/)?(www\.)?(makerworld\.com|printables\.com)(\/.*)?$"
+                    title="Only makerworld.com or printables.com URLs are accepted">
+            </div>
+            
+            <div style="margin-top: 15px;" id="step-weight-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <label><strong>Print Weight (grams):</strong></label>
+                    <button type="button" id="btn-weight-help" class="btn-secondary" onclick="toggleWeightInstructions()">How to find weight?</button>
+                </div>
+                <div id="weight-instructions" class="instruction-box" style="display:none;">
+                    <strong>How to find model weight on MakerWorld</strong><br>
+                    1. On MakerWorld, hover over the model/profile you want to print.<br>
+                    2. A floating panel will pop up — find the <strong>Weight</strong> label (usually in grams).<br>
+                    3. Enter the number (only digits) below.
+                    <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <img src="{{ url_for('static', filename='weight-step1.png') }}" alt="Hover over model to see weight" style="width: 240px; max-width: 100%; border-radius: 12px; border: 1px solid #eee;">
+                        <img src="{{ url_for('static', filename='weight-step2.png') }}" alt="Find weight label" style="width: 240px; max-width: 100%; border-radius: 12px; border: 1px solid #eee;">
+                    </div>
+                </div>
+                <input id="model_weight" type="number" min="0" step="0.1" name="model_weight" placeholder="e.g. 32.5">
+            </div>
+
+            <div style="margin-top: 15px;" id="step-profile-container">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label><strong>Print Profile / Number:</strong></label>
+                    <button type="button" id="btn-how-to" class="btn-secondary" onclick="toggleInstructions()">How to choose?</button>
+                </div>
+                
+                <div id="profile-instructions" class="instruction-box">
+                    <strong>Instructions:</strong><br>
+                    1. Look at the list of Print Profiles on the MakerWorld page.<br>
+                    2. Type the profile name <strong>OR</strong> its position (1 is the top profile).<br>
+                    3. Use negative numbers to count from the bottom (e.g., -1 is the very last one).<br>
+                    <em>If you leave this blank, Profile 1 will be selected.</em>
+                </div>
+
+                <input type="text" name="print_profile" placeholder="Profile 1 (Default)">
+            </div>
+
+            <div id="step-color-section">
+                <label style="margin-top: 15px; display: block;"><strong>How many colors is this model?</strong></label>
+                <div style="display: flex; gap: 20px; margin: 10px 0;">
+                    <label style="cursor:pointer;"><input type="radio" name="color_mode" value="single" checked onclick="toggleColorMode('single')"> 1 Color</label>
+                    <label style="cursor:pointer;" id="step-multi-radio"><input type="radio" name="color_mode" value="multi" onclick="toggleColorMode('multi')"> 2 or More Colors</label>
+                </div>
+
+                <div id="single-color-section">
+                    <label>Select Filament:</label>
+                    <select name="single_filament" required>
+                        <option value="" disabled selected>Choose a filament...</option>
+                        {% for color in filaments %}
+                        <option value="{{ color }}">{{ color }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="multi-color-section" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                    <p style="font-size: 0.85em; color: #666; margin-top: 0;">Match model parts to available filaments.</p>
+                    <div id="color-mappings">
+                        <div class="mapping-row">
+                            <input type="text" name="model_part[]" placeholder="e.g. The Body" style="flex: 1; margin: 0;">
+                            <select name="mapped_filament[]" style="flex: 1; margin: 0;">
+                                {% for color in filaments %}
+                                <option value="{{ color }}">{{ color }}</option>
+                                {% endfor %}
+                            </select>
+                            <div style="width: 35px;"></div> 
+                        </div>
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="addMappingRow()" style="margin-top: 10px;">+ Add Another Part</button>
+                </div>
+            </div>
+            
+            <button type="submit" id="btn-submit" class="btn-primary" {% if not shop_open %}disabled{% endif %} style="margin-top: 20px;">{% if shop_open %}Request Quote{% else %}Shop Closed{% endif %}</button>
+            </fieldset>
+        </form>
+    </div>
+
+    {% if user_orders is defined %}
+    <div class="box" id="my-orders" style="position:relative;">
+        <h3 style="margin-bottom:0;">Your Recent Orders</h3>
+        <button id="orders-search-toggle" class="search-icon" aria-label="Search orders" title="Search orders" style="position:absolute; right:437px; top:12px; background:transparent; border:none; padding:8px;">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M11 4a7 7 0 105.292 11.708l4.5 4.5 1.414-1.414-4.5-4.5A7 7 0 0011 4z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <div id="orders-search-container">
+            <form id="orders-search-form" action="/search_orders" method="POST">
+                <input id="orders-search-input" class="orders-search-input" type="text" name="q" placeholder="Search by Order ID or name" value="{{ search_query|default('') }}" autocomplete="off">
+            </form>
+        </div>
+
+        {% if user_orders and user_orders|length > 0 %}
+            <div class="orders-list">
+                {% for o in user_orders %}
+                <div class="order-card">
+                    <div class="order-info">
+                        <div class="order-title">{{ o.nickname or o.name or o.product_name or 'Unnamed Order' }}</div>
+                        <div class="order-meta">
+                            ID: {{ o.id }} •
+                            <span class="status {{ (o.status or 'unknown')|lower }}">
+                                {% if o.get('deleted_at') %}
+                                    Pending Deletion
+                                {% else %}
+                                    {{ o.status }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% if o.get('deleted_at') %}
+                        <div class="order-meta" style="margin-top:4px; color:#9a3412;">
+                            Scheduled removal: {{ o.pending_delete_on or 'in 3 days' }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="order-actions">
+                        <a href="/order/{{ o.id }}" class="btn-link">View</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="order-empty">
+                <div class="empty-illustration">🗂️</div>
+                {% if search_query %}
+                    <h4>No matching orders found</h4>
+                    <p class="muted">Sorry, there is no order with that name or ID.</p>
+                {% else %}
+                    <h4>No orders yet</h4>
+                    <p class="muted">You don't have any active orders.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <p style="margin-top:10px;"><a href="/user_logout" style="color:#64748b;">Log out</a></p>
+    </div>
+    {% else %}
+    <div class="box" id="step-track">
+        <h3>Check Order Status</h3>
+        <form action="/check_order" method="POST">
+            <input type="text" name="order_id" placeholder="Enter your 8-digit Order ID" required>
+            <button type="submit" class="btn-primary" style="background-color: var(--carbon);">Track My Order</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div id="price-confirm-modal" class="modal">
+        <div class="modal-backdrop" id="modal-backdrop"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <h3 id="modal-title">Estimated Price</h3>
+            <p id="modal-message">Loading...</p>
+            <div class="modal-actions">
+                <button type="button" id="modal-cancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="modal-confirm" class="btn-primary">Confirm Submission</button>
+            </div>
+        </div>
+    </div>
+    <div id="featured-order-modal" class="modal">
+        <div class="modal-backdrop" id="featured-modal-backdrop"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="featured-modal-title">
+            <h3 id="featured-modal-title">Featured Print</h3>
+            <div id="featured-modal-image" style="height:220px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 14px;"></div>
+            <p id="featured-modal-description" style="margin: 0 0 12px 0; color: #444;"></p>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                <div id="featured-modal-price" style="font-size: 1.7rem; font-weight: 800; color: var(--bambu-green);"></div>
+                <div style="display:flex; flex-direction:column; gap: 6px;">
+                    <label style="font-size: 0.85rem; margin: 0;">Print Profile</label>
+                    <select id="featured-modal-profile" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; width: 180px;"></select>
+                </div>
+            </div>
+            <div id="featured-modal-suggested-colors" style="margin-bottom: 10px; display:none; font-size: 0.9rem;">
+                <strong>Suggested Colors:</strong>
+                <div id="featured-modal-color-pills" style="margin-top: 6px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+            </div>
+            <div id="featured-modal-filament-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+                <div style="font-size: 0.85rem;">Choose Filament</div>
+                <select id="featured-modal-filament" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; width: 180px;"></select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="featured-modal-cancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="featured-modal-confirm" class="btn-primary">Confirm & Order</button>
+            </div>
+        </div>
+    </div>
+    <p style="font-size: 10px; color: #ccc; cursor: pointer;" onclick="localStorage.removeItem('seen_tour'); location.reload();">Reset Tutorial</p>
+
+    <script>
+        // --- TOUR INITIALIZATION ---
+        const driver = window.driver.js.driver;
+        const tour = driver({
+            showProgress: true,
+            allowClose: false, 
+            overlayColor: 'rgba(0, 0, 0, 0.75)',
+            steps: [
+                { popover: { title: 'Welcome!', description: "Hello and welcome to Benaiah's 3D Printing Website!", side: "center", align: 'center' }},
+                { element: '#step-link', popover: { title: '1. Model Link', description: 'Paste the MakerWorld URL here so I know what to print.', side: "bottom" }},
+                
+                // Step 2: Interactive - Next button removed, Back button kept
+                { 
+                    element: '#btn-how-to', 
+                    popover: { 
+                        title: '2. Profile Selection', 
+                        description: 'Please <b>click</b> the "How to choose?" button to see how to select a profile.', 
+                        side: "bottom",
+                        showButtons: ['previous'] 
+                    } 
+                },
+                
+                { element: '#profile-instructions', popover: { title: 'Profile Help', description: 'This is how you select a profile. You can use numbers or names!', side: "top" }},
+                { element: '#single-color-section', popover: { title: '3. Picking Colors', description: 'For simple prints, just pick your filament here.', side: "top" }},
+                
+                // Step 5: Interactive - Next button removed, Back button kept
+                { 
+                    element: '#step-multi-radio', 
+                    popover: { 
+                        title: 'Multi-Color', 
+                        description: 'Now <b>click</b> "2 or More Colors" to see the advanced options!', 
+                        side: "top",
+                        showButtons: ['previous']
+                    } 
+                },
+                
+                { element: '#multi-color-section', popover: { title: 'Custom Mapping', description: 'Match specific model parts to different filaments here.', side: "top" }},
+                { element: '#btn-submit', popover: { title: 'Submit', description: 'Send your order request when you are ready!', side: "top" }}
+            ],
+            onDestroyStarted: () => {
+                localStorage.setItem('seen_tour', 'true');
+                tour.destroy();
+            }
+        });
+
+        if (!localStorage.getItem('seen_tour')) {
+            tour.drive();
+        }
+
+        // Toggle search input for orders box
+        // prepare a simple JS flag based on whether the server passed a query
+        // This version uses quotes so the editor doesn't show an error
+        const _hasSearchQuery = "{{ search_query or '' }}" !== "" && "{{ search_query }}" !== "None";
+        let orderSubmitConfirmed = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const ordersToggle = document.getElementById('orders-search-toggle');
+            const ordersContainer = document.getElementById('orders-search-container');
+            const ordersInput = document.getElementById('orders-search-input');
+
+            if (ordersToggle && ordersContainer) {
+                ordersToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = ordersContainer.style.display === 'none' || ordersContainer.style.display === '';
+                    ordersContainer.style.display = isHidden ? 'block' : 'none';
+                    if (isHidden && ordersInput) ordersInput.focus();
+                });
+
+                // clicking outside will close the search box
+                document.addEventListener('click', (e) => {
+                    if (!ordersContainer.contains(e.target) && !ordersToggle.contains(e.target) && ordersContainer.style.display === 'block') {
+                        ordersContainer.style.display = 'none';
+                    }
+                });
+
+                // Escape to close
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && ordersContainer.style.display === 'block') ordersContainer.style.display = 'none';
+                });
+            }
+
+            // if there is a prefilled query, show search box automatically
+            if (_hasSearchQuery && ordersContainer && ordersInput) {
+                ordersContainer.style.display = 'block';
+                ordersInput.focus();
+            }
+        });
+
+        // --- ORIGINAL FUNCTIONS WITH TOUR TRIGGERS ---
+        function toggleInstructions() {
+            const inst = document.getElementById('profile-instructions');
+            inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+            
+            // Auto-advance if they are on Step 2
+            if (tour.isActive() && tour.getActiveIndex() === 2) {
+                tour.moveNext();
+            }
+        }
+
+        function toggleWeightInstructions() {
+            const inst = document.getElementById('weight-instructions');
+            inst.style.display = (inst.style.display === 'none' || inst.style.display === '') ? 'block' : 'none';
+        }
+
+        let heroIndex = 0;
+        let heroTimer;
+
+        function startHeroRotation() {
+            const slides = document.querySelectorAll('.hero-slide');
+            const dotsContainer = document.getElementById('hero-dots');
+            if (!slides.length) return;
+
+            // Build dot indicators (one per slide) if not already present
+            if (dotsContainer && dotsContainer.children.length !== slides.length) {
+                dotsContainer.innerHTML = '';
+                slides.forEach((slide, i) => {
+                    const dot = document.createElement('button');
+                    dot.type = 'button';
+                    dot.className = 'hero-dot';
+                    dot.setAttribute('aria-label', `Show slide ${i + 1}`);
+                    dot.addEventListener('click', () => goToHeroSlide(i));
+                    dotsContainer.appendChild(dot);
+                });
+            }
+
+            showHeroSlide(heroIndex);
+            resetHeroTimer();
+        }
+
+        function resetHeroTimer() {
+            const slides = document.querySelectorAll('.hero-slide');
+            if (heroTimer) clearInterval(heroTimer);
+            heroTimer = setInterval(() => {
+                heroIndex = (heroIndex + 1) % slides.length;
+                showHeroSlide(heroIndex);
+            }, 5000);
+        }
+
+        function showHeroSlide(index) {
+            const slides = document.querySelectorAll('.hero-slide');
+            const dots = document.querySelectorAll('.hero-dot');
+            slides.forEach((slide, i) => {
+                slide.style.opacity = i === index ? '1' : '0';
+                slide.style.pointerEvents = i === index ? 'auto' : 'none';
+            });
+            if (dots.length) {
+                dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+            }
+        }
+
+        function goToHeroSlide(index) {
+            const slides = document.querySelectorAll('.hero-slide');
+            if (!slides.length) return;
+            const wrapped = ((index % slides.length) + slides.length) % slides.length;
+            heroIndex = wrapped;
+            showHeroSlide(heroIndex);
+            resetHeroTimer();
+        }
+
+        function openFeaturedModal(index, event) {
+            if (event) event.stopPropagation();
+            const slides = document.querySelectorAll('.hero-slide');
+            if (!slides[index]) return;
+            const item = JSON.parse(slides[index].dataset.item);
+            const modal = document.getElementById('featured-order-modal');
+            const img = document.getElementById('featured-modal-image');
+            const desc = document.getElementById('featured-modal-description');
+            const price = document.getElementById('featured-modal-price');
+            const filament = document.getElementById('featured-modal-filament');
+
+            img.style.backgroundImage = `url('${item.image_url}')`;
+            desc.textContent = item.description || '';
+            const priceValue = Number(item.price) || 0;
+            price.textContent = `Rp${priceValue.toLocaleString()}`;
+
+            // populate profile selector
+            const profileSelect = document.getElementById('featured-modal-profile');
+            const suggestedProfile = (item.suggested_profile || item.profile || '1').toString();
+            const rawProfileOptions = item.profile_options || [];
+            let profileOptions = [];
+            if (Array.isArray(rawProfileOptions)) profileOptions = rawProfileOptions;
+            else if (typeof rawProfileOptions === 'string' && rawProfileOptions.trim()) {
+                profileOptions = rawProfileOptions.split(',').map(p => p.trim()).filter(Boolean);
+            }
+            if (!profileOptions.length) profileOptions = [suggestedProfile];
+            if (!profileOptions.includes(suggestedProfile)) profileOptions.unshift(suggestedProfile);
+
+            profileSelect.innerHTML = '';
+            profileOptions.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                if (p === suggestedProfile) opt.selected = true;
+                profileSelect.appendChild(opt);
+            });
+
+            // populate filament select
+            filament.innerHTML = '';
+            const currentColors = JSON.parse(document.getElementById('page-data')?.dataset?.filaments || '[]');
+            const recommended = item.suggested_filament || '';
+            currentColors.forEach(color => {
+                const opt = document.createElement('option');
+                opt.value = color;
+                opt.textContent = color;
+                if (recommended && color.toLowerCase() === recommended.toLowerCase()) opt.selected = true;
+                filament.appendChild(opt);
+            });
+
+            // show suggested color pills (multi-color defaults)
+            const suggestedColorsString = (item.suggested_colors || item.suggested_filament || '').toString();
+            const colorsContainer = document.getElementById('featured-modal-suggested-colors');
+            const pillsContainer = document.getElementById('featured-modal-color-pills');
+            if (suggestedColorsString && suggestedColorsString.includes('|')) {
+                colorsContainer.style.display = 'block';
+                pillsContainer.innerHTML = '';
+                suggestedColorsString.split(' | ').map(s => s.trim()).filter(Boolean).forEach(seg => {
+                    const pill = document.createElement('span');
+                    pill.className = 'color-pill';
+                    pill.textContent = seg;
+                    pillsContainer.appendChild(pill);
+                });
+                document.getElementById('featured-modal-filament-row').style.display = 'none';
+            } else {
+                colorsContainer.style.display = 'none';
+                document.getElementById('featured-modal-filament-row').style.display = 'flex';
+            }
+
+            modal.dataset.featuredIndex = index;
+            modal.dataset.featuredId = item.id || '';
+            modal.classList.add('open');
+        }
+
+        function closeFeaturedModal() {
+            const modal = document.getElementById('featured-order-modal');
+            if (!modal) return;
+            modal.classList.remove('open');
+        }
+
+        function toggleColorMode(mode) {
+            document.getElementById('single-color-section').style.display = (mode === 'single') ? 'block' : 'none';
+            document.getElementById('multi-color-section').style.display = (mode === 'multi') ? 'block' : 'none';
+
+            const singleSelect = document.querySelector('select[name="single_filament"]');
+            if(singleSelect) singleSelect.required = (mode === 'single');
+
+            document.querySelectorAll('#color-mappings .mapping-row').forEach(row => {
+                row.querySelector('input[name="model_part[]"]').required = (mode === 'multi');
+                row.querySelector('select[name="mapped_filament[]"]').required = (mode === 'multi');
+            });
+
+            // Auto-advance if they click Multi on Step 5
+            if (tour.isActive() && mode === 'multi' && tour.getActiveIndex() === 5) {
+                tour.moveNext();
+            }
+        }
+
+        function addMappingRow() {
+            const container = document.getElementById('color-mappings');
+            const newRow = document.createElement('div');
+            newRow.className = 'mapping-row';
+            const filamentOptions = document.querySelector('select[name="mapped_filament[]"]').innerHTML;
+            newRow.innerHTML = `
+                <input type="text" name="model_part[]" placeholder="e.g. The Eyes" style="flex: 1; margin: 0;" required>
+                <select name="mapped_filament[]" style="flex: 1; margin: 0;" required>
+                    ${filamentOptions}
+                </select>
+                <button type="button" class="delete-btn" onclick="this.parentElement.remove()">✕</button>
+            `;
+            container.appendChild(newRow);
+        }
+
+        document.getElementById('order-form').addEventListener('submit', function(evt) {
+            if (orderSubmitConfirmed) {
+                return; // already confirmed via modal
+            }
+
+            evt.preventDefault();
+
+            // Client-side: ensure link belongs to allowed domains (scheme optional)
+            const linkInput = document.getElementById('makerworld_link');
+            const linkVal = linkInput ? linkInput.value.trim() : '';
+            const allowedRe = /^(?:https?:\/\/)?(?:www\.)?(?:makerworld\.com|printables\.com)(?:[\/\:\?#]|$)/i;
+            if (!allowedRe.test(linkVal)) {
+                alert('Please enter a makerworld.com or printables.com link (you may omit https://).');
+                if (linkInput) linkInput.focus();
+                return;
+            }
+
+            // Verify weight (optional)
+            const weightInput = document.getElementById('model_weight');
+            const weightRaw = weightInput ? weightInput.value.trim() : '';
+            const weightVal = weightRaw ? parseFloat(weightRaw) : NaN;
+            if (weightRaw && (Number.isNaN(weightVal) || weightVal <= 0)) {
+                alert('Please enter a valid model weight (in grams) as shown in the MakerWorld popup.');
+                if (weightInput) weightInput.focus();
+                return;
+            }
+
+            // Validate color selections
+            const mode = document.querySelector('input[name="color_mode"]:checked').value;
+            if (mode === 'single') {
+                const sel = document.querySelector('select[name="single_filament"]');
+                if (sel && !sel.value) {
+                    alert('Please choose a filament color.');
+                    sel.focus();
+                    return;
+                }
+            } else {
+                const rows = document.querySelectorAll('#color-mappings .mapping-row');
+                for (const row of rows) {
+                    const part = row.querySelector('input[name="model_part[]"]');
+                    const fil = row.querySelector('select[name="mapped_filament[]"]');
+                    if (!part.value.trim() || !fil.value) {
+                        alert('Please fill out every part and filament when using multi-color.');
+                        return;
+                    }
+                }
+            }
+
+            // If weight is provided, show estimated price confirmation
+            if (weightRaw) {
+                const estimatedRaw = weightVal * 154 * 2.5; // grams * 154 * 2.5
+                const estimated = Math.ceil(estimatedRaw / 5000) * 5000;
+                const formatted = estimated.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+                // Show confirmation modal
+                const modal = document.getElementById('price-confirm-modal');
+                const messageEl = document.getElementById('modal-message');
+                messageEl.innerHTML = `<span class="price-estimate">Rp${formatted}</span>`;
+                modal.classList.add('open');
+
+                const closeModal = () => {
+                    modal.classList.remove('open');
+                };
+
+                const confirmBtn = document.getElementById('modal-confirm');
+                const cancelBtn = document.getElementById('modal-cancel');
+
+                const onConfirm = () => {
+                    orderSubmitConfirmed = true;
+                    closeModal();
+                    document.getElementById('order-form').submit();
+                };
+
+                const onCancel = () => {
+                    closeModal();
+                };
+
+                confirmBtn.addEventListener('click', onConfirm, { once: true });
+                cancelBtn.addEventListener('click', onCancel, { once: true });
+
+                const backdrop = document.getElementById('modal-backdrop');
+                if (backdrop) backdrop.addEventListener('click', onCancel, { once: true });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && modal.style.display === 'block') {
+                        onCancel();
+                    }
+                }, { once: true });
+
+                return;
+            }
+
+            // If no weight provided, just submit directly
+            orderSubmitConfirmed = true;
+            document.getElementById('order-form').submit();
+
+            const closeModal = () => {
+                modal.classList.remove('open');
+            };
+
+            const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
+
+            const onConfirm = () => {
+                orderSubmitConfirmed = true;
+                closeModal();
+                document.getElementById('order-form').submit();
+            };
+
+            const onCancel = () => {
+                closeModal();
+            };
+
+            confirmBtn.addEventListener('click', onConfirm, { once: true });
+            cancelBtn.addEventListener('click', onCancel, { once: true });
+
+            const backdrop = document.getElementById('modal-backdrop');
+            if (backdrop) backdrop.addEventListener('click', onCancel, { once: true });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modal.style.display === 'block') {
+                    onCancel();
+                }
+            }, { once: true });
+        });
+
+        // Featured modal handlers
+        document.getElementById('featured-modal-cancel').addEventListener('click', () => closeFeaturedModal());
+        document.getElementById('featured-modal-backdrop').addEventListener('click', () => closeFeaturedModal());
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeFeaturedModal();
+        });
+
+        document.getElementById('featured-modal-confirm').addEventListener('click', async () => {
+            const modal = document.getElementById('featured-order-modal');
+            const index = parseInt(modal.dataset.featuredIndex, 10);
+            const slides = document.querySelectorAll('.hero-slide');
+            const item = slides[index] ? JSON.parse(slides[index].dataset.item) : null;
+            if (!item) return;
+
+            const filament = document.getElementById('featured-modal-filament').value;
+            const profile = document.getElementById('featured-modal-profile')?.value || '1';
+            const suggestedColorsFromItem = (item.suggested_colors || item.suggested_filament || '').toString();
+            const suggested_colors = suggestedColorsFromItem && suggestedColorsFromItem.includes('|') ? suggestedColorsFromItem : filament;
+
+            const btn = document.getElementById('featured-modal-confirm');
+            const originalText = btn.textContent;
+            btn.textContent = 'Sending...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/create_featured_order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: item.title,
+                        makerworld_link: item.makerworld_url,
+                        price: item.price,
+                        filament: filament,
+                        profile: profile,
+                        suggested_colors: suggested_colors,
+                        item_id: item.id
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.order_id) {
+                    window.location.href = `/order/${data.order_id}`;
+                } else {
+                    alert(data.error || 'Unable to create order.');
+                }
+            } catch (err) {
+                alert('Failed to create order. Please try again.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // Start hero rotation
+        document.addEventListener('DOMContentLoaded', () => {
+            startHeroRotation();
+            document.querySelector('.hero-arrow-left')?.addEventListener('click', () => goToHeroSlide(heroIndex - 1));
+            document.querySelector('.hero-arrow-right')?.addEventListener('click', () => goToHeroSlide(heroIndex + 1));
+            
+            // Add event listeners to featured order buttons
+            document.querySelectorAll('.featured-order-btn').forEach(btn => {
+                btn.addEventListener('click', (event) => {
+                    const slide = btn.closest('.hero-slide');
+                    const index = parseInt(slide.dataset.index, 10);
+                    openFeaturedModal(index, event);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

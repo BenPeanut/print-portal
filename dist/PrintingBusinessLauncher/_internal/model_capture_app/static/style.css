@@ -1,0 +1,228 @@
+:root {
+    --bamboo-900: #0f3b2a;
+    --bamboo-800: #15563a;
+    --bamboo-700: #1f7a50;
+    --bamboo-600: #2c9a63;
+    --bamboo-100: #e9f6ef;
+    --text-900: #10281d;
+    --text-700: #3b5a4c;
+    --line: #d7ebdf;
+    --white: #ffffff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+    color: var(--text-900);
+    background:
+        radial-gradient(circle at 0% 0%, #dff2e7 0%, rgba(223, 242, 231, 0) 42%),
+        radial-gradient(circle at 100% 100%, #f2fbf6 0%, rgba(242, 251, 246, 0) 38%),
+        linear-gradient(145deg, #f8fcf9, #eef7f1);
+    min-height: 100vh;
+}
+
+.ambient {
+    position: fixed;
+    inset: 0;
+    background-image: linear-gradient(135deg, rgba(31, 122, 80, 0.08) 0%, rgba(31, 122, 80, 0) 38%);
+    pointer-events: none;
+}
+
+.shell {
+    position: relative;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 18px 46px;
+}
+
+.hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-end;
+    margin-bottom: 18px;
+}
+
+.eyebrow {
+    margin: 0 0 6px;
+    letter-spacing: 0.16em;
+    color: var(--bamboo-700);
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+h1 {
+    margin: 0;
+    font-family: "Manrope", "Plus Jakarta Sans", sans-serif;
+    font-size: clamp(1.6rem, 2.4vw, 2.4rem);
+    color: var(--bamboo-900);
+}
+
+.hero-copy {
+    margin-top: 8px;
+    max-width: 780px;
+    color: var(--text-700);
+}
+
+.hero-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 14px 28px rgba(20, 61, 43, 0.08);
+}
+
+.card h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--bamboo-800);
+}
+
+.muted {
+    margin: 7px 0 16px;
+    color: var(--text-700);
+    font-size: 0.92rem;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.form-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.86rem;
+    color: var(--text-700);
+    font-weight: 600;
+}
+
+input,
+textarea {
+    border: 1px solid #cde3d6;
+    border-radius: 11px;
+    padding: 10px 11px;
+    font: inherit;
+    color: var(--text-900);
+    background: #fbfefc;
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--bamboo-600);
+    box-shadow: 0 0 0 3px rgba(44, 154, 99, 0.16);
+}
+
+.primary-btn,
+.ghost-btn {
+    border-radius: 11px;
+    border: 1px solid transparent;
+    text-decoration: none;
+    font-weight: 700;
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 10px 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.primary-btn {
+    background: linear-gradient(120deg, var(--bamboo-700), var(--bamboo-600));
+    color: var(--white);
+    box-shadow: 0 10px 18px rgba(31, 122, 80, 0.22);
+}
+
+.ghost-btn {
+    border-color: #bbd9c8;
+    color: var(--bamboo-800);
+    background: #f7fcf9;
+}
+
+.primary-btn:hover,
+.ghost-btn:hover {
+    transform: translateY(-1px);
+}
+
+.checkbox-row {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-row input {
+    width: 16px;
+    height: 16px;
+}
+
+.row-actions {
+    display: flex;
+    gap: 9px;
+    margin-top: 10px;
+}
+
+.steps {
+    margin: 12px 0 0 18px;
+    padding: 0;
+    color: var(--text-700);
+    display: grid;
+    gap: 5px;
+    font-size: 0.9rem;
+}
+
+.status-text {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--bamboo-800);
+    font-weight: 700;
+}
+
+.empty-state {
+    border: 1px dashed #b8d7c5;
+    background: #f4fbf7;
+    border-radius: 12px;
+    color: #35614b;
+    padding: 16px;
+    font-size: 0.95rem;
+}
+
+.hidden {
+    display: none;
+}
+
+.span-2 {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+    .hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .layout,
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
