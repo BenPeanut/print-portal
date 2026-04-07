@@ -3264,7 +3264,39 @@ def _makerworld_http_get(url, timeout=25):
         response = client.get(url, headers=headers, timeout=timeout)
     else:
         response = requests.get(url, headers=headers, timeout=timeout)
-    return int(response.status_code or 0), str(response.text or '')
+    status_code = int(response.status_code or 0)
+    html_text = str(response.text or '')
+
+    # Some hosts block plain HTTP clients from data-center IPs. If available,
+    # try a real browser context to render JS-delivered markup.
+    if (status_code >= 400 or len(html_text) < 4000) and sync_playwright is not None:
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                try:
+                    context = browser.new_context(
+                        user_agent=headers['User-Agent'],
+                        locale='en-US',
+                        viewport={'width': 1366, 'height': 900},
+                    )
+                    page = context.new_page()
+                    response_pw = page.goto(url, wait_until='domcontentloaded', timeout=int(timeout * 1000))
+                    try:
+                        page.wait_for_load_state('networkidle', timeout=5000)
+                    except Exception:
+                        pass
+                    html_pw = str(page.content() or '')
+                    status_pw = int(response_pw.status) if response_pw is not None else status_code
+                    if html_pw:
+                        status_code = status_pw
+                        html_text = html_pw
+                finally:
+                    browser.close()
+        except Exception:
+            # Keep the original response if browser rendering is unavailable.
+            pass
+
+    return status_code, html_text
 
 
 def _makerworld_slug_to_title(raw_slug):
@@ -3283,13 +3315,23 @@ def _extract_makerworld_live_rows(html_text, query=''):
         r'href=["\'](?P<href>(?:https?://(?:www\.)?makerworld\.com)?/[a-z]{2}/models/\d+[^"\']*)["\']',
         re.IGNORECASE,
     )
+    raw_url_pattern = re.compile(
+        r'(?P<href>(?:https?://(?:www\.)?makerworld\.com)?/[a-z]{2}/models/\d+(?:-[^"\'\s<]*)?)',
+        re.IGNORECASE,
+    )
     image_pattern = re.compile(
         r'(https://makerworld\.bblmw\.com/[^"\'\s]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^"\'\s]*)?)',
         re.IGNORECASE,
     )
 
-    for match in href_pattern.finditer(html_text or ''):
-        href = str(match.group('href') or '').replace('&amp;', '&').strip()
+    matches = []
+    raw_html = str(html_text or '')
+    decoded_html = raw_html.replace('\\/', '/').replace('&amp;', '&')
+    matches.extend((m.start(), str(m.group('href') or '')) for m in href_pattern.finditer(decoded_html))
+    matches.extend((m.start(), str(m.group('href') or '')) for m in raw_url_pattern.finditer(decoded_html))
+
+    for start_idx, raw_href in matches:
+        href = str(raw_href or '').replace('&amp;', '&').strip()
         if not href:
             continue
         if href.startswith('/'):
@@ -3311,7 +3353,7 @@ def _extract_makerworld_live_rows(html_text, query=''):
         if normalized_query and normalized_query not in title.lower() and normalized_query not in full_url.lower():
             continue
 
-        around = (html_text or '')[match.start():min(len(html_text or ''), match.end() + 1400)]
+        around = decoded_html[start_idx:min(len(decoded_html), start_idx + 1600)]
         image_match = image_pattern.search(around)
         image_url = str(image_match.group(1) if image_match else '').strip()
 
