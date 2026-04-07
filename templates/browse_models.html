@@ -674,6 +674,33 @@
         // Count label intentionally removed from UI.
     }
 
+    function summarizeDiagnostics(payload) {
+        if (!payload || typeof payload !== 'object') return '';
+        const diagnostics = (payload.diagnostics && typeof payload.diagnostics === 'object')
+            ? payload.diagnostics
+            : {};
+        const bits = [];
+        const errorCode = String(payload.error_code || '').trim();
+        const errorMessage = String(payload.error || payload.message || '').trim();
+        const reason = String(diagnostics.reason || diagnostics.exception_message || '').trim();
+        const source = String(payload.source || '').trim();
+        if (errorCode) bits.push(errorCode);
+        if (errorMessage) bits.push(errorMessage);
+        if (reason && reason.toLowerCase() !== errorMessage.toLowerCase()) bits.push(reason);
+        if (source) bits.push('source=' + source);
+        return bits.join(' | ').slice(0, 260);
+    }
+
+    function buildLoadErrorMessage(response, payload) {
+        const status = response ? String(response.status || '').trim() : '';
+        const statusText = response ? String(response.statusText || '').trim() : '';
+        const statusPrefix = status
+            ? ('HTTP ' + status + (statusText ? (' ' + statusText) : ''))
+            : 'Request failed';
+        const details = summarizeDiagnostics(payload);
+        return details ? (statusPrefix + ' | ' + details) : statusPrefix;
+    }
+
     function createPlaceholderCard() {
         const article = document.createElement('article');
         article.className = 'browse-card placeholder';
@@ -765,6 +792,11 @@
                 headers: { 'Accept': 'application/json' },
             });
             const payload = await response.json().catch(function () { return {}; });
+            if (!response.ok || payload.ok === false) {
+                const loadError = new Error(buildLoadErrorMessage(response, payload));
+                loadError.userMessage = buildLoadErrorMessage(response, payload);
+                throw loadError;
+            }
             if (cycleAtRequest !== requestCycle) return;
 
             const rowsRaw = Array.isArray(payload.results)
@@ -820,9 +852,14 @@
                 }
 
                 grid.innerHTML = '';
-                emptyEl.textContent = searching
-                    ? 'No models found for this search.'
-                    : 'Unable to load live models right now. Please try again.';
+                if (searching) {
+                    emptyEl.textContent = 'No models found for this search.';
+                } else {
+                    const emptyReason = summarizeDiagnostics(payload);
+                    emptyEl.textContent = emptyReason
+                        ? ('No live models available right now. ' + emptyReason)
+                        : 'No live models available right now.';
+                }
                 emptyEl.style.display = '';
                 hasMore = false;
                 updateCountLabel();
@@ -861,7 +898,7 @@
             }
             updateCountLabel();
             maybePreloadByScrollPosition();
-        } catch (_error) {
+        } catch (error) {
             if (cycleAtRequest !== requestCycle) return;
             hasMore = false;
             placeholders.forEach(function (ph) {
@@ -869,7 +906,10 @@
             });
             const realCount = Number(grid.querySelectorAll('.browse-card:not(.placeholder)').length || 0);
             if (!realCount) {
-                emptyEl.textContent = 'Unable to load live models right now. Please try again.';
+                const detail = String((error && error.userMessage) || (error && error.message) || '').trim();
+                emptyEl.textContent = detail
+                    ? ('Unable to load live models: ' + detail)
+                    : 'Unable to load live models right now. Please try again.';
                 emptyEl.style.display = '';
             }
             updateCountLabel();

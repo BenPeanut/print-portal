@@ -3247,6 +3247,96 @@ def api_health():
         return jsonify({'status': 'alive', 'db': 'disconnected'}), 503
 
 
+@app.route('/api/live-browse-models', methods=['GET'])
+def live_browse_models_api():
+    if not session.get('user_id'):
+        return jsonify({
+            'ok': False,
+            'error': 'Authentication required.',
+            'error_code': 'AUTH_REQUIRED',
+            'diagnostics': {
+                'http_status': 401,
+                'reason': 'No active user session.',
+            },
+        }), 401
+
+    offset = _to_int(request.args.get('offset'), default=0, min_value=0)
+    page_size = _to_int(request.args.get('page_size'), default=40, min_value=1, max_value=80)
+    query = str(request.args.get('q') or '').strip().lower()
+
+    try:
+        context = _build_user_portal_context(session.get('user_id'))
+        browse_items = context.get('browse_items') if isinstance(context, dict) else []
+        if not isinstance(browse_items, list):
+            browse_items = []
+        if not browse_items:
+            browse_items = _default_featured_items()
+
+        filtered = []
+        for idx, item in enumerate(browse_items):
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get('title') or '').strip()
+            description = str(item.get('description') or '').strip()
+            makerworld_url = str(item.get('makerworld_url') or item.get('link') or '').strip()
+            profile_options = item.get('profile_options') if isinstance(item.get('profile_options'), list) else []
+            haystack = ' '.join([
+                title.lower(),
+                description.lower(),
+                makerworld_url.lower(),
+                ' '.join(str(p or '').strip().lower() for p in profile_options),
+            ])
+            if query and query not in haystack:
+                continue
+
+            raw_id = str(item.get('id') or '').strip()
+            filtered.append({
+                'id': raw_id or f'browse-{idx + 1}',
+                'title': title or 'MakerWorld Model',
+                'description': description,
+                'image_url': str(item.get('image_url') or '').strip(),
+                'makerworld_url': makerworld_url,
+                'price': _to_float(item.get('price'), 0.0),
+                'model_weight': _to_float(item.get('base_weight'), _to_float(item.get('model_weight'), 0.0)),
+                'profile_options': profile_options,
+                'profile_pricing': item.get('profile_pricing') if isinstance(item.get('profile_pricing'), list) else [],
+                'suggested_profile': str(item.get('suggested_profile') or '').strip(),
+                'parts_configuration': item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [],
+                'profile_customizations': item.get('profile_customizations') if isinstance(item.get('profile_customizations'), list) else [],
+                'insufficient_filaments': item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [],
+            })
+
+        total_available = len(filtered)
+        safe_offset = min(offset, total_available)
+        next_offset = min(safe_offset + page_size, total_available)
+        results = filtered[safe_offset:next_offset]
+
+        return jsonify({
+            'ok': True,
+            'results': results,
+            'offset': safe_offset,
+            'next_offset': next_offset,
+            'has_more': next_offset < total_available,
+            'total_available_on_source': total_available,
+            'source': 'internal_featured_catalog',
+            'diagnostics': {
+                'query': query,
+                'returned_count': len(results),
+            },
+        })
+    except Exception as exc:
+        app.logger.exception('live_browse_models_api failed')
+        return jsonify({
+            'ok': False,
+            'error': 'Unable to load live models from the server.',
+            'error_code': 'LIVE_BROWSE_INTERNAL_ERROR',
+            'diagnostics': {
+                'exception_type': type(exc).__name__,
+                'exception_message': str(exc),
+            },
+        }), 500
+
+
 @app.route('/api/user/updates')
 def user_updates_api():
     if not session.get('user_id'):
