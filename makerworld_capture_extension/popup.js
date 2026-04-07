@@ -1,6 +1,6 @@
 const STORAGE_KEYS = {
-  settings: "extension_settings",
-  latest: "latest_captured_model"
+  settings: "capture_settings",
+  latest: "latest_capture"
 };
 
 const DEFAULT_API_BASE = "http://127.0.0.1:5000";
@@ -8,6 +8,9 @@ const DEFAULT_API_BASE = "http://127.0.0.1:5000";
 const statusLine = document.getElementById("status-line");
 const appFrame = document.getElementById("app-frame");
 const reloadFrameBtn = document.getElementById("reload-frame-btn");
+const scannerList = document.getElementById("scanner-list");
+const modelCount = document.getElementById("model-count");
+const scanBtn = document.getElementById("scan-btn");
 const popupParams = new URLSearchParams(window.location.search || "");
 const isEmbeddedMode = popupParams.get("embedded") === "1";
 
@@ -92,24 +95,136 @@ async function loadFrame() {
     const frameUrl = buildFrameUrl(apiBase, modelUrl);
     appFrame.src = frameUrl;
     if (modelUrl) {
-      setStatus("Loaded app with latest Q-captured model.");
+      setStatus("Loaded app with latest captured model.");
     } else {
-      setStatus("App loaded. Hover a MakerWorld model and press Q.");
+      setStatus("App loaded. Press Scan to discover model links on the page.");
     }
   } catch (error) {
     setStatus(error && error.message ? error.message : "Failed to load app frame.", true);
   }
 }
 
-reloadFrameBtn?.addEventListener("click", () => {
-  loadFrame();
+async function captureModelFromList(modelUrl, btn) {
+  setStatus("Capturing model...");
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: "capture_from_hover", modelUrl, sourcePage: modelUrl, triggeredAt: new Date().toISOString() },
+        resolve
+      );
+    });
+    if (result && result.ok) {
+      setStatus("Captured. Loading into app...");
+      if (btn) {
+        btn.textContent = "Captured";
+        btn.style.color = "#0d7f3b";
+      }
+      await loadFrame();
+    } else {
+      setStatus((result && result.error) || "Capture failed.", true);
+      if (btn) {
+        btn.textContent = "Retry";
+        btn.disabled = false;
+      }
+    }
+  } catch (err) {
+    setStatus("Capture failed.", true);
+    if (btn) {
+      btn.textContent = "Retry";
+      btn.disabled = false;
+    }
+  }
+}
+
+function renderModelList(models) {
+  if (!scannerList) return;
+  scannerList.innerHTML = "";
+
+  if (!models.length) {
+    scannerList.innerHTML = "<p class=\"scanner-empty\">No model links found. Open a MakerWorld listing page and try Scan again.</p>";
+    return;
+  }
+
+  models.forEach(function (m) {
+    const row = document.createElement("div");
+    row.className = "scanner-row";
+
+    const titleEl = document.createElement("span");
+    titleEl.className = "scanner-title";
+    titleEl.textContent = m.title || m.url;
+    titleEl.title = m.url;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scanner-capture-btn";
+    btn.textContent = "Capture";
+    btn.addEventListener("click", function () {
+      btn.textContent = "...";
+      btn.disabled = true;
+      captureModelFromList(m.url, btn);
+    });
+
+    row.appendChild(titleEl);
+    row.appendChild(btn);
+    scannerList.appendChild(row);
+  });
+}
+
+async function scanAndRenderPageModels() {
+  if (scanBtn) scanBtn.disabled = true;
+  if (modelCount) modelCount.textContent = "Scanning...";
+  if (scannerList) scannerList.innerHTML = "";
+  setStatus("Deep scanning current MakerWorld page...");
+
+  try {
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "scan_active_tab_for_models",
+          options: {
+            deep: true,
+            maxScrollSteps: 48,
+            settleMs: 320,
+            stopAfterNoGrowth: 4,
+            maxSuggestions: 120,
+          },
+        },
+        resolve
+      );
+    });
+
+    const models = (response && Array.isArray(response.models)) ? response.models : [];
+    const totalFound = Number(response && response.total_found) || models.length;
+    const suggestedCount = Number(response && response.suggested_count) || models.length;
+    if (modelCount) modelCount.textContent = `${suggestedCount} suggested / ${totalFound} found`;
+
+    renderModelList(models);
+
+    if (response && response.error) {
+      setStatus(response.error, true);
+    } else {
+      setStatus(`Scan complete: ${totalFound} found, suggesting ${suggestedCount}.`);
+    }
+  } catch (_err) {
+    if (modelCount) modelCount.textContent = "0";
+    renderModelList([]);
+    setStatus("Could not scan the current tab.", true);
+  } finally {
+    if (scanBtn) scanBtn.disabled = false;
+  }
+}
+
+reloadFrameBtn?.addEventListener("click", async () => {
+  await loadFrame();
+  await scanAndRenderPageModels();
 });
+
+scanBtn?.addEventListener("click", scanAndRenderPageModels);
 
 appFrame?.addEventListener("load", () => {
   chrome.runtime.sendMessage({ action: "clear_badge" }, () => {});
 });
 
-// Resize iframe to full content height so the popup scrolls as one unified page
 window.addEventListener("message", (e) => {
   if (e.data && e.data.type === "dc_resize" && typeof e.data.height === "number") {
     if (appFrame) appFrame.style.height = e.data.height + "px";
@@ -127,3 +242,4 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 loadFrame();
+scanAndRenderPageModels();

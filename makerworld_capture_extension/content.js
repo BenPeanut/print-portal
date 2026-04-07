@@ -248,8 +248,14 @@
     true
   );
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key && event.key.toLowerCase() === "q") {
+  function isQHotkey(event) {
+    const key = String(event && event.key || "").toLowerCase();
+    const code = String(event && event.code || "").toLowerCase();
+    return key === "q" || code === "keyq";
+  }
+
+  function handleCaptureHotkey(event) {
+    if (isQHotkey(event)) {
       console.log("[MakerWorld Capture] Q pressed. hoveredModelUrl:", hoveredModelUrl, "captureInFlight:", captureInFlight);
     }
 
@@ -257,7 +263,8 @@
       const tag = (event.target && event.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || (event.target && event.target.isContentEditable)) return;
       if (event.repeat) return;
-      if (!event.key || event.key.toLowerCase() !== "q") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!isQHotkey(event)) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -297,20 +304,119 @@
       captureInFlight = false;
       showToast("Capture failed: extension context invalidated. Refresh this page.", false, 4000);
     }
-  }, true);
+  }
+
+  function scanPageForModels() {
+    const seen = new Set();
+    const results = [];
+    document.querySelectorAll("a[href]").forEach(function (a) {
+      const norm = normalizeModelUrl(a.href);
+      if (!norm || seen.has(norm)) return;
+      seen.add(norm);
+
+      let title = "";
+      const container =
+        a.closest("article, [class*='card'], [class*='item'], [class*='model'], li, section") ||
+        a.parentElement;
+      if (container && container !== document.body) {
+        const heading = container.querySelector("h1, h2, h3, h4, h5");
+        if (heading) title = (heading.textContent || "").trim();
+        if (!title) {
+          const titleEl = container.querySelector("[class*='title'], [class*='name'], [class*='label']");
+          if (titleEl) title = (titleEl.textContent || "").trim();
+        }
+      }
+      if (!title) title = (a.textContent || "").trim();
+      if (!title) {
+        const img = a.querySelector("img[alt]");
+        if (img) title = (img.alt || "").trim();
+      }
+      title = title.replace(/\s+/g, " ").trim().slice(0, 120);
+
+      const idMatch = norm.match(/\/models\/(\d+)/);
+      const modelId = idMatch ? idMatch[1] : "";
+      results.push({ url: norm, title: title || ("Model " + modelId), modelId: modelId });
+    });
+    return results;
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  async function deepScanModels(options) {
+    const opts = options || {};
+    const maxScrollSteps = Math.max(1, Math.min(120, Number(opts.maxScrollSteps || 36)));
+    const settleMs = Math.max(120, Math.min(2000, Number(opts.settleMs || 350)));
+    const stopAfterNoGrowth = Math.max(2, Math.min(12, Number(opts.stopAfterNoGrowth || 4)));
+    const maxSuggestions = Math.max(10, Math.min(500, Number(opts.maxSuggestions || 120)));
+
+    let best = scanPageForModels();
+    let noGrowthRuns = 0;
+
+    for (let step = 0; step < maxScrollSteps; step += 1) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "auto" });
+      await sleep(settleMs);
+      const current = scanPageForModels();
+      if (current.length > best.length) {
+        best = current;
+        noGrowthRuns = 0;
+      } else {
+        noGrowthRuns += 1;
+      }
+      if (noGrowthRuns >= stopAfterNoGrowth) {
+        break;
+      }
+    }
+
+    return {
+      models: best.slice(0, maxSuggestions),
+      total_found: best.length,
+      suggested_count: Math.min(best.length, maxSuggestions),
+      scan_mode: "deep",
+    };
+  }
+
+  // Use window capture phase so this fires before MakerWorld page JS,
+  // which can call stopPropagation at document/element level.
+  window.addEventListener("keydown", handleCaptureHotkey, true);
 
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-      if (!message || message.action !== "open_capture_overlay") {
-        return;
+      if (!message) return;
+
+      if (message.action === "get_page_models") {
+        (async function () {
+          try {
+            const deep = Boolean(message.options && message.options.deep);
+            const payload = deep
+              ? await deepScanModels(message.options)
+              : (function () {
+                const models = scanPageForModels();
+                return {
+                  models: models,
+                  total_found: models.length,
+                  suggested_count: models.length,
+                  scan_mode: "quick",
+                };
+              })();
+            sendResponse({ ok: true, ...payload });
+          } catch (error) {
+            sendResponse({ ok: true, models: [], total_found: 0, suggested_count: 0, scan_mode: "error" });
+          }
+        })();
+        return true;
       }
-      try {
-        const result = openCaptureOverlay(String(message.frameUrl || ""));
-        sendResponse(result);
-      } catch (error) {
-        sendResponse({ ok: false, error: error && error.message ? String(error.message) : "Overlay failed." });
+
+      if (message.action === "open_capture_overlay") {
+        try {
+          const result = openCaptureOverlay(String(message.frameUrl || ""));
+          sendResponse(result);
+        } catch (error) {
+          sendResponse({ ok: false, error: error && error.message ? String(error.message) : "Overlay failed." });
+        }
+        return true;
       }
-      return true;
     });
   }
 

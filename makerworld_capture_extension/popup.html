@@ -16,6 +16,13 @@
       <button id="reload-frame-btn" class="reload-btn" type="button">Reload</button>
     </header>
     <div id="status-line" class="status-line"></div>
+    <div id="scanner-panel" class="scanner-panel">
+      <div class="scanner-bar">
+        <span class="scanner-label">Found on this page &nbsp;<span id="model-count" class="model-count">–</span></span>
+        <button id="scan-btn" class="scan-btn" type="button">↻ Rescan</button>
+      </div>
+      <div id="scanner-list" class="scanner-list"></div>
+    </div>
     <iframe id="app-frame" class="app-frame" title="Desktop Capture App" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
   </div>
 

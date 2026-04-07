@@ -22,9 +22,18 @@ function Test-PortOpen {
 }
 
 $port = 5000
-if (Test-PortOpen -Port $port) {
-    Write-Host "Flask server is already running on 127.0.0.1:$port"
-    exit 0
+
+# Always replace whatever is listening on the Flask port so stale instances
+# cannot keep serving old code.
+$listeningPids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+
+foreach ($owningPid in ($listeningPids | Where-Object { $_ })) {
+    Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue
+}
+
+if ($listeningPids) {
+    Start-Sleep -Milliseconds 500
 }
 
 $pythonw = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'

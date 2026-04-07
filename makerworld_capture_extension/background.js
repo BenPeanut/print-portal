@@ -464,6 +464,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "scan_active_tab_for_models") {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      const tab = tabs && tabs[0];
+      if (!tab || !tab.id) {
+        sendResponse({ ok: true, models: [], total_found: 0, suggested_count: 0, error: "No active tab." });
+        return;
+      }
+      chrome.tabs.sendMessage(
+        tab.id,
+        { action: "get_page_models", options: message.options || {} },
+        function (response) {
+          if (chrome.runtime.lastError) {
+            sendResponse({
+              ok: true,
+              models: [],
+              total_found: 0,
+              suggested_count: 0,
+              error: "Open a MakerWorld page and refresh it once, then scan again.",
+            });
+            return;
+          }
+          sendResponse(response || { ok: true, models: [], total_found: 0, suggested_count: 0 });
+        }
+      );
+    });
+    return true;
+  }
+
   if (message.action === "confirm_latest") {
     confirmLatest(message.overrides || {})
       .then((result) => sendResponse({ ok: true, result }))

@@ -5,6 +5,9 @@ BACKGROUND FLASK SERVER (NO TERMINAL WINDOW)
 Run once now:
 .\start_flask_background.ps1
 
+Stop background Flask server:
+Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+
 AUTO-START FLASK AT WINDOWS LOGIN
 Enable:
 .\enable_flask_autostart.ps1
