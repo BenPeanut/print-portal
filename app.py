@@ -12,7 +12,7 @@ import uuid
 import json
 import importlib
 from dotenv import load_dotenv
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote_plus
 import re
 import psycopg2
 import requests
@@ -3247,6 +3247,142 @@ def api_health():
         return jsonify({'status': 'alive', 'db': 'disconnected'}), 503
 
 
+def _makerworld_http_get(url, timeout=25):
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+    }
+    if cloudscraper is not None:
+        client = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+        response = client.get(url, headers=headers, timeout=timeout)
+    else:
+        response = requests.get(url, headers=headers, timeout=timeout)
+    return int(response.status_code or 0), str(response.text or '')
+
+
+def _makerworld_slug_to_title(raw_slug):
+    slug = unquote(str(raw_slug or '')).strip('-_ ')
+    if not slug:
+        return 'MakerWorld Model'
+    return re.sub(r'\s+', ' ', slug.replace('-', ' ').replace('_', ' ')).strip().title() or 'MakerWorld Model'
+
+
+def _extract_makerworld_live_rows(html_text, query=''):
+    rows = []
+    seen_model_ids = set()
+    normalized_query = str(query or '').strip().lower()
+
+    href_pattern = re.compile(
+        r'href=["\'](?P<href>(?:https?://(?:www\.)?makerworld\.com)?/[a-z]{2}/models/\d+[^"\']*)["\']',
+        re.IGNORECASE,
+    )
+    image_pattern = re.compile(
+        r'(https://makerworld\.bblmw\.com/[^"\'\s]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^"\'\s]*)?)',
+        re.IGNORECASE,
+    )
+
+    for match in href_pattern.finditer(html_text or ''):
+        href = str(match.group('href') or '').replace('&amp;', '&').strip()
+        if not href:
+            continue
+        if href.startswith('/'):
+            full_url = f'https://makerworld.com{href}'
+        else:
+            full_url = href
+
+        parsed = urlparse(full_url)
+        path = str(parsed.path or '')
+        model_match = re.search(r'/models/(\d+)(?:-([^/?#]+))?', path, re.IGNORECASE)
+        if not model_match:
+            continue
+        model_id = str(model_match.group(1) or '').strip()
+        if not model_id or model_id in seen_model_ids:
+            continue
+
+        slug = str(model_match.group(2) or '').strip()
+        title = _makerworld_slug_to_title(slug)
+        if normalized_query and normalized_query not in title.lower() and normalized_query not in full_url.lower():
+            continue
+
+        around = (html_text or '')[match.start():min(len(html_text or ''), match.end() + 1400)]
+        image_match = image_pattern.search(around)
+        image_url = str(image_match.group(1) if image_match else '').strip()
+
+        seen_model_ids.add(model_id)
+        rows.append({
+            'id': f'mw-live-{model_id}',
+            'title': title,
+            'description': '',
+            'image_url': image_url,
+            'makerworld_url': full_url,
+            'price': 0.0,
+            'model_weight': 0.0,
+            'profile_options': [],
+            'profile_pricing': [],
+            'suggested_profile': '',
+            'parts_configuration': [],
+            'profile_customizations': [],
+            'insufficient_filaments': [],
+        })
+
+        if len(rows) >= 400:
+            break
+
+    return rows
+
+
+def _build_internal_browse_rows(user_id, query=''):
+    context = _build_user_portal_context(user_id)
+    browse_items = context.get('browse_items') if isinstance(context, dict) else []
+    if not isinstance(browse_items, list):
+        browse_items = []
+    if not browse_items:
+        browse_items = _default_featured_items()
+
+    filtered = []
+    normalized_query = str(query or '').strip().lower()
+    for idx, item in enumerate(browse_items):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get('title') or '').strip()
+        description = str(item.get('description') or '').strip()
+        makerworld_url = str(item.get('makerworld_url') or item.get('link') or '').strip()
+        profile_options = item.get('profile_options') if isinstance(item.get('profile_options'), list) else []
+        haystack = ' '.join([
+            title.lower(),
+            description.lower(),
+            makerworld_url.lower(),
+            ' '.join(str(p or '').strip().lower() for p in profile_options),
+        ])
+        if normalized_query and normalized_query not in haystack:
+            continue
+
+        raw_id = str(item.get('id') or '').strip()
+        filtered.append({
+            'id': raw_id or f'browse-{idx + 1}',
+            'title': title or 'MakerWorld Model',
+            'description': description,
+            'image_url': str(item.get('image_url') or '').strip(),
+            'makerworld_url': makerworld_url,
+            'price': _to_float(item.get('price'), 0.0),
+            'model_weight': _to_float(item.get('base_weight'), _to_float(item.get('model_weight'), 0.0)),
+            'profile_options': profile_options,
+            'profile_pricing': item.get('profile_pricing') if isinstance(item.get('profile_pricing'), list) else [],
+            'suggested_profile': str(item.get('suggested_profile') or '').strip(),
+            'parts_configuration': item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [],
+            'profile_customizations': item.get('profile_customizations') if isinstance(item.get('profile_customizations'), list) else [],
+            'insufficient_filaments': item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [],
+        })
+    return filtered
+
+
 @app.route('/api/live-browse-models', methods=['GET'])
 def live_browse_models_api():
     if not session.get('user_id'):
@@ -3263,53 +3399,82 @@ def live_browse_models_api():
     offset = _to_int(request.args.get('offset'), default=0, min_value=0)
     page_size = _to_int(request.args.get('page_size'), default=40, min_value=1, max_value=80)
     query = str(request.args.get('q') or '').strip().lower()
+    allow_fallback = _to_bool(request.args.get('allow_fallback'), default=False)
 
     try:
-        context = _build_user_portal_context(session.get('user_id'))
-        browse_items = context.get('browse_items') if isinstance(context, dict) else []
-        if not isinstance(browse_items, list):
-            browse_items = []
-        if not browse_items:
-            browse_items = _default_featured_items()
+        encoded_query = quote_plus(query)
+        candidate_urls = (
+            [
+                f'https://makerworld.com/en/search/models?keyword={encoded_query}',
+                f'https://makerworld.com/en/models?from=search&keyword={encoded_query}',
+            ] if query else [
+                'https://makerworld.com/en/models?from=discover',
+                'https://makerworld.com/en/models',
+            ]
+        )
 
-        filtered = []
-        for idx, item in enumerate(browse_items):
-            if not isinstance(item, dict):
-                continue
-            title = str(item.get('title') or '').strip()
-            description = str(item.get('description') or '').strip()
-            makerworld_url = str(item.get('makerworld_url') or item.get('link') or '').strip()
-            profile_options = item.get('profile_options') if isinstance(item.get('profile_options'), list) else []
-            haystack = ' '.join([
-                title.lower(),
-                description.lower(),
-                makerworld_url.lower(),
-                ' '.join(str(p or '').strip().lower() for p in profile_options),
-            ])
-            if query and query not in haystack:
-                continue
+        attempts = []
+        source_url = ''
+        live_rows = []
+        last_status = 0
 
-            raw_id = str(item.get('id') or '').strip()
-            filtered.append({
-                'id': raw_id or f'browse-{idx + 1}',
-                'title': title or 'MakerWorld Model',
-                'description': description,
-                'image_url': str(item.get('image_url') or '').strip(),
-                'makerworld_url': makerworld_url,
-                'price': _to_float(item.get('price'), 0.0),
-                'model_weight': _to_float(item.get('base_weight'), _to_float(item.get('model_weight'), 0.0)),
-                'profile_options': profile_options,
-                'profile_pricing': item.get('profile_pricing') if isinstance(item.get('profile_pricing'), list) else [],
-                'suggested_profile': str(item.get('suggested_profile') or '').strip(),
-                'parts_configuration': item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [],
-                'profile_customizations': item.get('profile_customizations') if isinstance(item.get('profile_customizations'), list) else [],
-                'insufficient_filaments': item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [],
+        for url in candidate_urls:
+            status_code, html_text = _makerworld_http_get(url)
+            last_status = status_code
+            parsed_rows = _extract_makerworld_live_rows(html_text, query=query)
+            attempts.append({
+                'url': url,
+                'status_code': status_code,
+                'parsed_rows': len(parsed_rows),
+            })
+            if status_code < 400 and parsed_rows:
+                source_url = url
+                live_rows = parsed_rows
+                break
+
+        if not live_rows:
+            error_message = (
+                f'MakerWorld source unreachable or returned no parsable models (last HTTP {last_status}).'
+                if last_status > 0
+                else 'MakerWorld source unreachable or returned no parsable models.'
+            )
+            if not allow_fallback:
+                return jsonify({
+                    'ok': False,
+                    'error': error_message,
+                    'error_code': 'LIVE_SOURCE_UNAVAILABLE',
+                    'diagnostics': {
+                        'query': query,
+                        'attempts': attempts,
+                        'reason': 'Upstream source denied, unavailable, or changed markup.',
+                    },
+                }), 502
+
+            fallback_rows = _build_internal_browse_rows(session.get('user_id'), query=query)
+            total_available = len(fallback_rows)
+            safe_offset = min(offset, total_available)
+            next_offset = min(safe_offset + page_size, total_available)
+            results = fallback_rows[safe_offset:next_offset]
+            return jsonify({
+                'ok': True,
+                'results': results,
+                'offset': safe_offset,
+                'next_offset': next_offset,
+                'has_more': next_offset < total_available,
+                'total_available_on_source': total_available,
+                'source': 'internal_featured_catalog_fallback',
+                'diagnostics': {
+                    'query': query,
+                    'returned_count': len(results),
+                    'reason': error_message,
+                    'attempts': attempts,
+                },
             })
 
-        total_available = len(filtered)
+        total_available = len(live_rows)
         safe_offset = min(offset, total_available)
         next_offset = min(safe_offset + page_size, total_available)
-        results = filtered[safe_offset:next_offset]
+        results = live_rows[safe_offset:next_offset]
 
         return jsonify({
             'ok': True,
@@ -3318,10 +3483,11 @@ def live_browse_models_api():
             'next_offset': next_offset,
             'has_more': next_offset < total_available,
             'total_available_on_source': total_available,
-            'source': 'internal_featured_catalog',
+            'source': 'makerworld_public_web',
             'diagnostics': {
                 'query': query,
                 'returned_count': len(results),
+                'source_url': source_url,
             },
         })
     except Exception as exc:
