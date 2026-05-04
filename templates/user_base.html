@@ -1,9 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-FRQH856N5N');
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or 'Client Portal' }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
     <style>
         :root {
             --bg: #f4f8f6;
@@ -359,7 +370,7 @@
             background: rgba(0, 0, 0, 0.38);
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
-            z-index: 900;
+            z-index: 2200;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.25s ease;
@@ -379,7 +390,7 @@
             background: #ffffff;
             border-radius: 12px 0 0 12px;
             box-shadow: -14px 0 44px rgba(0, 0, 0, 0.22);
-            z-index: 910;
+            z-index: 2210;
             display: flex;
             flex-direction: column;
             transform: translateX(100%);
@@ -585,9 +596,42 @@
             justify-content: center;
             border-radius: 6px;
             flex-shrink: 0;
+            transition: all 0.2s ease;
+            position: relative;
         }
 
-        .cart-item-remove:hover { background: #fff1f1; }
+        .cart-item-remove:hover:not(:disabled) { background: #fff1f1; }
+        
+        .cart-item-remove:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .cart-item-remove.deleting {
+            color: #9ca3af;
+        }
+
+        .cart-item-remove.deleting svg {
+            animation: spin 0.75s linear infinite;
+        }
+
+        .cart-item-remove.deleted {
+            color: #4ade80;
+        }
+
+        .cart-item-remove.error {
+            color: #f87171;
+            animation: pulse-error 0.4s ease !important;
+        }
+
+        @keyframes pulse-error {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
         .cart-drawer-footer {
             padding: 14px 20px 18px;
@@ -1064,7 +1108,6 @@
             <div class="brand">USER PORTAL</div>
             <div class="links">
                 <a href="/" class="{% if active_tab == 'home' %}active{% endif %}">Home</a>
-                <a href="/browse-models" class="{% if active_tab == 'browse' %}active{% endif %}">Browse Models</a>
                 <a href="/order" class="{% if active_tab == 'order' %}active{% endif %}">Order</a>
                 <a href="/history" class="{% if active_tab == 'history' %}active{% endif %}">My History</a>
                 <a href="/materials" class="{% if active_tab == 'materials' %}active{% endif %}">Materials</a>
@@ -1303,6 +1346,13 @@
             }
         }
 
+        function setServerCartOrders(orders) {
+            const el = document.getElementById('cart-order-data');
+            if (!el) return;
+            const nextOrders = Array.isArray(orders) ? orders : [];
+            el.setAttribute('data-orders', JSON.stringify(nextOrders));
+        }
+
         function cartItemFingerprint(item) {
             const safe = item || {};
             const parts = Array.isArray(safe.multiMappings)
@@ -1430,6 +1480,49 @@
             updateCartUI();
         }
 
+        async function loadPersistedCart() {
+            try {
+                const res = await fetch('/cart/orders', { credentials: 'include' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.items || !Array.isArray(data.items)) return;
+                setServerCartOrders(data.items);
+                const backendItems = data.items.map(function(order) {
+                    return {
+                        orderId: order.id,
+                        id: order.id,
+                        displayName: order.product_name || order.name,
+                        link: order.link,
+                        singleFilament: order.color ? String(order.color).split('|')[0].split(':').pop().trim() : '',
+                        colorMode: (order.color || '').includes('|') ? 'multi' : 'single',
+                        profile: order.profile,
+                        weight: (Number(order.print_weight_g) || 0) / (Number(order.quantity) || 1),
+                        estimatedPrice: Number(order.print_price || 0),
+                        quantity: Number(order.quantity) || 1,
+                        serverStatus: order.status,
+                        adminNote: order.admin_note || ''
+                    };
+                });
+                const localCart = JSON.parse(localStorage.getItem(CART_KEY) || '{"items":[]}');
+                const localItems = Array.isArray(localCart.items) ? localCart.items : [];
+                const seenOrderIds = new Set();
+                backendItems.forEach(function(item) {
+                    const id = String(item.orderId || item.order_id || item.id || '').trim();
+                    if (id) seenOrderIds.add(id);
+                });
+
+                const merged = backendItems.slice();
+                localItems.forEach(function(item) {
+                    const id = String((item && (item.orderId || item.order_id || item.id)) || '').trim();
+                    if (!id || !seenOrderIds.has(id)) {
+                        merged.push(item);
+                    }
+                });
+
+                localStorage.setItem(CART_KEY, JSON.stringify({ items: dedupeCartItems(merged) }));
+            } catch (e) {}
+        }
+
         function applyServerCartCleanup() {
             const clearIds = getClearIds();
             if (!clearIds.length) return;
@@ -1490,7 +1583,7 @@
             if (priceEl) priceEl.textContent = item.estimatedPrice ? formatPrice(item.estimatedPrice) : 'Price TBD';
             if (weightEl) weightEl.textContent = item.weight ? String(item.weight) + ' g' : 'Weight TBD';
             if (colorEl) colorEl.textContent = colorText;
-            if (profileEl) profileEl.textContent = item.profile || 'Standard';
+            if (profileEl) profileEl.textContent = item.profile || '';
             if (deliveryEl) deliveryEl.textContent = item.preferredDeliveryDate || 'Not set';
             if (linkEl) linkEl.textContent = item.link || 'No source link provided';
 
@@ -1662,7 +1755,7 @@
                             '</div>' +
                             '<p class="cart-item-price">' + linePrice + '</p>' +
                             (selectable ? '' : '<p class="cart-item-meta">Admin quote required</p>') +
-                            '<button class="cart-item-remove" type="button" onclick="window.removeCartItem(\'' + safeId + '\')" aria-label="Remove item">' +
+                            '<button class="cart-item-remove" type="button" data-cart-item-id="' + safeId + '" onclick="window.removeCartItem(\'' + safeId + '\')" aria-label="Remove item">' +
                             '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
                             '</button>' +
                             '</div>' +
@@ -1695,9 +1788,56 @@
         window.openOrderPreviewFromCartItem = openPreviewModal;
         window.changeCartItemQuantity = changeDrawerQuantity;
 
-        window.removeCartItem = function (id) {
+        window.removeCartItem = async function (id) {
             const cart = getCart();
-            cart.items = (cart.items || []).filter(function (item) { return item.id !== id; });
+            const items = Array.isArray(cart.items) ? cart.items : [];
+            const target = items.find(function (item) { return String(item && item.id) === String(id); }) || null;
+            const orderId = String((target && (target.orderId || target.order_id || target.id)) || '').trim();
+            const deleteBtn = document.querySelector('button.cart-item-remove[data-cart-item-id="' + String(id).replace(/"/g, '') + '"]');
+
+            let removedOnServer = false;
+            if (orderId) {
+                try {
+                    if (deleteBtn) {
+                        deleteBtn.disabled = true;
+                        deleteBtn.classList.add('deleting');
+                        deleteBtn.setAttribute('aria-busy', 'true');
+                    }
+
+                    const response = await fetch('/cart/remove/' + encodeURIComponent(orderId), {
+                        method: 'POST',
+                        credentials: 'include',
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete cart item');
+                    }
+
+                    removedOnServer = true;
+                    if (deleteBtn) {
+                        deleteBtn.classList.remove('deleting');
+                        deleteBtn.classList.add('deleted');
+                        await new Promise(function (resolve) { setTimeout(resolve, 350); });
+                    }
+                } catch (e) {
+                    if (deleteBtn) {
+                        deleteBtn.classList.remove('deleting');
+                        deleteBtn.classList.add('error');
+                        deleteBtn.disabled = false;
+                        deleteBtn.removeAttribute('aria-busy');
+                        setTimeout(function () {
+                            deleteBtn.classList.remove('error');
+                        }, 1800);
+                    }
+                    return;
+                }
+            }
+
+            if (orderId && !removedOnServer) {
+                return;
+            }
+
+            cart.items = items.filter(function (item) { return String(item && item.id) !== String(id); });
             saveCart(cart);
         };
 
@@ -1770,7 +1910,11 @@
         });
 
         applyServerCartCleanup();
-        updateCartUI();
+        loadPersistedCart().then(function() {
+            updateCartUI();
+        }).catch(function() {
+            updateCartUI();
+        });
     })();
 
     (function () {
@@ -1831,7 +1975,7 @@
     })();
 
     (function () {
-        const initialToken = '{{ user_updates_token or '' }}';
+        const initialToken = "{{ user_updates_token or '' }}";
         let currentToken = initialToken;
         const toast = document.getElementById('live-update-toast');
         const reloadBtn = document.getElementById('live-update-reload');

@@ -339,11 +339,29 @@
 (function () {
     const CART_KEY = 'bcart_v1';
     let selectedIds = new Set();
+    let isHydratingServerCart = false;
 
     function getCart() {
         try {
             const cart = JSON.parse(localStorage.getItem(CART_KEY) || '{"items":[]}');
-            const items = Array.isArray(cart.items) ? cart.items : [];
+            let items = Array.isArray(cart.items) ? cart.items : [];
+            // Keep only items whose order IDs still exist in the latest server list.
+            const serverOrders = getServerCartOrders();
+            const serverOrderIds = new Set(serverOrders.map(function (o) {
+                return String(o.id || '').trim();
+            }).filter(Boolean));
+
+            const pruned = items.filter(function (item) {
+                const oid = String(item.orderId || item.order_id || '').trim();
+                if (!oid) return false;
+                return serverOrderIds.has(oid);
+            });
+            const prunedCount = items.length - pruned.length;
+            items = pruned;
+
+            if (prunedCount > 0) {
+                localStorage.setItem(CART_KEY, JSON.stringify({ items: items }));
+            }
             const synced = syncCartWithServer(items);
             if (synced.changed) {
                 localStorage.setItem(CART_KEY, JSON.stringify({ items: synced.items }));
@@ -375,6 +393,54 @@
             return Array.isArray(parsed) ? parsed : [];
         } catch (e) {
             return [];
+        }
+    }
+
+    function setServerCartOrders(orders) {
+        const el = document.getElementById('cart-order-data-local');
+        if (!el) return;
+        const nextOrders = Array.isArray(orders) ? orders : [];
+        el.setAttribute('data-orders', JSON.stringify(nextOrders));
+    }
+
+    function mapOrderToCartItem(order) {
+        const quantity = normalizeQuantity(order && order.quantity);
+        const total = Number((order && order.print_price) || 0);
+        const unitPrice = quantity > 0 ? total / quantity : total;
+        return {
+            id: String((order && order.id) || ''),
+            orderId: String((order && order.id) || ''),
+            displayName: (order && (order.product_name || order.name)) || 'Unnamed',
+            link: (order && order.link) || '',
+            colorMode: String((order && order.color) || '').includes('|') ? 'multi' : 'single',
+            singleFilament: (order && order.color) ? String(order.color).split('|')[0].split(':').pop().trim() : '',
+            multiMappings: [],
+            filamentHex: '#cccccc',
+            weight: (Number((order && order.print_weight_g) || 0) || 0) / quantity,
+            profile: (order && order.profile) || '',
+            estimatedPrice: unitPrice,
+            quantity: quantity,
+            serverStatus: (order && order.status) || '',
+            adminNote: (order && order.admin_note) || '',
+        };
+    }
+
+    async function refreshServerCartOrders() {
+        if (isHydratingServerCart) return;
+        isHydratingServerCart = true;
+        try {
+            const res = await fetch('/cart/orders', { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || !Array.isArray(data.items)) return;
+            const orders = data.items;
+            setServerCartOrders(orders);
+            const items = orders.map(mapOrderToCartItem);
+            localStorage.setItem(CART_KEY, JSON.stringify({ items: items }));
+        } catch (e) {
+            // Keep current local cart when refresh fails.
+        } finally {
+            isHydratingServerCart = false;
         }
     }
 
@@ -440,11 +506,23 @@
         setItemQuantity(id, current + delta);
     }
 
-    function removeItem(id) {
+    async function removeItem(id) {
         const cart = getCart();
-        cart.items = (cart.items || []).filter(function (i) { return i.id !== id; });
+        const items = Array.isArray(cart.items) ? cart.items : [];
+        const target = items.find(function (i) { return String(i && i.id) === String(id); }) || null;
+        const orderId = String((target && (target.orderId || target.order_id || target.id)) || '').trim();
+        if (orderId) {
+            try {
+                await fetch('/cart/remove/' + encodeURIComponent(orderId), {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+            } catch (e) {}
+        }
+        cart.items = items.filter(function (i) { return String(i && i.id) !== String(id); });
         selectedIds.delete(String(id));
         localStorage.setItem(CART_KEY, JSON.stringify(cart));
+        await refreshServerCartOrders();
         if (window.updateCartUI) window.updateCartUI();
         renderCart();
     }
@@ -639,7 +717,11 @@
         }
     });
 
-    renderCart();
+    refreshServerCartOrders().then(function () {
+        renderCart();
+    }).catch(function () {
+        renderCart();
+    });
 })();
 </script>
 {% endblock %}

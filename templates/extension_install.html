@@ -1,0 +1,324 @@
+{% extends 'user_base.html' %}
+{% set page_title = 'Extension Setup | Client Portal' %}
+{% set extension_setup_shots = extension_setup_shots|default({}, true) %}
+
+{% block content %}
+<style>
+    .install-badge {
+        display: inline-block;
+        border: 1px solid #d9e6df;
+        border-radius: 999px;
+        background: #f3faf6;
+        color: #215a45;
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 4px 10px;
+        margin-bottom: 8px;
+    }
+
+    .install-note {
+        margin-top: 12px;
+        border: 1px solid #d9e6df;
+        border-radius: 14px;
+        background: #f8fcfa;
+        padding: 12px;
+        color: #416256;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .os-picker {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .os-btn {
+        border: 1px solid #cde0d5;
+        background: #ffffff;
+        color: #235743;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.9rem;
+        font-weight: 800;
+        cursor: pointer;
+    }
+
+    .os-btn.active {
+        background: #e9f8ef;
+        border-color: #b7dac5;
+        color: #18533a;
+    }
+
+    .os-panel {
+        margin-top: 10px;
+        border: 1px solid #d8e6de;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 14px;
+        display: none;
+    }
+
+    .os-panel.active {
+        display: block;
+    }
+
+    .steps-title {
+        margin: 0 0 8px;
+        font-size: 1.03rem;
+        font-weight: 900;
+        color: #1f5940;
+    }
+
+    .steps-list {
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    .steps-list li {
+        color: #5f746a;
+        line-height: 1.55;
+        font-size: 0.92rem;
+        margin-bottom: 6px;
+    }
+
+    .download-grid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .download-card {
+        border: 1px solid #d8e6de;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 12px;
+    }
+
+    .download-title {
+        margin: 0 0 4px;
+        font-size: 0.95rem;
+        color: #1f5940;
+        font-weight: 800;
+    }
+
+    .download-copy {
+        margin: 0 0 10px;
+        color: #5f746a;
+        font-size: 0.86rem;
+        line-height: 1.45;
+    }
+
+    .download-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        border: 1px solid #b7dac5;
+        border-radius: 10px;
+        background: #e9f8ef;
+        color: #18533a;
+        font-weight: 800;
+        font-size: 0.84rem;
+        text-decoration: none;
+        padding: 9px 10px;
+    }
+
+    .download-btn:hover {
+        background: #ddf4e7;
+    }
+
+    .screenshot-grid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .shot-card {
+        border: 1px dashed #c6dbcf;
+        border-radius: 12px;
+        background: #fbfefd;
+        padding: 10px;
+    }
+
+    .shot-card p {
+        margin: 0 0 8px;
+        font-size: 0.83rem;
+        color: #587065;
+        font-weight: 700;
+    }
+
+    .shot-card img {
+        width: 100%;
+        border: 1px solid #d8e6de;
+        border-radius: 8px;
+        background: #ffffff;
+        display: block;
+    }
+
+    .shot-placeholder {
+        width: 100%;
+        border: 1px dashed #cfe0d7;
+        border-radius: 8px;
+        background: #f4faf7;
+        color: #6b8076;
+        font-size: 0.8rem;
+        text-align: center;
+        padding: 22px 10px;
+    }
+
+    @media (max-width: 980px) {
+        .os-picker { grid-template-columns: 1fr; }
+        .download-grid { grid-template-columns: 1fr; }
+        .screenshot-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<section class="card">
+    <div class="card-body">
+        <h2 class="section-title">MakerWorld Extension Setup</h2>
+        <p class="section-copy">Follow the exact click-by-click steps below. Pick your OS first, then do each step in order.</p>
+
+        <div class="os-picker" role="tablist" aria-label="Operating system selector">
+            <button type="button" class="os-btn active" data-os-tab="windows" role="tab" aria-selected="true">Windows</button>
+            <button type="button" class="os-btn" data-os-tab="macos" role="tab" aria-selected="false">macOS</button>
+            <button type="button" class="os-btn" data-os-tab="chromebook" role="tab" aria-selected="false">Chromebook</button>
+        </div>
+
+        <article class="os-panel active" id="os-panel-windows" role="tabpanel">
+            <span class="install-badge">Windows</span>
+            <h3 class="steps-title">Exactly what to click (Windows)</h3>
+            <ol class="steps-list">
+                <li>Click <strong>Download for Windows</strong> below and extract the ZIP file.</li>
+                <li>Open Chrome and click the address bar, type <strong>chrome://extensions</strong>, then press Enter.</li>
+                <li>On the Extensions page, turn on <strong>Developer mode</strong> (top-right toggle).</li>
+                <li>Click <strong>Load unpacked</strong>.</li>
+                <li>Select the extracted <strong>makerworld_capture_extension</strong> folder, then click <strong>Select Folder</strong>.</li>
+                <li>Open PowerShell in your project folder and run <strong>bootstrap_extension_setup.ps1</strong>.</li>
+                <li>Enter your <strong>DATABASE_URL</strong> (and <strong>EXTENSION_API_KEY</strong> if requested), then wait for completion.</li>
+                <li>Click the extension icon in Chrome, log in, then open MakerWorld and press <strong>Q</strong> while hovering a model.</li>
+            </ol>
+        </article>
+
+        <article class="os-panel" id="os-panel-macos" role="tabpanel">
+            <span class="install-badge">macOS</span>
+            <h3 class="steps-title">Exactly what to click (macOS)</h3>
+            <ol class="steps-list">
+                <li>Click <strong>Download for macOS</strong> below and extract the ZIP file.</li>
+                <li>Open Chrome and go to <strong>chrome://extensions</strong>.</li>
+                <li>Turn on <strong>Developer mode</strong>.</li>
+                <li>Click <strong>Load unpacked</strong>.</li>
+                <li>Select <strong>makerworld_capture_extension</strong> from the extracted folder.</li>
+                <li>In Terminal, run <strong>bootstrap_extension_setup.sh</strong> to configure startup and environment values.</li>
+                <li>Open the extension popup and sign in.</li>
+                <li>Open MakerWorld and press <strong>Q</strong> while hovering a model card.</li>
+            </ol>
+        </article>
+
+        <article class="os-panel" id="os-panel-chromebook" role="tabpanel">
+            <span class="install-badge">Chromebook</span>
+            <h3 class="steps-title">Exactly what to click (Chromebook)</h3>
+            <ol class="steps-list">
+                <li>Click <strong>Download for Chromebook</strong> below and extract the ZIP file.</li>
+                <li>Open Chrome and go to <strong>chrome://extensions</strong>.</li>
+                <li>Turn on <strong>Developer mode</strong>.</li>
+                <li>Click <strong>Load unpacked</strong>.</li>
+                <li>Select <strong>makerworld_capture_extension</strong> from the extracted folder.</li>
+                <li>Click the extension icon and choose hosted website mode.</li>
+                <li>Click <strong>Open Web Portal</strong> and log in to continue ordering.</li>
+            </ol>
+            <p style="margin-top:10px; color:#5f746a; font-size:0.9rem;">Portal: <a href="https://print-portal-qm9p.onrender.com/" target="_blank" rel="noopener">print-portal-qm9p.onrender.com</a></p>
+        </article>
+
+        <div class="install-note" style="margin-top:10px;">
+            <strong>Screenshot Guide (Optional but recommended)</strong><br>
+            Add screenshot images to <strong>static/extension_setup/</strong> using the filenames shown below. They will display automatically on this page.
+
+            <div class="screenshot-grid">
+                <div class="shot-card">
+                    <p>1) Chrome Extensions page (chrome://extensions)</p>
+                    <img src="/static/extension_setup/chrome_extensions.png" alt="Chrome extensions page screenshot" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="shot-placeholder" style="display:none;">Add file: static/extension_setup/chrome_extensions.png</div>
+                </div>
+                <div class="shot-card">
+                    <p>2) Developer mode + Load unpacked buttons</p>
+                    <img src="/static/extension_setup/load_unpacked.png" alt="Load unpacked screenshot" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="shot-placeholder" style="display:none;">Add file: static/extension_setup/load_unpacked.png</div>
+                </div>
+                <div class="shot-card">
+                    <p>3) Select extension folder dialog</p>
+                    <img src="/static/extension_setup/select_folder.png" alt="Select folder screenshot" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="shot-placeholder" style="display:none;">Add file: static/extension_setup/select_folder.png</div>
+                </div>
+                <div class="shot-card">
+                    <p>4) Extension popup login screen</p>
+                    <img src="/static/extension_setup/popup_login.png" alt="Extension login screenshot" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="shot-placeholder" style="display:none;">Add file: static/extension_setup/popup_login.png</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="install-note">
+            Quick test after setup: open MakerWorld, hover a model, then press <strong>Q</strong>. If popup login reports backend unavailable on desktop, rerun bootstrap and verify startup scripts are enabled.
+        </div>
+
+        <div class="install-note" style="margin-top:10px;">
+            <strong>Direct Downloads</strong><br>
+            Download the extension bundle for your operating system below. Each bundle includes the extension folder and setup helper files for that platform.
+
+            <div class="download-grid">
+                <div class="download-card">
+                    <p class="download-title">Windows Bundle</p>
+                    <p class="download-copy">Extension + PowerShell setup scripts.</p>
+                    <a class="download-btn" href="/static/downloads/MakerWorld-Extension-Windows.zip" download>Download for Windows</a>
+                </div>
+                <div class="download-card">
+                    <p class="download-title">macOS Bundle</p>
+                    <p class="download-copy">Extension + shell scripts for launch setup.</p>
+                    <a class="download-btn" href="/static/downloads/MakerWorld-Extension-macOS.zip" download>Download for macOS</a>
+                </div>
+                <div class="download-card">
+                    <p class="download-title">Chromebook Bundle</p>
+                    <p class="download-copy">Extension + hosted-portal instructions.</p>
+                    <a class="download-btn" href="/static/downloads/MakerWorld-Extension-Chromebook.zip" download>Download for Chromebook</a>
+                </div>
+            </div>
+        </div>
+
+        <p style="margin-top:12px;"><a class="muted-btn" href="/help" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Need help?</a></p>
+    </div>
+</section>
+
+<script>
+(function () {
+    const buttons = Array.from(document.querySelectorAll('[data-os-tab]'));
+    const panels = {
+        windows: document.getElementById('os-panel-windows'),
+        macos: document.getElementById('os-panel-macos'),
+        chromebook: document.getElementById('os-panel-chromebook'),
+    };
+
+    function activate(tab) {
+        Object.keys(panels).forEach(function (key) {
+            const panel = panels[key];
+            if (!panel) return;
+            panel.classList.toggle('active', key === tab);
+        });
+        buttons.forEach(function (btn) {
+            const isActive = btn.getAttribute('data-os-tab') === tab;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+    }
+
+    buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activate(btn.getAttribute('data-os-tab'));
+        });
+    });
+})();
+</script>
+{% endblock %}

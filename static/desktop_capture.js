@@ -768,7 +768,7 @@ function normalizeProfileRows(rows) {
     const sourceRows = Array.isArray(rows) ? rows : [];
     const baseRows = shared.normalizeProfileRows(rows, () => ({
       id: '',
-      name: 'Default Profile',
+      name: '',
       price: calcPrice(Number(el.fieldWeight.value || 0), Number(el.fieldHours.value || 0)),
       weight_g: Number(el.fieldWeight.value || 0),
       estimated_print_hours: Number(el.fieldHours.value || 0),
@@ -783,7 +783,7 @@ function normalizeProfileRows(rows) {
         if (srcId && rowId && srcId === rowId) {
           return true;
         }
-        return String(src?.name || '').trim() === String(row?.name || '').trim();
+        return String(src?.name || '') === String(row?.name || '');
       }) || sourceRows[index] || {};
 
       return {
@@ -803,7 +803,7 @@ function normalizeProfileRows(rows) {
   const normalized = (Array.isArray(rows) ? rows : [])
     .map((row, index) => ({
       id: String(row.id || ''),
-      name: String(row.name || `Profile ${index + 1}`),
+      name: String(row.name || ''),
       price: Number(row.price || 0),
       weight_g: Number(row.weight_g || 0),
       estimated_print_hours: Number(row.estimated_print_hours || 0),
@@ -819,12 +819,12 @@ function normalizeProfileRows(rows) {
       manual_sufficient_by_part: (row.manual_sufficient_by_part && typeof row.manual_sufficient_by_part === 'object') ? row.manual_sufficient_by_part : ((row.sufficient_filaments_by_part && typeof row.sufficient_filaments_by_part === 'object') ? row.sufficient_filaments_by_part : {}),
       manual_insufficient_filaments: Array.isArray(row.manual_insufficient_filaments) ? row.manual_insufficient_filaments : [],
     }))
-    .filter((row) => row.name.trim());
+    .filter((row) => row.name !== '');
 
   if (!normalized.length) {
     normalized.push({
       id: '',
-      name: 'Default Profile',
+      name: '',
       price: calcPrice(Number(el.fieldWeight.value || 0), Number(el.fieldHours.value || 0)),
       weight_g: Number(el.fieldWeight.value || 0),
       estimated_print_hours: Number(el.fieldHours.value || 0),

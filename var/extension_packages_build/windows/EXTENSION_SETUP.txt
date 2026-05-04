@@ -1,0 +1,278 @@
+================================================================================
+MAKERWORLD EXTENSION SETUP GUIDE
+================================================================================
+
+This guide walks you through installing and configuring the MakerWorld 
+extension for the Printing Business Application.
+
+The extension adds a quick "Q-hover" ordering feature to MakerWorld that 
+lets you press Q on any model to open the same order popup as the web dashboard.
+
+================================================================================
+CROSS-PLATFORM QUICK PATH
+================================================================================
+
+WINDOWS
+  - Use bootstrap_extension_setup.ps1 (recommended path below in this guide).
+
+MACOS
+  - Use bootstrap_extension_setup.sh to register launch-at-login.
+  - Manual start script: start_flask_background.sh
+  - Disable launch-at-login: disable_flask_autostart.sh
+
+CHROMEBOOK
+  - Local Flask backend is not supported.
+  - Use hosted portal fallback: https://print-portal-qm9p.onrender.com/
+  - Extension popup will provide a direct "Open Web Portal" action.
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+You need:
+  1. Windows 10 or later
+  2. Google Chrome browser
+  3. Database connection string (DATABASE_URL)
+  4. Extension API key (EXTENSION_API_KEY)
+  5. PowerShell 5.0 or later (built into Windows 10+)
+
+Ask your administrator if you don't have the connection string or API key.
+
+================================================================================
+INSTALLATION STEPS
+================================================================================
+
+STEP 1: Install the Extension in Chrome
+-----------------------------------------
+
+1. Open Google Chrome
+2. Go to: chrome://extensions/
+3. Enable "Developer mode" (toggle in top right)
+4. Click "Load unpacked"
+5. Browse to: 
+   C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website\makerworld_capture_extension
+6. Click "Select Folder"
+
+The extension should now appear in your Chrome toolbar.
+
+IMPORTANT: Do NOT close this window yet. Complete Step 2 below.
+
+STEP 2: Run the Bootstrap Setup (One-Time Configuration)
+---------------------------------------------------------
+
+The bootstrap script sets up:
+  • Connection secrets as secure environment variables
+  • Automatic Flask backend startup when you log into Windows
+  • Immediate backend launch for testing
+
+To run the bootstrap:
+
+1. Open PowerShell as your regular user (NOT admin)
+   • Press Windows key + X
+   • Click "Windows PowerShell" or "Terminal"
+
+2. Navigate to the project folder:
+   cd "C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website"
+
+3. Run the bootstrap script:
+   .\bootstrap_extension_setup.ps1
+
+4. When prompted, paste your secrets:
+   • DATABASE_URL: (paste the connection string from your administrator)
+   • EXTENSION_API_KEY: (paste the key from your administrator)
+
+5. Wait for the script to complete. You should see:
+   ✓ Bootstrap setup completed successfully!
+
+6. Press any key to close the script.
+
+IMPORTANT: The secrets are now stored as user-level environment variables on
+your computer. They are NOT shared across the network and NOT stored in the
+extension code.
+
+STEP 3: Verify the Setup
+------------------------
+
+1. Go to the extension in Chrome (icon in top toolbar)
+2. Click the extension icon to open the popup
+3. You should see a login form
+4. Log in with your username and password
+5. After successful login, you should see:
+   "Signed in as [username]. Hover a model and press Q to open the order popup."
+
+If you see an error about the backend not responding:
+   • Wait 10 seconds and try again (the backend may still be starting)
+   • If it persists, restart your computer
+   • Then open the extension popup again
+
+STEP 4: Test the Q-Hover Feature
+--------------------------------
+
+1. Go to a MakerWorld model page (e.g., MakerWorld.com/designs/...)
+2. Note: The model must show both "Profile" customization options AND at least one print-time selectable part
+3. Hover your mouse over the model image or thumbnail
+4. Press the Q key (just "Q", no other modifiers)
+5. You should see a popup with:
+   • Profile selection dropdown
+   • Part selector with color options
+   • "Add to Cart" button
+6. Select a profile and color for each part
+7. Click "Add to Cart"
+8. You should see a checkout popup
+9. Complete the checkout or cancel
+10. You should see a thank-you popup with confetti animation
+
+If the popup doesn't appear:
+   • Make sure you're hovering over the model (not elsewhere on the page)
+   • Make sure you pressed just "Q" (not Shift+Q or any other modifier)
+   • Check the extension popup - ensure you're logged in
+   • Check that the model has selectable parts (some models may not support quick order)
+
+================================================================================
+AUTOSTART VERIFICATION
+================================================================================
+
+Your Flask backend will now start automatically every time you log into Windows.
+
+To verify this works:
+
+1. Restart your computer
+2. Log back in with your Windows username/password
+3. Open the extension popup in Chrome
+4. You should see the login form automatically
+5. the backend should be running without you doing anything
+
+If the backend does NOT start:
+   • Check that the Startup shortcut was created:
+     • Right-click Windows Start menu → Run → shell:startup
+     • Look for "PrintingBusiness Flask Background.lnk" file
+     • If it's missing, re-run: .\bootstrap_extension_setup.ps1
+   • Try restarting your computer again
+   • Check the log file created during bootstrap setup (look in ./var/ folder)
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "Backend server not responding" in extension popup
+SOLUTION:
+  1. Wait 10 seconds - the backend may still be starting
+  2. Click refresh in the extension popup (or close and reopen)
+  3. Still not working? 
+     • Restart your computer
+     • Try again
+     • If still not working, run: .\start_flask_background.ps1 manually
+     • Then refresh the extension popup
+
+PROBLEM: Login fails in extension popup
+SOLUTION:
+  • Check that your username and password are correct
+  • Try logging in on the main website first to verify credentials
+  • Then try the extension popup again
+  • If the extension still fails but website works, the backend may have crashed
+     → Restart: .\start_flask_background.ps1 or restart your computer
+
+PROBLEM: Q-hover popup doesn't appear when I press Q
+SOLUTION:
+  • Make sure you're logged in (check extension popup)
+  • Make sure you're hovering directly over the model thumbnail
+  • Make sure the model supports part selection (not all models have parts)
+  • Try refreshing the MakerWorld page and hovering again
+  • Check Chrome developer console (F12) for errors
+  • If Console shows errors about "api_key" or "EXTENSION_API_KEY", 
+    the API key may have expired → re-run: .\bootstrap_extension_setup.ps1
+
+PROBLEM: The Startup shortcut doesn't exist after bootstrap
+SOLUTION:
+  1. Right-click Windows Start → Run → shell:startup
+  2. Check if the shortcut is missing
+  3. If missing, re-run: .\bootstrap_extension_setup.ps1
+  4. If re-running fails, check the log file in ./var/ folder for errors
+
+PROBLEM: I want to disable autostart
+SOLUTION:
+  • Run: .\disable_flask_autostart.ps1
+  • This removes the Startup shortcut
+  • You can re-enable later with: .\bootstrap_extension_setup.ps1
+
+PROBLEM: I want to update the connection string or API key
+SOLUTION:
+  • Run: .\bootstrap_extension_setup.ps1
+  • Enter the new values when prompted
+  • The old values will be replaced
+  • No need to uninstall the extension
+
+================================================================================
+SECURITY NOTES
+================================================================================
+
+Your database connection string and API key are:
+  ✓ Stored as user-level Windows environment variables (encrypted at rest by Windows)
+  ✓ NOT stored in the extension code or browser storage
+  ✓ NOT visible in Chrome developer tools or network logs
+  ✓ Only visible to you and system administrators on this computer
+  ✓ Lost if you uninstall Windows or create a new user account
+
+The extension:
+  ✓ Only talks to your local Flask server (127.0.0.1:5000)
+  ✓ Never sends secrets to the internet or cloud services
+  ✓ Cannot access or modify secrets outside its sandbox
+
+If you believe your API key has been compromised:
+  1. Contact your administrator immediately
+  2. They can rotate the key and the connection string
+  3. Re-run: .\bootstrap_extension_setup.ps1 with the new values
+  4. The extension will use the new secrets automatically
+
+================================================================================
+MANUAL BACKEND STARTUP (IF AUTOSTART FAILS)
+================================================================================
+
+If the backend doesn't start automatically, you can start it manually:
+
+1. Open PowerShell
+2. cd to: C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website
+3. Run: .\start_flask_background.ps1
+
+The backend will start with a console window hidden (no visible window).
+
+To stop it manually:
+  • Open Task Manager (Ctrl+Shift+Esc)
+  • Look for process "python.exe"
+  • Right-click and "End Task"
+
+================================================================================
+NEED HELP?
+================================================================================
+
+If you encounter issues not covered above:
+  1. Check the log file created by bootstrap: look in ./var/ folder (most recent file)
+  2. Share the log file with your administrator for troubleshooting
+  3. Include a description of what you were trying to do when the error occurred
+  4. Include your Windows username and computer name
+
+Common diagnostics to include:
+  • Python version: Open PowerShell and run: python --version
+  • Verify env vars are set: run: Get-Item -Path Env:DATABASE_URL
+  • Check if backend is listening: run: Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue
+
+================================================================================
+ADDITIONAL RESOURCES
+================================================================================
+
+Documentation:
+  • Flask backend health: http://127.0.0.1:5000/api/health (when running)
+  • Main dashboard: http://127.0.0.1:5000/ (when running and logged in)
+  • User home slideshow: http://127.0.0.1:5000/ (when running)
+
+Project folder:
+  • Bootstrap script: bootstrap_extension_setup.ps1
+  • Background launcher: start_flask_background.ps1
+  • Startup shortcut location: C:\Users\[YourUsername]\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+
+Chrome extension folder:
+  • Load unpacked from: makerworld_capture_extension/
+  • Edit manifest.json to change extension name/descriptions
+  • Edit popup.html to customize UI
+
+================================================================================

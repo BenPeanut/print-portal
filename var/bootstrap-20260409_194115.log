@@ -1,0 +1,42 @@
+[2026-04-09 19:41:15] [INFO] ==========================================
+[2026-04-09 19:41:15] [INFO] MakerWorld Extension Bootstrap Setup
+[2026-04-09 19:41:15] [INFO] ==========================================
+[2026-04-09 19:41:15] [INFO] Log file: C:\Users\Benaiah\Documents\MyCode\MyPrintingBuisness\Client_Website\var\bootstrap-20260409_194115.log
+[2026-04-09 19:41:15] [INFO] Project root: C:\Users\Benaiah\Documents\MyCode\MyPrintingBuisness\Client_Website
+[2026-04-09 19:41:15] [INFO] Step 1: Collecting database connection credentials
+[2026-04-09 19:58:07] [INFO] DATABASE_URL collected (length: 115 chars)
+[2026-04-09 20:04:18] [INFO] EXTENSION_API_KEY collected (length: 41 chars)
+[2026-04-09 20:04:18] [INFO] Step 2: Registering environment variables at user level
+[2026-04-09 20:04:32] [INFO] [OK] DATABASE_URL registered
+[2026-04-09 20:04:45] [INFO] [OK] EXTENSION_API_KEY registered
+[2026-04-09 20:04:45] [INFO] [OK] Environment variables available in current session
+[2026-04-09 20:04:45] [INFO] Step 3: Registering Flask backend for autostart at login
+[2026-04-09 20:04:45] [INFO] [OK] Startup shortcut created: C:\Users\Benaiah\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\PrintingBusiness Flask Background.lnk
+[2026-04-09 20:04:45] [INFO] Step 4: Launching Flask backend for immediate testing
+[2026-04-09 20:04:46] [INFO] Stopped existing process (PID: 34572) listening on port 5000
+[2026-04-09 20:04:46] [INFO] [OK] Flask backend process launched (port 5000)
+[2026-04-09 20:04:46] [INFO] Waiting for backend to become available...
+[2026-04-09 20:05:31] [WARN] WARNING: Backend did not respond within timeout
+[2026-04-09 20:05:31] [INFO] 
+[2026-04-09 20:05:31] [INFO] ==========================================
+[2026-04-09 20:05:31] [INFO] [OK] Bootstrap setup completed successfully!
+[2026-04-09 20:05:31] [INFO] ==========================================
+[2026-04-09 20:05:31] [INFO] 
+[2026-04-09 20:05:31] [INFO] NEXT STEPS:
+[2026-04-09 20:05:31] [INFO]   1. Open the MakerWorld extension popup in Chrome
+[2026-04-09 20:05:31] [INFO]   2. You should see the login form
+[2026-04-09 20:05:31] [INFO]   3. Log in with your username and password
+[2026-04-09 20:05:31] [INFO]   4. Navigate to a MakerWorld model page
+[2026-04-09 20:05:31] [INFO]   5. Hover over a model and press Q to open the order popup
+[2026-04-09 20:05:31] [INFO] 
+[2026-04-09 20:05:31] [INFO] AUTOSTART VERIFICATION:
+[2026-04-09 20:05:31] [INFO]   The Flask backend will now start automatically when you log into Windows.
+[2026-04-09 20:05:31] [INFO]   To verify: restart your computer and check Task Manager for python.exe process.
+[2026-04-09 20:05:31] [INFO] 
+[2026-04-09 20:05:31] [INFO] TROUBLESHOOTING:
+[2026-04-09 20:05:31] [INFO]   - To disable autostart: Delete 'PrintingBusiness Flask Background.lnk' from Startup folder
+[2026-04-09 20:05:31] [INFO]   - To update secrets: Run this script again
+[2026-04-09 20:05:31] [INFO]   - To manually start backend: Run start_flask_background.ps1
+[2026-04-09 20:05:31] [INFO]   - Check log file: C:\Users\Benaiah\Documents\MyCode\MyPrintingBuisness\Client_Website\var\bootstrap-20260409_194115.log
+[2026-04-09 20:05:31] [INFO] 
+[2026-04-09 20:05:31] [INFO] ==========================================

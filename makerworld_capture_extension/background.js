@@ -1,7 +1,11 @@
 const STORAGE_KEYS = {
   settings: "capture_settings",
-  latest: "latest_capture"
+  latest: "latest_capture",
+  authToken: "extension_auth_token",
 };
+
+const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com";
+const HOSTED_EXTENSION_SETUP_URL = `${HOSTED_PORTAL_BASE}/extension-install`;
 
 const DEFAULT_SETTINGS = {
   apiBase: "http://127.0.0.1:5000",
@@ -16,6 +20,47 @@ const DEFAULT_SETTINGS = {
   defaultFilament: "Bamboo Green PLA",
   defaultQuantity: 1
 };
+
+function normalizeLocalApiBase(raw) {
+  const fallback = DEFAULT_SETTINGS.apiBase;
+  const text = String(raw || "").trim() || fallback;
+  try {
+    const parsed = new URL(text);
+    const host = String(parsed.hostname || "").toLowerCase();
+    if (host !== "127.0.0.1" && host !== "localhost") {
+      return fallback;
+    }
+    return `${parsed.protocol}//${parsed.host}`.replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+function getPlatformInfoSafe() {
+  return new Promise((resolve) => {
+    try {
+      if (!chrome.runtime || typeof chrome.runtime.getPlatformInfo !== "function") {
+        resolve({ os: "unknown" });
+        return;
+      }
+      chrome.runtime.getPlatformInfo((info) => {
+        if (chrome.runtime.lastError) {
+          resolve({ os: "unknown" });
+          return;
+        }
+        resolve(info || { os: "unknown" });
+      });
+    } catch {
+      resolve({ os: "unknown" });
+    }
+  });
+}
+
+async function isChromeOS() {
+  return true; // TESTING: force Chromebook mode — revert before deploying
+  const info = await getPlatformInfoSafe(); // eslint-disable-line no-unreachable
+  return String((info && info.os) || "").toLowerCase() === "cros";
+}
 
 function normalizeUrl(raw) {
   const text = String(raw || "").trim();
@@ -57,8 +102,62 @@ function mergeProfileHash(modelUrl, sourcePage) {
 }
 
 async function getSettings() {
-  const data = await chrome.storage.sync.get([STORAGE_KEYS.settings]);
-  return { ...DEFAULT_SETTINGS, ...(data[STORAGE_KEYS.settings] || {}) };
+  const localData = await chrome.storage.local.get([STORAGE_KEYS.settings]);
+  let settings = localData[STORAGE_KEYS.settings] || null;
+  if (!settings) {
+    const syncData = await chrome.storage.sync.get([STORAGE_KEYS.settings]);
+    settings = syncData[STORAGE_KEYS.settings] || {};
+    if (Object.keys(settings).length) {
+      await chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
+    }
+  }
+  const merged = { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  merged.apiBase = normalizeLocalApiBase(merged.apiBase);
+  return merged;
+}
+
+async function openHostedPortal(path = "") {
+  const clean = String(path || "").trim();
+  const target = clean ? `${HOSTED_PORTAL_BASE}/${clean.replace(/^\/+/, "")}` : HOSTED_PORTAL_BASE;
+  await chrome.tabs.create({ url: target });
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
+  if (!details || details.reason !== "install") return;
+  chrome.tabs.create({ url: HOSTED_EXTENSION_SETUP_URL });
+});
+
+async function getExtensionAuthToken() {
+  const localData = await chrome.storage.local.get([STORAGE_KEYS.authToken]);
+  return String(localData[STORAGE_KEYS.authToken] || "").trim();
+}
+
+async function buildExtensionAuthHeaders(baseHeaders = {}) {
+  const token = await getExtensionAuthToken();
+  if (!token) return { ...baseHeaders };
+  return {
+    ...baseHeaders,
+    "X-Extension-Auth": token,
+  };
+}
+
+async function apiFetchJson(path, options = {}) {
+  const settings = await getSettings();
+  const apiBase = normalizeLocalApiBase(settings.apiBase || DEFAULT_SETTINGS.apiBase);
+  const method = String(options.method || "GET").toUpperCase();
+  const body = options.body === undefined ? null : options.body;
+  const headers = await buildExtensionAuthHeaders(
+    body !== null ? { "Content-Type": "application/json" } : {}
+  );
+
+  const response = await fetch(`${apiBase}${path}`, {
+    method,
+    credentials: "include",
+    headers,
+    body: body !== null ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
 }
 
 function withTimeout(promise, ms, errorMessage) {
@@ -78,14 +177,9 @@ function withTimeout(promise, ms, errorMessage) {
 }
 
 async function fetchMetricsFromBackend(modelUrl, settings) {
-  const apiBase = String(settings.apiBase || DEFAULT_SETTINGS.apiBase).replace(/\/$/, "");
-  const apiKey = String(settings.apiKey || "").trim();
-  if (!apiKey) {
-    throw new Error("Missing API key in extension settings.");
-  }
+  const apiBase = normalizeLocalApiBase(settings.apiBase);
   const params = new URLSearchParams({
     model_url: String(modelUrl || ""),
-    api_key: String(apiKey || ""),
   });
   if (String(settings.baseFeeOverride || "").trim() !== "") params.set("base_fee", settings.baseFeeOverride);
   if (String(settings.pricePerGramOverride || "").trim() !== "") params.set("price_per_gram", settings.pricePerGramOverride);
@@ -93,7 +187,8 @@ async function fetchMetricsFromBackend(modelUrl, settings) {
   if (String(settings.profitMarginOverride || "").trim() !== "") params.set("profit_margin", settings.profitMarginOverride);
 
   const endpoint = `${apiBase}/extension-api/scrape-model-metrics?${params.toString()}`;
-  const response = await fetch(endpoint, { method: "GET" });
+  const headers = await buildExtensionAuthHeaders();
+  const response = await fetch(endpoint, { method: "GET", credentials: "include", headers });
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.ok) {
     throw new Error(result.error || `Scrape request failed (${response.status})`);
@@ -225,7 +320,7 @@ async function clearBadge() {
 }
 
 function buildDesktopCapturePushUrl(apiBase) {
-  const base = String(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000").replace(/\/$/, "");
+  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000");
   return `${base}/extension-api/desktop-capture/push`;
 }
 
@@ -235,7 +330,7 @@ async function openIsolatedQuickPopup() {
 }
 
 function buildDesktopCaptureFrameUrl(apiBase, modelUrl) {
-  const base = String(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000").replace(/\/$/, "");
+  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000");
   const params = new URLSearchParams({
     source: "extension_overlay",
     embedded: "1",
@@ -247,6 +342,18 @@ function buildDesktopCaptureFrameUrl(apiBase, modelUrl) {
     params.set("auto_load", "1");
   }
   return `${base}/desktop-capture?${params.toString()}`;
+}
+
+function buildOrderOverlayFrameUrl(apiBase, modelUrl, authToken) {
+  const params = new URLSearchParams({
+    model_url: String(modelUrl || "").trim(),
+    api_base: normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000"),
+    _ts: String(Date.now()),
+  });
+  if (String(authToken || "").trim()) {
+    params.set("ext_auth", String(authToken || "").trim());
+  }
+  return chrome.runtime.getURL(`overlay.html?${params.toString()}`);
 }
 
 async function openEmbeddedOverlayInTab(sender, settings, modelUrl) {
@@ -275,19 +382,51 @@ async function openEmbeddedOverlayInTab(sender, settings, modelUrl) {
   });
 }
 
+async function openOrderOverlayInTab(sender, settings, modelUrl) {
+  if (await isChromeOS()) {
+    await openHostedPortal();
+    return;
+  }
+  const tabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+  if (!Number.isInteger(tabId)) {
+    throw new Error("Active MakerWorld tab not found.");
+  }
+
+  const authToken = await getExtensionAuthToken();
+  const frameUrl = buildOrderOverlayFrameUrl(settings && settings.apiBase, modelUrl, authToken);
+  await new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(
+      tabId,
+      { action: "open_capture_overlay", frameUrl },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || "Failed to open order overlay."));
+          return;
+        }
+        if (!response || !response.ok) {
+          reject(new Error((response && response.error) || "Order overlay not acknowledged by page."));
+          return;
+        }
+        resolve(response);
+      }
+    );
+  });
+}
+
 
 async function pushDesktopCaptureSignal(settings, modelUrl, triggeredAt) {
   const endpoint = buildDesktopCapturePushUrl(settings && settings.apiBase);
   const payload = {
-    api_key: String((settings && settings.apiKey) || "").trim(),
     model_url: String(modelUrl || "").trim(),
     source: "mw_q_hotkey",
     triggered_at: String(triggeredAt || ""),
   };
 
+  const headers = await buildExtensionAuthHeaders({ "Content-Type": "application/json" });
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const result = await response.json().catch(() => ({}));
@@ -408,18 +547,17 @@ async function confirmLatest(overrides) {
   const data = await chrome.storage.local.get([STORAGE_KEYS.latest]);
   const latest = data[STORAGE_KEYS.latest];
   if (!latest || !latest.suggested_order) {
-    throw new Error("No captured model yet. Hover a model and press Q first.");
+    throw new Error("No captured model yet. Hover a model and press Alt+Q first.");
   }
 
   const settings = await getSettings();
-  const apiBase = String(settings.apiBase || DEFAULT_SETTINGS.apiBase).replace(/\/$/, "");
+  const apiBase = normalizeLocalApiBase(settings.apiBase || DEFAULT_SETTINGS.apiBase);
 
   // Resolve target user — prefer overrides, then fall back to settings
   const targetUserId = String(overrides.targetUserId || "").trim();
   const targetUsername = String(overrides.targetUsername || settings.targetUsername || "").trim();
 
   const payload = {
-    api_key: String(settings.apiKey || ""),
     target_user_id: targetUserId,
     target_username: targetUsername,
     title: String(overrides.title || latest.suggested_order.name || "MakerWorld Model").trim(),
@@ -435,13 +573,11 @@ async function confirmLatest(overrides) {
     estimated_print_hours: Number(overrides.printHours ?? latest.suggested_order.print_time_hours ?? 0),
   };
 
-  if (!payload.api_key.trim()) {
-    throw new Error("Missing API key in extension settings.");
-  }
-
+  const headers = await buildExtensionAuthHeaders({ "Content-Type": "application/json" });
   const response = await fetch(`${apiBase}/extension-api/confirm-capture`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
+    credentials: "include",
     body: JSON.stringify(payload)
   });
 
@@ -454,13 +590,144 @@ async function confirmLatest(overrides) {
   return result;
 }
 
+async function fetchPricingPopupPayload(message) {
+  const modelUrl = mergeProfileHash(normalizeUrl(message && message.modelUrl), message && message.sourcePage);
+  if (!modelUrl) {
+    throw new Error("Hovered link is not a valid MakerWorld model URL.");
+  }
+
+  const settings = await getSettings();
+  const apiBase = normalizeLocalApiBase(settings.apiBase || DEFAULT_SETTINGS.apiBase);
+
+  const authHeaders = await buildExtensionAuthHeaders();
+  const [metrics, appData, pricingConfig] = await Promise.all([
+    withTimeout(fetchMetricsFromBackend(modelUrl, settings), 15000, "Model scrape timed out."),
+    withTimeout(
+      fetch(`${apiBase}/extension-api/app-data`, {
+        credentials: "include",
+        headers: authHeaders,
+      })
+        .then((res) => res.json().catch(() => ({})).then((json) => ({ ok: res.ok, json }))),
+      10000,
+      "App data request timed out."
+    ),
+    withTimeout(
+      fetch(`${apiBase}/extension-api/pricing-config`, {
+        credentials: "include",
+        headers: authHeaders,
+      })
+        .then((res) => res.json().catch(() => ({})).then((json) => ({ ok: res.ok, json }))),
+      10000,
+      "Pricing config request timed out."
+    ),
+  ]);
+
+  if (!appData.ok || !appData.json || !appData.json.ok) {
+    throw new Error((appData.json && appData.json.error) || "Failed to fetch app data.");
+  }
+  if (!pricingConfig.ok || !pricingConfig.json || !pricingConfig.json.ok) {
+    throw new Error((pricingConfig.json && pricingConfig.json.error) || "Failed to fetch pricing configuration.");
+  }
+
+  const profiles = Array.isArray(metrics && metrics.profiles) ? metrics.profiles : [];
+  const defaultProfile = profiles.find((p) => p && p.is_default) || profiles[0] || null;
+
+  return {
+    ok: true,
+    model_url: modelUrl,
+    title: String((metrics && metrics.title) || "MakerWorld Model"),
+    image_url: String((metrics && metrics.image_url) || ""),
+    profiles,
+    default_profile_id: String((defaultProfile && defaultProfile.id) || ""),
+    default_profile_name: String((defaultProfile && defaultProfile.name) || ""),
+    price_config: pricingConfig.json,
+    filaments: Array.isArray(appData.json.filaments) ? appData.json.filaments : [],
+    users: Array.isArray(appData.json.users) ? appData.json.users : [],
+    metrics,
+  };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return;
 
   if (message.action === "capture_from_hover") {
-    captureFromHover(message, sender)
-      .then((latestCapture) => sendResponse({ ok: true, latestCapture }))
-      .catch((error) => sendResponse({ ok: false, error: error.message || "Capture failed" }));
+    (async function () {
+      try {
+        if (await isChromeOS()) {
+          await openHostedPortal();
+          sendResponse({ ok: true, fallback: "hosted_portal", url: HOSTED_PORTAL_BASE });
+          return;
+        }
+        const latestCapture = await captureFromHover(message, sender);
+        sendResponse({ ok: true, latestCapture });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Capture failed" });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "open_hover_order_overlay") {
+    (async function () {
+      try {
+        if (await isChromeOS()) {
+          await openHostedPortal();
+          sendResponse({ ok: true, fallback: "hosted_portal", url: HOSTED_PORTAL_BASE });
+          return;
+        }
+        const normalizedUrl = normalizeUrl(message.modelUrl);
+        const modelUrl = mergeProfileHash(normalizedUrl, message.sourcePage);
+        if (!modelUrl) {
+          throw new Error("Hovered link is not a valid MakerWorld model URL.");
+        }
+        const settings = await getSettings();
+        await openOrderOverlayInTab(sender, settings, modelUrl);
+        sendResponse({ ok: true });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to open order overlay." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "open_extension_setup") {
+    (async function () {
+      try {
+        await chrome.tabs.create({ url: HOSTED_EXTENSION_SETUP_URL });
+        sendResponse({ ok: true, url: HOSTED_EXTENSION_SETUP_URL });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Could not open setup page." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "open_hosted_portal") {
+    (async function () {
+      try {
+        await openHostedPortal();
+        sendResponse({ ok: true, url: HOSTED_PORTAL_BASE });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Could not open hosted portal." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "get_platform_mode") {
+    (async function () {
+      try {
+        const cros = await isChromeOS();
+        sendResponse({
+          ok: true,
+          mode: cros ? "chromebook-hosted" : "desktop-local",
+          hosted_url: HOSTED_PORTAL_BASE,
+          setup_url: HOSTED_EXTENSION_SETUP_URL,
+        });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to detect platform." });
+      }
+    })();
     return true;
   }
 
@@ -499,8 +766,121 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "fetch_pricing_popup") {
+    fetchPricingPopupPayload(message)
+      .then((payload) => sendResponse(payload))
+      .catch((error) => sendResponse({ ok: false, error: error.message || "Failed to fetch popup data" }));
+    return true;
+  }
+
+  if (message.action === "get_cart_orders") {
+    (async function () {
+      try {
+        const { response, payload } = await apiFetchJson("/cart/orders", { method: "GET" });
+        if (!response.ok || !payload || !payload.ok) {
+          throw new Error((payload && payload.error) || `Cart request failed (${response.status})`);
+        }
+        sendResponse({ ok: true, items: Array.isArray(payload.items) ? payload.items : [] });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to load cart." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "save_cart_item") {
+    console.log("[BG] save_cart_item called:", message && message.item && message.item.link);
+    (async function () {
+      try {
+        const payloadBody = message && message.item && typeof message.item === "object" ? message.item : {};
+        console.log("[BG] Sending to /cart/save-item:", { link: payloadBody.link, display_name: payloadBody.displayName });
+        const { response, payload } = await apiFetchJson("/cart/save-item", {
+          method: "POST",
+          body: payloadBody,
+        });
+        console.log("[BG] /cart/save-item response:", response.status, payload);
+        if (!response.ok || !payload || !payload.ok) {
+          console.error("[BG] save_cart_item failed:", payload && payload.error);
+          throw new Error((payload && payload.error) || `Save cart item failed (${response.status})`);
+        }
+        console.log("[BG] save_cart_item success: order_id =", payload.order_id);
+        sendResponse({ ok: true, order_id: String(payload.order_id || "") });
+      } catch (error) {
+        console.error("[BG] save_cart_item error:", error && error.message);
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to save cart item." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "remove_cart_item") {
+    (async function () {
+      try {
+        const orderId = String((message && message.orderId) || "").trim();
+        if (!orderId) {
+          throw new Error("Missing order id.");
+        }
+        const { response, payload } = await apiFetchJson(`/cart/remove/${encodeURIComponent(orderId)}`, {
+          method: "POST",
+        });
+        if (!response.ok || !payload || !payload.ok) {
+          throw new Error((payload && payload.error) || `Remove cart item failed (${response.status})`);
+        }
+        sendResponse({ ok: true, removed: Boolean(payload.removed), order_id: String(payload.order_id || orderId) });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to remove cart item." });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "checkout_cart") {
+    (async function () {
+      try {
+        const items = Array.isArray(message && message.items) ? message.items : [];
+        if (!items.length) {
+          throw new Error("Select at least one cart item.");
+        }
+        const { response, payload } = await apiFetchJson("/checkout", {
+          method: "POST",
+          body: {
+            items,
+            response_mode: "json",
+          },
+        });
+        if (!response.ok || !payload || !payload.ok) {
+          throw new Error((payload && payload.error) || `Checkout failed (${response.status})`);
+        }
+        sendResponse({
+          ok: true,
+          order_ids: Array.isArray(payload.order_ids) ? payload.order_ids : [],
+          order_count: Number(payload.order_count || 0),
+          unit_count: Number(payload.unit_count || 0),
+          grand_total: Number(payload.grand_total || 0),
+          message: String(payload.message || "Checkout complete."),
+        });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to check out cart." });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === "clear_badge") {
     clearBadge().then(() => sendResponse({ ok: true }));
     return true;
   }
+
+  if (message.action === "get_extension_auth_token") {
+    (async function () {
+      try {
+        const token = await getExtensionAuthToken();
+        sendResponse({ ok: true, token: String(token || "") });
+      } catch (error) {
+        sendResponse({ ok: false, error: error && error.message ? error.message : "Failed to load extension auth token." });
+      }
+    })();
+    return true;
+  }
+
 });

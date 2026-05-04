@@ -1,0 +1,22 @@
+================================================================================
+MAKERWORLD EXTENSION - CHROMEBOOK QUICK SETUP
+================================================================================
+
+Chromebook cannot run the local Flask backend in this project.
+Use the extension with hosted website mode.
+
+Steps:
+1. Open Chrome and go to chrome://extensions/
+2. Turn on Developer mode
+3. Click Load unpacked
+4. Select the makerworld_capture_extension folder
+5. Pin the extension
+6. Open the extension popup and choose hosted website mode when prompted
+
+Hosted Portal:
+https://print-portal-qm9p.onrender.com/
+
+Notes:
+- Use your normal portal username/password.
+- Orders and cart are handled in the hosted portal.
+- No local bootstrap script is required on Chromebook.

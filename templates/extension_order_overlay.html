@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-FRQH856N5N');
+</script>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Quick Order</title>
+	<style>
+		:root {
+			--bg: #08111f;
+			--panel: #0f1c31;
+			--line: #2a3d5f;
+			--text: #e8f1ff;
+			--muted: #9db2d5;
+			--accent: #33d17a;
+			--danger: #ff6b6b;
+			--btn: #1c65ff;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			background:
+				radial-gradient(circle at 85% 20%, rgba(51, 209, 122, 0.15), transparent 42%),
+				radial-gradient(circle at 10% 0%, rgba(28, 101, 255, 0.28), transparent 40%),
+				var(--bg);
+			color: var(--text);
+			font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+		}
+		.wrap {
+			max-width: 960px;
+			margin: 0 auto;
+			padding: 18px;
+		}
+		.panel {
+			border: 1px solid var(--line);
+			background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+			border-radius: 14px;
+			overflow: hidden;
+			box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+		}
+		.head {
+			padding: 16px 18px;
+			border-bottom: 1px solid var(--line);
+			display: flex;
+			gap: 14px;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+		}
+		.title {
+			font-size: 1.08rem;
+			font-weight: 700;
+			margin: 0;
+		}
+		.sub {
+			color: var(--muted);
+			font-size: 0.92rem;
+			margin-top: 3px;
+		}
+		.body {
+			padding: 18px;
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			gap: 18px;
+		}
+		.stack { display: grid; gap: 12px; }
+		.img {
+			width: 100%;
+			aspect-ratio: 16 / 10;
+			border-radius: 12px;
+			object-fit: cover;
+			border: 1px solid var(--line);
+			background: #101b2d;
+		}
+		.field { display: grid; gap: 6px; }
+		label {
+			color: var(--muted);
+			font-size: 0.85rem;
+		}
+		input, select {
+			width: 100%;
+			border: 1px solid var(--line);
+			border-radius: 9px;
+			background: #0a1628;
+			color: var(--text);
+			padding: 10px 12px;
+		}
+		.parts {
+			display: grid;
+			gap: 10px;
+			max-height: 320px;
+			overflow: auto;
+			padding-right: 4px;
+		}
+		.part-row {
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			padding: 10px;
+			background: rgba(255,255,255,0.02);
+		}
+		.actions {
+			border-top: 1px solid var(--line);
+			padding: 14px 18px;
+			display: flex;
+			gap: 10px;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+		}
+		.btn {
+			border: 1px solid transparent;
+			border-radius: 10px;
+			padding: 10px 14px;
+			font-weight: 600;
+			cursor: pointer;
+		}
+		.btn-primary {
+			background: var(--btn);
+			color: white;
+		}
+		.btn-primary[disabled] {
+			opacity: 0.55;
+			cursor: default;
+		}
+		.btn-link {
+			background: transparent;
+			border-color: var(--line);
+			color: var(--text);
+			text-decoration: none;
+			display: inline-block;
+		}
+		.price {
+			color: var(--accent);
+			font-weight: 700;
+			letter-spacing: 0.02em;
+		}
+		.status {
+			color: var(--muted);
+			font-size: 0.9rem;
+			min-height: 1.2em;
+		}
+		.status.error { color: var(--danger); }
+		@media (max-width: 860px) {
+			.body { grid-template-columns: 1fr; }
+		}
+	</style>
+</head>
+<body>
+	<div class="wrap">
+		<div class="panel">
+			<div class="head">
+				<div>
+					<h1 class="title">Quick Model Order</h1>
+					<div id="model-link" class="sub"></div>
+				</div>
+				<div id="price" class="price">$0.00</div>
+			</div>
+
+			<div class="body">
+				<div class="stack">
+					<img id="model-image" class="img" alt="Model image" hidden>
+					<div id="model-title" class="title">Loading model...</div>
+					<div id="model-desc" class="sub"></div>
+				</div>
+
+				<div class="stack">
+					<div class="field">
+						<label for="profile-select">Print profile</label>
+						<select id="profile-select"></select>
+					</div>
+					<div class="field">
+						<label>Part colors</label>
+						<div id="parts" class="parts"></div>
+					</div>
+					<div id="status" class="status"></div>
+				</div>
+			</div>
+
+			<div class="actions">
+				<a id="open-model" class="btn btn-link" href="#" target="_blank" rel="noopener">Open model page</a>
+				<button id="add-btn" class="btn btn-primary" type="button">Add To Cart</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		const MODEL_URL = JSON.parse('{{ (model_url or "")|tojson|safe }}');
+		const EXT_AUTH = JSON.parse('{{ (extension_auth_token or "")|tojson|safe }}');
+		const state = {
+			item: null,
+			profileName: '',
+			parts: []
+		};
+
+		const $ = (id) => document.getElementById(id);
+
+		function setStatus(message, isError) {
+			const el = $('status');
+			el.textContent = message || '';
+			el.classList.toggle('error', Boolean(isError));
+		}
+
+		function money(value) {
+			const num = Number(value || 0);
+			return '$' + num.toFixed(2);
+		}
+
+		function getProfileObject(name) {
+			const pricing = Array.isArray(state.item && state.item.profile_pricing) ? state.item.profile_pricing : [];
+			return pricing.find((p) => String(p && p.name || '').trim() === String(name || '').trim()) || null;
+		}
+
+		function getCustomization(name) {
+			const list = Array.isArray(state.item && state.item.profile_customizations) ? state.item.profile_customizations : [];
+			return list.find((p) => String(p && p.profile_name || '').trim() === String(name || '').trim()) || null;
+		}
+
+		function buildPartsForProfile(name) {
+			const customization = getCustomization(name);
+			const fromCustomization = Array.isArray(customization && customization.parts_configuration)
+				? customization.parts_configuration
+				: [];
+			const fromItem = Array.isArray(state.item && state.item.parts_configuration)
+				? state.item.parts_configuration
+				: [];
+			const source = fromCustomization.length ? fromCustomization : fromItem;
+			const normalized = source
+				.map((p, idx) => ({
+					key: String(p && p.part || '').trim() || ('Part ' + (idx + 1)),
+					filament: String(p && p.suggested_filament || '').trim()
+				}))
+				.filter((p) => p.key);
+			if (normalized.length) return normalized;
+			const fallback = String((state.item && state.item.suggested_filament) || '').trim();
+			return [{ key: 'Part 1', filament: fallback }];
+		}
+
+		function refreshPartsUi() {
+			const root = $('parts');
+			root.innerHTML = '';
+			state.parts.forEach((part, idx) => {
+				const row = document.createElement('div');
+				row.className = 'part-row';
+
+				const label = document.createElement('label');
+				label.textContent = part.key;
+
+				const input = document.createElement('input');
+				input.type = 'text';
+				input.value = part.filament || '';
+				input.placeholder = 'Filament name';
+				input.addEventListener('input', () => {
+					state.parts[idx].filament = input.value;
+				});
+
+				row.appendChild(label);
+				row.appendChild(input);
+				root.appendChild(row);
+			});
+		}
+
+		function updatePrice() {
+			const profileObj = getProfileObject(state.profileName);
+			const price = profileObj ? Number(profileObj.price || 0) : Number((state.item && state.item.price) || 0);
+			$('price').textContent = money(price);
+		}
+
+		function onProfileChanged() {
+			state.profileName = $('profile-select').value;
+			state.parts = buildPartsForProfile(state.profileName);
+			refreshPartsUi();
+			updatePrice();
+		}
+
+		function renderItem(item) {
+			state.item = item || {};
+			$('model-title').textContent = state.item.title || 'MakerWorld Model';
+			$('model-desc').textContent = state.item.description || '';
+			$('model-link').textContent = MODEL_URL;
+			$('open-model').href = state.item.makerworld_url || MODEL_URL || '#';
+
+			const image = String(state.item.image_url || '').trim();
+			const imgEl = $('model-image');
+			if (image) {
+				imgEl.src = image;
+				imgEl.hidden = false;
+			} else {
+				imgEl.hidden = true;
+			}
+
+			const profileSelect = $('profile-select');
+			profileSelect.innerHTML = '';
+			const pricing = Array.isArray(state.item.profile_pricing) ? state.item.profile_pricing : [];
+			const names = pricing.length
+				? pricing.map((p) => String(p && p.name || '').trim()).filter(Boolean)
+				: [String(state.item.suggested_profile || '').trim()].filter(Boolean);
+
+			names.forEach((name) => {
+				const opt = document.createElement('option');
+				opt.value = name;
+				opt.textContent = name;
+				profileSelect.appendChild(opt);
+			});
+
+			state.profileName = String(state.item.suggested_profile || names[0] || '').trim();
+			if (!names.includes(state.profileName) && names.length) {
+				state.profileName = names[0];
+			}
+			profileSelect.value = state.profileName;
+			state.parts = buildPartsForProfile(state.profileName);
+			refreshPartsUi();
+			updatePrice();
+			setStatus('');
+		}
+
+		async function loadItem() {
+			const params = new URLSearchParams({ model_url: MODEL_URL });
+			if (EXT_AUTH) params.set('ext_auth', EXT_AUTH);
+
+			const response = await fetch('/extension-api/hover-order-item?' + params.toString(), {
+				method: 'GET',
+				credentials: 'include',
+				headers: EXT_AUTH ? { 'X-Extension-Auth': EXT_AUTH } : {}
+			});
+
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok || !data.ok || !data.item) {
+				throw new Error(data.error || 'Failed to load model details.');
+			}
+			renderItem(data.item);
+		}
+
+		async function addToCart() {
+			if (!state.item) return;
+
+			const emptyPart = state.parts.some((p) => !String(p.filament || '').trim());
+			if (emptyPart) {
+				setStatus('Please choose a filament for every part.', true);
+				return;
+			}
+
+			const profileObj = getProfileObject(state.profileName);
+			const dynamicPrice = profileObj ? Number(profileObj.price || 0) : Number(state.item.price || 0);
+			const categoryChoices = state.parts.map((p, idx) => ({
+				part: p.key,
+				filament: String(p.filament || '').trim(),
+				partIdx: idx
+			}));
+			const suggestedColors = categoryChoices.map((p) => p.part + ': ' + p.filament).join(' | ');
+
+			const payload = {
+				title: state.item.title,
+				makerworld_link: state.item.makerworld_url || MODEL_URL,
+				price: dynamicPrice,
+				profile: state.profileName,
+				filament: categoryChoices[0] ? categoryChoices[0].filament : '',
+				suggested_colors: suggestedColors,
+				category_choices: categoryChoices,
+				ext_auth: EXT_AUTH
+			};
+
+			const addBtn = $('add-btn');
+			addBtn.disabled = true;
+			const oldText = addBtn.textContent;
+			addBtn.textContent = 'Adding...';
+			setStatus('');
+			try {
+				const response = await fetch('/create_featured_order', {
+					method: 'POST',
+					credentials: 'include',
+					headers: Object.assign(
+						{ 'Content-Type': 'application/json' },
+						EXT_AUTH ? { 'X-Extension-Auth': EXT_AUTH } : {}
+					),
+					body: JSON.stringify(payload)
+				});
+				const data = await response.json().catch(() => ({}));
+				if (!response.ok || !data.order_id) {
+					throw new Error(data.error || 'Could not add order to cart.');
+				}
+				setStatus('Added to cart successfully. You can close this panel.', false);
+			} catch (error) {
+				setStatus(error && error.message ? error.message : 'Request failed.', true);
+			} finally {
+				addBtn.disabled = false;
+				addBtn.textContent = oldText;
+			}
+		}
+
+		$('profile-select').addEventListener('change', onProfileChanged);
+		$('add-btn').addEventListener('click', addToCart);
+
+		loadItem().catch((error) => {
+			setStatus(error && error.message ? error.message : 'Unable to load quick order.', true);
+			$('model-title').textContent = 'Unable to load model';
+			$('model-desc').textContent = 'Try opening the popup and logging in again.';
+		});
+	</script>
+</body>
+</html>
+

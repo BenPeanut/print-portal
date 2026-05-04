@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-FRQH856N5N');
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
@@ -15,8 +24,8 @@
         <header class="hero">
             <div>
                 <p class="eyebrow">MODEL CAPTURE COMPANION</p>
-                <h1>MakerWorld Hover + Q Capture</h1>
-                <p class="hero-copy">Hover a model card on MakerWorld and press Q. This app scrapes the model page, prepares a suggested order, and lets you confirm it into {% if admin_mode %}a selected user's{% else %}your{% endif %} cart.</p>
+                <h1>MakerWorld Companion App</h1>
+                <p class="hero-copy">Review captured model suggestions and confirm them into {% if admin_mode %}a selected user's{% else %}your{% endif %} cart.</p>
             </div>
             <div class="hero-actions">
                 {% if admin_mode %}
@@ -66,39 +75,11 @@
 
                 <div id="settings-status" class="status-text"></div>
             </article>
-
-            <article class="card">
-                <h2>MakerWorld Bridge</h2>
-                <p class="muted">Open MakerWorld, run this once, then press Q while hovering model links.</p>
-
-                <label>
-                    Capture token
-                    <input type="text" readonly value="{{ capture_token }}">
-                </label>
-
-                <label>
-                    Bookmarklet (drag to bookmarks or copy)
-                    <textarea id="bookmarklet" rows="4" readonly>{{ bookmarklet_code }}</textarea>
-                </label>
-
-                <div class="row-actions">
-                    <button id="copy-bookmarklet" class="primary-btn" type="button">Copy Bookmarklet</button>
-                    <a class="ghost-btn" href="javascript:void(0)" onclick="alert('Drag this button to your bookmarks bar from desktop browser for one-click bridge load.');">How to Use</a>
-                </div>
-
-                <ol class="steps">
-                    <li>Log in here first and keep this page open.</li>
-                    <li>Go to MakerWorld and run the bookmarklet.</li>
-                    <li>Hover a model card and press Q to capture.</li>
-                    <li>Return here and confirm the suggested order.</li>
-                </ol>
-            </article>
-
             <article class="card span-2" id="capture-card">
                 <h2>Suggested Order</h2>
                 <p class="muted">Waiting for capture events. This panel updates live.</p>
 
-                <div id="capture-empty" class="empty-state">No capture yet. Hover a MakerWorld model and press Q.</div>
+                <div id="capture-empty" class="empty-state">No capture available yet.</div>
 
                 <form id="confirm-form" class="form-grid hidden">
                     <label>
@@ -147,3 +128,4 @@
     <script src="{{ url_for('model_capture_app.static', filename='app.js') }}"></script>
 </body>
 </html>
+

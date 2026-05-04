@@ -2,8 +2,6 @@
 {% set page_title = 'Home | Client Portal' %}
 
 {% block content %}
-<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <style>
     html.modal-open,
     body.modal-open {
@@ -959,6 +957,14 @@
                 <a class="muted-btn" href="/history" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin-top:6px;">View Order History</a>
             </div>
         </article>
+
+        <article class="card">
+            <div class="card-body">
+                <h3 class="section-title">MakerWorld Extension</h3>
+                <p class="section-copy">Install the browser extension to open order popups directly from MakerWorld.</p>
+                <a class="muted-btn" href="/extension-install" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin-top:6px;">Install & Setup</a>
+            </div>
+        </article>
     </aside>
 </section>
 
@@ -1087,13 +1093,8 @@
     }
 
     function normalizeItemProfiles(item) {
-        function normalizeProfileName(name) {
-            const cleaned = String(name || '').replace(/\s+/g, ' ').trim();
-            if (!cleaned) return '';
-            if (/^(?:no|with|without)?\s*supports?$/i.test(cleaned)) return 'Standard';
-            if (/^(?:no|with|without)$/i.test(cleaned)) return 'Standard';
-            if (/^single$/i.test(cleaned)) return 'Standard';
-            return cleaned;
+        function exactProfileName(name) {
+            return String(name || '').replace(/\s+/g, ' ').trim();
         }
 
         function dedupeProfiles(list) {
@@ -1101,7 +1102,7 @@
             const byKey = new Map();
             list.forEach(function (entry) {
                 if (!entry) return;
-                const normalizedName = normalizeProfileName(entry.name);
+                const normalizedName = exactProfileName(entry.name);
                 if (!normalizedName) return;
                 const normalizedPrice = Number(entry.price || 0);
                 const key = normalizedName.toLowerCase() + '|' + Math.round(normalizedPrice);
@@ -1132,7 +1133,7 @@
         if (pricing.length) {
             const mapped = dedupeProfiles(pricing
                 .map(function (p) {
-                    const name = normalizeProfileName((p && p.name) || '');
+                    const name = exactProfileName((p && p.name) || '');
                     if (!name) return null;
                     return {
                         id: String((p && p.id) || '').trim(),
@@ -1349,7 +1350,6 @@
                     maxItems: 1,
                     controlInput: null,
                     searchField: ['text'],
-                    sortField: { field: 'text', direction: 'asc' },
                     dropdownParent: 'body',
                     render: {
                         option: function (data, escape) {
@@ -1568,7 +1568,10 @@
                     return { id: String(p.id || '').trim(), name: p.name, price: basePrice + Number(p.price_modifier || 0), is_default: p.is_default };
                 });
                 if (!modalState.profiles.length) {
-                    modalState.profiles = [{ id: '', name: 'Standard', price: basePrice, is_default: true }];
+                    const fallbackName = String((modalState.item && modalState.item.suggested_profile) || '');
+                    modalState.profiles = fallbackName
+                        ? [{ id: '', name: fallbackName, price: basePrice, is_default: true }]
+                        : [];
                 }
                 modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
                 modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
@@ -1736,10 +1739,10 @@
                     addedAt: new Date().toISOString(),
                 };
 
+                closeFeaturedModal();
                 if (window.addToCart) {
                     await window.addToCart(cartItem);
                 }
-                closeFeaturedModal();
                 if (window.openCartDrawer) window.openCartDrawer();
             } else {
                 alert(data.error || 'Unable to create order.');

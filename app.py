@@ -11,25 +11,32 @@ import threading
 import uuid
 import json
 import importlib
+from typing import Any
 from dotenv import load_dotenv
-from urllib.parse import urlparse, unquote, quote_plus
+from urllib.parse import urlparse, unquote
 import re
 import psycopg2
 import requests
-from psycopg2.pool import ThreadedConnectionPool
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
+from psycopg2.pool import PoolError, ThreadedConnectionPool
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+class _PlaywrightTimeoutFallbackError(Exception):
+    pass
+
+
+PlaywrightTimeoutError: type[Exception] = _PlaywrightTimeoutFallbackError
 
 try:
     _playwright_sync = importlib.import_module('playwright.sync_api')
     sync_playwright = getattr(_playwright_sync, 'sync_playwright', None)
-    PlaywrightTimeoutError = getattr(_playwright_sync, 'TimeoutError', Exception)
+    _playwright_timeout_error = getattr(_playwright_sync, 'TimeoutError', None)
+    if isinstance(_playwright_timeout_error, type) and issubclass(_playwright_timeout_error, Exception):
+        PlaywrightTimeoutError = _playwright_timeout_error
 except Exception:
     sync_playwright = None
-
-    class PlaywrightTimeoutError(Exception):
-        pass
 
 try:
     cloudscraper = importlib.import_module('cloudscraper')
@@ -119,57 +126,143 @@ _DESKTOP_CAPTURE_SIGNAL = {
     'triggered_at': '',
 }
 _DESKTOP_CAPTURE_SIGNAL_LOCK = threading.Lock()
+_EXTENSION_AUTH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
-# --- DATABASE HELPERS ---
 
-def _create_db_pool():
-    db_url = _required_env('DATABASE_URL')
-    if db_url.startswith('postgres://'):
-        db_url = 'postgresql://' + db_url[len('postgres://'):]
-    return ThreadedConnectionPool(DB_POOL_MIN, DB_POOL_MAX, dsn=db_url)
+def _validate_startup_environment():
+    """
+    Validate that all required environment variables are properly configured.
+    Called at app startup to fail fast with clear diagnostics.
+    """
+    print('\n' + '=' * 60)
+    print('STARTUP VALIDATION: Checking environment configuration')
+    print('=' * 60)
+
+    required = ['SECRET_KEY', 'ADMIN_PASSWORD', 'DATABASE_URL']
+    missing = []
+
+    for var_name in required:
+        value = os.environ.get(var_name, '').strip()
+        is_set = bool(value)
+        status = 'SET' if is_set else 'MISSING'
+        print(f'  {var_name}: {status}')
+        if not is_set:
+            missing.append(var_name)
+
+    ext_key_set = bool(EXTENSION_API_KEY)
+    print(f"  EXTENSION_API_KEY: {'optional, set' if ext_key_set else 'optional, not set (session auth only)'}")
+
+    print(f'  Environment file: {ENV_PATH or "(none found)"}')
+    print('=' * 60)
+
+    if missing:
+        raise RuntimeError(
+            f'Failed to start: missing required environment variables: {", ".join(missing)}\n'
+            'Set them in your environment or in a .env file and restart.'
+        )
+
+
+def _get_db_pool():
+    global _DB_POOL
+    if _DB_POOL is not None:
+        return _DB_POOL
+
+    with _DB_POOL_LOCK:
+        if _DB_POOL is None:
+            db_url = _required_env('DATABASE_URL')
+            _DB_POOL = ThreadedConnectionPool(
+                minconn=DB_POOL_MIN,
+                maxconn=DB_POOL_MAX,
+                dsn=db_url,
+            )
+    return _DB_POOL
+
+
+def _reset_db_pool():
+    global _DB_POOL
+    with _DB_POOL_LOCK:
+        pool = _DB_POOL
+        _DB_POOL = None
+    if pool is None:
+        return
+    try:
+        pool.closeall()
+    except Exception:
+        pass
+
+
+def _connection_is_usable(conn):
+    if conn is None or getattr(conn, 'closed', 1):
+        return False
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute('SELECT 1')
+            cur.fetchone()
+            return True
+        finally:
+            cur.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return False
 
 
 def _get_pooled_connection():
-    global _DB_POOL
-    with _DB_POOL_LOCK:
-        if _DB_POOL is None:
-            _DB_POOL = _create_db_pool()
-        pool = _DB_POOL
-    return pool.getconn()
+    last_error = None
+    for attempt in range(2):
+        pool = _get_db_pool()
+        conn = None
+        try:
+            conn = pool.getconn()
+        except PoolError as exc:
+            last_error = exc
+            if attempt == 0:
+                _reset_db_pool()
+                continue
+            raise RuntimeError(f'Unable to get DB connection from pool: {exc}') from exc
+
+        if _connection_is_usable(conn):
+            return conn
+
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        conn = None
+        _reset_db_pool()
+
+    if last_error is not None:
+        raise RuntimeError(f'Unable to get DB connection from pool: {last_error}') from last_error
+    raise RuntimeError('Unable to get a usable DB connection from pool')
 
 
 def _put_pooled_connection(conn, discard=False):
     if conn is None:
         return
-    with _DB_POOL_LOCK:
-        pool = _DB_POOL
+    pool = _DB_POOL
     if pool is None:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
         return
     try:
-        pool.putconn(conn, close=discard or bool(getattr(conn, 'closed', 0)))
-    except psycopg2.pool.PoolError:
-        # If the global pool was replaced (e.g. during reload), close this
-        # orphaned connection rather than crashing the request lifecycle.
-        conn.close()
+        pool.putconn(conn, close=bool(discard))
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
-def _close_db_pool():
-    global _DB_POOL
-    with _DB_POOL_LOCK:
-        pool = _DB_POOL
-        _DB_POOL = None
-    if pool is not None:
-        pool.closeall()
-
-
-atexit.register(_close_db_pool)
-
-def _execute(query, params=(), fetch=False):
-    normalized_query = query.replace('?', '%s')
+def _execute(query, params=None, fetch=False):
     last_error = None
-
-    # Retry once in case the pool gives us a stale/closed connection.
     for _ in range(2):
         conn = None
         discard_conn = False
@@ -177,11 +270,10 @@ def _execute(query, params=(), fetch=False):
             conn = _get_pooled_connection()
             cur = conn.cursor()
             try:
-                cur.execute(normalized_query, params)
-                if fetch:
-                    return cur.fetchall()
+                cur.execute(str(query).replace('?', '%s'), params or ())
+                rows = cur.fetchall() if fetch else None
                 conn.commit()
-                return None
+                return rows
             finally:
                 cur.close()
         except Exception as exc:
@@ -198,7 +290,9 @@ def _execute(query, params=(), fetch=False):
             if conn is not None:
                 _put_pooled_connection(conn, discard=discard_conn)
 
-    raise last_error
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError('Database execution failed without exception details')
 
 
 def _init_db():
@@ -206,155 +300,224 @@ def _init_db():
     if _SCHEMA_READY:
         return
 
-    conn = _get_pooled_connection()
-    try:
-        cur = conn.cursor()
+    schema_sql = """
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS featured_prints (
+            id TEXT PRIMARY KEY,
+            json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS business_stats (
+            stat_name TEXT PRIMARY KEY,
+            stat_value NUMERIC NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS daily_revenue (
+            completion_date DATE PRIMARY KEY DEFAULT CURRENT_DATE,
+            daily_profit NUMERIC NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS print_profiles (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            price_modifier NUMERIC NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            is_default BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    """
+
+    last_error = None
+    for _ in range(2):
+        conn = None
+        discard_conn = False
         try:
-            # Initialize all required tables in a single roundtrip.
-            cur.execute(
-                """
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'settings'
-                          AND column_name = 'name'
-                    ) AND NOT EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'settings'
-                          AND column_name = 'key'
-                    ) THEN
-                        ALTER TABLE settings RENAME COLUMN name TO key;
-                    END IF;
-
-                    IF EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'daily_revenue'
-                          AND column_name = 'date'
-                    ) AND NOT EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'daily_revenue'
-                          AND column_name = 'completion_date'
-                    ) THEN
-                        ALTER TABLE daily_revenue RENAME COLUMN date TO completion_date;
-                    END IF;
-
-                    IF EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'daily_revenue'
-                          AND column_name = 'revenue'
-                    ) AND NOT EXISTS (
-                        SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'daily_revenue'
-                          AND column_name = 'daily_profit'
-                    ) THEN
-                        ALTER TABLE daily_revenue RENAME COLUMN revenue TO daily_profit;
-                    END IF;
-                END $$;
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS orders (
-                    id TEXT PRIMARY KEY,
-                    json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS featured_prints (
-                    id TEXT PRIMARY KEY,
-                    json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS business_stats (
-                    stat_name TEXT PRIMARY KEY,
-                    stat_value NUMERIC NOT NULL DEFAULT 0
-                );
-                CREATE TABLE IF NOT EXISTS daily_revenue (
-                    completion_date DATE PRIMARY KEY DEFAULT CURRENT_DATE,
-                    daily_profit NUMERIC NOT NULL DEFAULT 0
-                );
-                """
-            )
-            conn.commit()
-            _SCHEMA_READY = True
+            conn = _get_pooled_connection()
+            cur = conn.cursor()
+            try:
+                cur.execute(schema_sql)
+                cur.execute("SELECT COUNT(*) FROM print_profiles")
+                count = int(cur.fetchone()[0] or 0)
+                if count == 0:
+                    cur.execute(
+                        """
+                        INSERT INTO print_profiles (name, price_modifier, description, is_active, is_default)
+                        VALUES (%s, %s, %s, TRUE, TRUE)
+                        """,
+                        ('Standard', 0, ''),
+                    )
+                conn.commit()
+                _SCHEMA_READY = True
+                return
+            finally:
+                cur.close()
+        except Exception as exc:
+            last_error = exc
+            discard_conn = isinstance(exc, (psycopg2.InterfaceError, psycopg2.OperationalError))
+            if conn is not None and not getattr(conn, 'closed', 1):
+                try:
+                    conn.rollback()
+                except Exception:
+                    discard_conn = True
+            if not discard_conn:
+                raise
         finally:
-            cur.close()
-    except Exception:
-        if conn is not None and not getattr(conn, 'closed', 1):
-            conn.rollback()
-        raise
-    finally:
-        _put_pooled_connection(conn)
+            if conn is not None:
+                _put_pooled_connection(conn, discard=discard_conn)
 
+    if last_error is not None:
+        raise last_error
+
+
+# --- OPTIMIZED QUERY FUNCTIONS (ROUTE-SPECIFIC) ---
+
+def _get_settings():
+    """Fetch only settings (lightweight)."""
+    _init_db()
+    settings = {"filaments": []}
+    rows = _execute("SELECT value FROM settings WHERE key = %s", ("settings",), fetch=True)
+    if rows:
+        try:
+            settings = json.loads(rows[0][0])
+        except Exception:
+            pass
+    return settings
+
+def _get_all_users(limit=None, offset=0):
+    """Fetch users with optional pagination."""
+    _init_db()
+    query = "SELECT json FROM users ORDER BY id"
+    if limit:
+        query += f" LIMIT {int(limit)} OFFSET {int(offset)}"
+    rows = _execute(query, fetch=True) if not limit else _execute(query, fetch=True)
+    users = []
+    if rows:
+        for r in rows:
+            try:
+                users.append(json.loads(r[0]))
+            except Exception:
+                pass
+    return users
+
+def _get_user_by_id(user_id):
+    """Fetch a single user by ID."""
+    _init_db()
+    rows = _execute("SELECT json FROM users WHERE id = %s", (user_id,), fetch=True)
+    if rows:
+        try:
+            return json.loads(rows[0][0])
+        except Exception:
+            pass
+    return None
+
+def _get_all_orders(limit=None, offset=0):
+    """Fetch orders with optional pagination."""
+    _init_db()
+    query = "SELECT json FROM orders ORDER BY id"
+    if limit:
+        query += f" LIMIT {int(limit)} OFFSET {int(offset)}"
+    rows = _execute(query, fetch=True)
+    orders = []
+    if rows:
+        for r in rows:
+            try:
+                orders.append(json.loads(r[0]))
+            except Exception:
+                pass
+    return orders
+
+def _get_user_orders(user_id, limit=None, offset=0):
+    """Fetch orders for a specific user with pagination."""
+    _init_db()
+    query = "SELECT json FROM orders WHERE (json::jsonb ->> 'owner') = %s ORDER BY id"
+    if limit:
+        query += f" LIMIT {int(limit)} OFFSET {int(offset)}"
+    rows = _execute(query, (user_id,), fetch=True)
+    orders = []
+    if rows:
+        for r in rows:
+            try:
+                orders.append(json.loads(r[0]))
+            except Exception:
+                pass
+    return orders
+
+def _get_orders_count(user_id=None):
+    """Get count of orders, optionally filtered by user."""
+    _init_db()
+    if user_id:
+        rows = _execute("SELECT COUNT(*) FROM orders WHERE (json::jsonb ->> 'owner') = %s", (user_id,), fetch=True)
+    else:
+        rows = _execute("SELECT COUNT(*) FROM orders", fetch=True)
+    return rows[0][0] if rows else 0
+
+def _get_all_featured_prints(limit=None, offset=0):
+    """Fetch featured prints with optional pagination."""
+    _init_db()
+    query = "SELECT json FROM featured_prints ORDER BY id"
+    if limit:
+        query += f" LIMIT {int(limit)} OFFSET {int(offset)}"
+    rows = _execute(query, fetch=True)
+    featured_prints = []
+    if rows:
+        for r in rows:
+            try:
+                featured_prints.append(json.loads(r[0]))
+            except Exception:
+                pass
+    return featured_prints
+
+def _get_featured_prints_count():
+    """Get count of featured prints."""
+    _init_db()
+    rows = _execute("SELECT COUNT(*) FROM featured_prints", fetch=True)
+    return rows[0][0] if rows else 0
 
 def _load_all():
+    """
+    Load all tables (backward compatibility).
+    DEPRECATED: Use specific query functions instead for better egress control.
+    """
     _init_db()
-
-    conn = _get_pooled_connection()
-    try:
-        cur = conn.cursor()
-        try:
-            settings = {"filaments": []}
-            cur.execute("SELECT value FROM settings WHERE key = %s", ("settings",))
-            row = cur.fetchone()
-            if row:
-                try:
-                    settings = json.loads(row[0])
-                except Exception:
-                    pass
-
-            users = []
-            cur.execute("SELECT json FROM users")
-            for r in cur.fetchall():
-                try:
-                    users.append(json.loads(r[0]))
-                except Exception:
-                    pass
-
-            orders = []
-            cur.execute("SELECT json FROM orders")
-            for r in cur.fetchall():
-                try:
-                    orders.append(json.loads(r[0]))
-                except Exception:
-                    pass
-
-            featured_prints = []
-            cur.execute("SELECT json FROM featured_prints")
-            for r in cur.fetchall():
-                try:
-                    featured_prints.append(json.loads(r[0]))
-                except Exception:
-                    pass
-        finally:
-            cur.close()
-    finally:
-        _put_pooled_connection(conn)
-
     return {
-        "settings": settings,
-        "users": users,
-        "orders": orders,
-        "featured_prints": featured_prints,
+        "settings": _get_settings(),
+        "users": _get_all_users(),
+        "orders": _get_all_orders(),
+        "featured_prints": _get_all_featured_prints(),
     }
 
 
 def get_db():
-    return _load_all()
+    """
+    Return full database object (backward compatibility).
+    WARNING: This loads all tables. Use specific query functions for high-traffic routes.
+    """
+    global _SCHEMA_READY
+    last_error = None
+    for _ in range(3):
+        try:
+            return _load_all()
+        except Exception as exc:
+            last_error = exc
+            is_transient = isinstance(exc, (psycopg2.InterfaceError, psycopg2.OperationalError, PoolError))
+            if not is_transient and 'Unable to get DB connection from pool' not in str(exc):
+                raise
+            _SCHEMA_READY = False
+            _reset_db_pool()
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError('Failed to load database payload')
 
 
 def _to_float(value, default=0.0):
@@ -413,11 +576,233 @@ def _is_allowed_model_link(raw_link):
     return any(host == a or host.endswith('.' + a) for a in allowed)
 
 
-def _extension_api_authorized(payload):
+def _extension_api_authorized(payload=None):
+    """
+    Verify extension API key from either query parameter or Authorization header.
+    If EXTENSION_API_KEY is unset, key-based auth is disabled and callers should use session auth.
+    
+    Args:
+        payload: Request payload dict (can be query params or JSON body)
+    
+    Returns:
+        True if the provided key matches EXTENSION_API_KEY, False otherwise.
+    
+    Security: Migrate from query params to Authorization header to avoid
+    exposing keys in browser history and proxy logs.
+    """
     if not EXTENSION_API_KEY:
-        return True
+        return False
+
+    # Check Authorization header first (preferred method)
+    auth_header = request.headers.get('Authorization', '').strip()
+    if auth_header.startswith('Bearer '):
+        provided = auth_header[7:]  # Remove "Bearer " prefix
+        if provided and provided == EXTENSION_API_KEY:
+            return True
+    
+    # Fall back to query parameter for backward compatibility
     provided = str((payload or {}).get('api_key') or '').strip()
-    return bool(provided and provided == EXTENSION_API_KEY)
+    if provided:
+        return provided == EXTENSION_API_KEY
+    
+    return False
+
+
+def _extension_session_authorized():
+    return bool(str(session.get('user_id') or '').strip())
+
+
+def _extension_token_serializer():
+    secret_key = app.secret_key
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is not configured')
+    return URLSafeTimedSerializer(secret_key, salt='extension-local-auth-v1')
+
+
+def _issue_extension_auth_token(user_id, username):
+    payload = {
+        'uid': str(user_id or '').strip(),
+        'un': str(username or '').strip(),
+        'iat': datetime.utcnow().isoformat() + 'Z',
+    }
+    return _extension_token_serializer().dumps(payload)
+
+
+def _read_extension_auth_token(raw_token):
+    token = str(raw_token or '').strip()
+    if not token:
+        return None
+    try:
+        data = _extension_token_serializer().loads(
+            token,
+            max_age=_EXTENSION_AUTH_TOKEN_MAX_AGE_SECONDS,
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+    user_id = str((data or {}).get('uid') or '').strip()
+    username = str((data or {}).get('un') or '').strip()
+    if not user_id:
+        return None
+    return {'user_id': user_id, 'username': username, 'token': token}
+
+
+def _extract_extension_auth_token(payload=None):
+    auth_header = str(request.headers.get('Authorization') or '').strip()
+    if auth_header.startswith('Extension '):
+        return auth_header[len('Extension '):].strip()
+
+    token_header = str(request.headers.get('X-Extension-Auth') or '').strip()
+    if token_header:
+        return token_header
+
+    token_query = str(request.args.get('ext_auth') or '').strip()
+    if token_query:
+        return token_query
+
+    return str((payload or {}).get('ext_auth') or '').strip()
+
+
+def _extension_request_user(payload=None):
+    token_data = _read_extension_auth_token(_extract_extension_auth_token(payload))
+    if token_data:
+        token_data['source'] = 'token'
+        return token_data
+
+    session_user_id = str(session.get('user_id') or '').strip()
+    if session_user_id:
+        return {
+            'user_id': session_user_id,
+            'username': str(session.get('username') or '').strip(),
+            'token': '',
+            'source': 'session',
+        }
+
+    return None
+
+
+def _sync_extension_session(auth_user):
+    if not auth_user:
+        return False
+    user_id = str(auth_user.get('user_id') or '').strip()
+    username = str(auth_user.get('username') or '').strip()
+    if not user_id:
+        return False
+    changed = False
+    if str(session.get('user_id') or '').strip() != user_id:
+        session['user_id'] = user_id
+        changed = True
+    if username and str(session.get('username') or '').strip() != username:
+        session['username'] = username
+        changed = True
+    return changed
+
+
+@app.before_request
+def _bind_extension_token_session():
+    # Keep extension popup/overlay requests bound to the extension-authenticated user.
+    # This makes website session state follow the active extension account automatically.
+    token_user = _read_extension_auth_token(_extract_extension_auth_token())
+    if token_user:
+        _sync_extension_session(token_user)
+
+
+# --- EGRESS DIAGNOSTICS & STORAGE HELPERS ---
+_EGRESS_STATS = {
+    'requests': {},  # {route: {'count': int, 'total_bytes': int, 'avg_bytes': int}}
+}
+
+def _track_egress(route_key, response_bytes):
+    """Track response size for egress monitoring."""
+    if route_key not in _EGRESS_STATS['requests']:
+        _EGRESS_STATS['requests'][route_key] = {'count': 0, 'total_bytes': 0}
+    stats = _EGRESS_STATS['requests'][route_key]
+    stats['count'] += 1
+    stats['total_bytes'] += response_bytes
+    stats['avg_bytes'] = stats['total_bytes'] // max(1, stats['count'])
+
+def _get_egress_stats():
+    """Return current egress statistics (helpful for monitoring)."""
+    return {
+        'requests': _EGRESS_STATS['requests'],
+        'total_tracked_requests': sum(s['count'] for s in _EGRESS_STATS['requests'].values()),
+        'total_tracked_bytes': sum(s['total_bytes'] for s in _EGRESS_STATS['requests'].values()),
+    }
+
+@app.after_request
+def _measure_egress(response):
+    """Track response size for high-traffic routes."""
+    try:
+        # Only measure JSON/HTML responses (not static assets)
+        content_type = response.headers.get('Content-Type', '').lower()
+        if any(ct in content_type for ct in ['application/json', 'text/html']):
+            route_key = request.endpoint or 'unknown'
+            response_bytes = len(response.get_data()) if hasattr(response, 'get_data') else 0
+            _track_egress(route_key, response_bytes)
+    except Exception:
+        pass
+    return response
+
+class SupabaseStorageHelper:
+    """Helper for managing Supabase Storage uploads with optimized cache headers."""
+    
+    @staticmethod
+    def get_cache_headers(is_immutable=True, max_age_seconds=31536000):
+        """
+        Return optimized cache headers for Supabase Smart CDN.
+        
+        Args:
+            is_immutable: If True, adds immutable directive (for versioned assets)
+            max_age_seconds: Cache duration in seconds (default: 1 year)
+        
+        Returns:
+            dict with Cache-Control and other relevant headers
+        """
+        cache_control = f'public, max-age={max_age_seconds}'
+        if is_immutable:
+            cache_control += ', immutable'
+        
+        return {
+            'Cache-Control': cache_control,
+            'X-Content-Type-Options': 'nosniff',
+        }
+    
+    @staticmethod
+    def get_content_type(filename):
+        """Guess content type from filename."""
+        ext = (str(filename) or '').lower().split('.')[-1]
+        types = {
+            'zip': 'application/zip',
+            'pdf': 'application/pdf',
+            'webp': 'image/webp',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'svg': 'image/svg+xml',
+            'stl': 'model/stl',
+            '3mf': 'model/3mf',
+        }
+        return types.get(ext, 'application/octet-stream')
+
+
+def _response_with_cache(response_data, cache_control_header='public, max-age=3600'):
+    """
+    Helper to attach cache headers to a Flask response.
+    For use with json-like endpoints that can be cached.
+    """
+    from flask import make_response
+    resp = make_response(response_data if isinstance(response_data, str) else jsonify(response_data))
+    resp.headers['Cache-Control'] = cache_control_header
+    return resp
+
+
+def _extension_request_authorized(payload=None):
+    desktop_client = request.headers.get('X-Desktop-Client') == '1'
+    if desktop_client:
+        return True
+    if _extension_request_user(payload):
+        return True
+    return _extension_api_authorized(payload)
 
 
 def _extract_first_hours(text):
@@ -781,6 +1166,8 @@ def _makerworld_instance_weight(instance):
             if not isinstance(filament, dict):
                 continue
             used_g = filament.get('usedG')
+            if used_g is None:
+                continue
             try:
                 value = float(used_g)
             except Exception:
@@ -849,99 +1236,9 @@ def _makerworld_instance_name(instance, index):
     for key in ('name', 'profileName', 'title', 'displayName'):
         value = str(instance.get(key) or '').strip()
         if value:
-            return _normalize_makerworld_profile_name(value, index)
+            return value
 
     return f'Profile {index}'
-
-
-def _is_profile_technical_clause(clause):
-    text = re.sub(r'\s+', ' ', str(clause or '')).strip().lower()
-    if not text:
-        return False
-
-    # Common UI fragments around profile rows.
-    if re.search(r'^designer\b', text):
-        return True
-    if re.search(r'^\d+(?:\.\d+)?\s*h(?:ours?)?\b', text):
-        return True
-    if re.search(r'^\d+\s*plates?\b|^plate\b', text):
-        return True
-
-    has_token = bool(re.search(r'\b(layer\s*height|layer|infill|walls?|nozzle|supports?|line\s*width|speed|temperature|temp|plate)\b', text))
-    has_value = bool(re.search(r'(\d+(?:\.\d+)?\s*mm\b|\d{1,3}\s*%|\b\d+(?:\.\d+)?\b)', text))
-    return has_token and has_value
-
-
-def _normalize_makerworld_profile_name(raw_name, index):
-    cleaned = re.sub(r'\s+', ' ', str(raw_name or '')).strip()
-
-    # Collapse exact duplicated phrase patterns.
-    for separator in (r'\s*\|\s*', r'\s*/\s*', r'\s*[\-\u2013\u2014]\s*'):
-        parts = [p.strip() for p in re.split(separator, cleaned) if p.strip()]
-        if len(parts) == 2 and parts[0].lower() == parts[1].lower():
-            cleaned = parts[0]
-
-    # Drop known trailing UI artifacts (Designer, time, plates).
-    for marker in (
-        r'\bdesigner\b',
-        r'\b\d+(?:\.\d+)?\s*h(?:ours?)?\b',
-        r'\b\d+\s*plates?\b',
-        r'\bplate\b',
-    ):
-        match = re.search(marker, cleaned, re.IGNORECASE)
-        if match and match.start() > 0:
-            cleaned = cleaned[:match.start()].rstrip(' -|,;/')
-
-    # Typical MakerWorld pattern: <profile name> - <technical recipe>
-    parts = re.split(r'\s*[\-\u2013\u2014|:]\s*', cleaned, maxsplit=1)
-    if len(parts) == 2:
-        left, right = parts[0].strip(), parts[1].strip()
-        if left and right and _is_profile_technical_clause(right):
-            cleaned = left
-
-    # Remove technical clauses separated by commas/semicolons/bullets.
-    clauses = [c.strip() for c in re.split(r'\s*(?:,|;|\u2022)\s*', cleaned) if c.strip()]
-    kept_clauses = [c for c in clauses if not _is_profile_technical_clause(c)]
-    if kept_clauses:
-        cleaned = ', '.join(kept_clauses)
-
-    # Remove technical parenthetical suffixes.
-    cleaned = re.sub(
-        r'\s*[\[(][^\])]*(?:layer\s*height|infill|nozzle|wall|walls|supports?|line\s*width|speed|temperature|temp|mm|%)\b[^\])]*[\])]\s*$',
-        '',
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    # If technical tokens still leak in, keep only the prefix before first token.
-    token_match = re.search(r'\b(layer\s*height|layer|infill|walls?|nozzle|supports?|line\s*width|speed|temperature|temp|plate)\b', cleaned, re.IGNORECASE)
-    if token_match and token_match.start() > 0:
-        prefix = cleaned[:token_match.start()].rstrip(' -|,;/')
-        if prefix:
-            cleaned = prefix
-
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' -|,;/')
-    if _is_layer_height_only_profile_name(cleaned):
-        return 'Standard'
-    return cleaned or f'Profile {index}'
-
-
-def _is_layer_height_only_profile_name(name):
-    raw = str(name or '').strip().lower()
-    if not raw:
-        return False
-
-    text = re.sub(r'\b\d+(?:\.\d+)?\s*mm\b', ' ', raw)
-    text = re.sub(r'\b\d+(?:\.\d+)?\s*(?:micron|microns|um)\b', ' ', text)
-    text = re.sub(r'\b\d+(?:\.\d+)?\b', ' ', text)
-    text = re.sub(
-        r'\b(?:layer|height|profile|print|walls?|infill|nozzle|supports?|line\s*width|mm|um|micron|microns|lh)\b',
-        ' ',
-        text,
-    )
-    text = re.sub(r'[^a-z]+', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text == ''
 
 
 def _resolve_pricing_inputs(overrides=None):
@@ -986,25 +1283,63 @@ def _calc_profile_price(weight_g, hours, pricing_inputs):
     return _round_price_to_nearest_5000(subtotal * (margin if margin > 0 else 1.0))
 
 
-def _extract_model_profile_metrics(model_url, pricing_overrides=None):
-    quick = _quick_parse_model_page(model_url)
-    html_text = str(quick.get('html') or '')
-    title = str(quick.get('title') or 'MakerWorld Model')
+def _extract_model_profile_metrics(model_url, pricing_overrides=None, calc_result=None):
+    pricing_inputs = _resolve_pricing_inputs(pricing_overrides)
+    if calc_result is not None:
+        html_text = str(calc_result.get('html') or '')
+        title = str(calc_result.get('title') or 'MakerWorld Model')
+        if not html_text:
+            fallback_weight = float(calc_result.get('weight') or 50.0)
+            fallback_hours = float(calc_result.get('hours') or 0.0)
+            return {
+                'title': title,
+                'profiles': [{
+                    'id': '',
+                    'name': '',
+                    'weight_g': round(fallback_weight, 2),
+                    'estimated_print_hours': round(fallback_hours, 2),
+                    'price': _calc_profile_price(fallback_weight, fallback_hours, pricing_inputs),
+                    'is_default': True,
+                    'weight_needs_review': bool(calc_result.get('needs_review')),
+                    'source': str(calc_result.get('source') or 'fallback_default'),
+                    'colors': [],
+                    'image_urls': [],
+                }],
+            }
+    else:
+        try:
+            quick = _quick_parse_model_page(model_url)
+            html_text = str(quick.get('html') or '')
+            title = str(quick.get('title') or 'MakerWorld Model')
+        except Exception:
+            calc_result = _calculate_model_metrics(model_url)
+            fallback_weight = float(calc_result.get('weight') or 50.0)
+            fallback_hours = float(calc_result.get('hours') or 0.0)
+            return {
+                'title': str(calc_result.get('title') or 'MakerWorld Model'),
+                'profiles': [{
+                    'id': '',
+                    'name': '',
+                    'weight_g': round(fallback_weight, 2),
+                    'estimated_print_hours': round(fallback_hours, 2),
+                    'price': _calc_profile_price(fallback_weight, fallback_hours, pricing_inputs),
+                    'is_default': True,
+                    'weight_needs_review': bool(calc_result.get('needs_review')),
+                    'source': str(calc_result.get('source') or 'fallback_default'),
+                    'colors': [],
+                    'image_urls': [],
+                }],
+            }
 
     profile_id_m = re.search(r'profileId[-_](\d+)', model_url, re.IGNORECASE)
     target_profile_id = profile_id_m.group(1) if profile_id_m else ''
 
     instances = _extract_makerworld_instances(html_text)
-    pricing_inputs = _resolve_pricing_inputs(pricing_overrides)
     profiles = []
     seen = set()
-    layer_only_price_index = {}
-
     for index, instance in enumerate(instances, start=1):
         profile_id = str(instance.get('profileId') or instance.get('id') or '').strip()
-        original_name = _makerworld_instance_name(instance, index)
-        layer_only_name = _is_layer_height_only_profile_name(original_name)
-        name = 'Standard' if layer_only_name else original_name
+        name = _makerworld_instance_name(instance, index)
 
         weight_g = _makerworld_instance_weight(instance)
         hours = _makerworld_instance_hours(instance)
@@ -1021,15 +1356,6 @@ def _extract_model_profile_metrics(model_url, pricing_overrides=None):
             (target_profile_id and target_profile_id in {str(instance.get('id') or ''), str(instance.get('profileId') or '')})
             or instance.get('authorsChoice')
         )
-
-        if layer_only_name:
-            layer_key = ('standard', int(round(float(price_value))))
-            existing_idx = layer_only_price_index.get(layer_key)
-            if existing_idx is not None:
-                if is_default_match:
-                    profiles[existing_idx]['is_default'] = True
-                continue
-            layer_only_price_index[layer_key] = len(profiles)
 
         dedupe_key = (profile_id or name.lower(), round(float(weight_g), 2), round(float(hours), 2))
         if dedupe_key in seen:
@@ -1050,21 +1376,25 @@ def _extract_model_profile_metrics(model_url, pricing_overrides=None):
         })
 
     if not profiles:
-        calc_result = _calculate_model_metrics(model_url)
+        if calc_result is None:
+            calc_result = _calculate_model_metrics(model_url)
         fallback_weight = float(calc_result.get('weight') or 50.0)
         fallback_hours = float(calc_result.get('hours') or 0.0)
-        profiles = [{
-            'id': '',
-            'name': 'Standard',
-            'weight_g': round(fallback_weight, 2),
-            'estimated_print_hours': round(fallback_hours, 2),
-            'price': _calc_profile_price(fallback_weight, fallback_hours, pricing_inputs),
-            'is_default': True,
-            'weight_needs_review': bool(calc_result.get('needs_review')),
-            'source': str(calc_result.get('source') or 'fallback_default'),
-            'colors': [],
-            'image_urls': [],
-        }]
+        return {
+            'title': title,
+            'profiles': [{
+                'id': '',
+                'name': '',
+                'weight_g': round(fallback_weight, 2),
+                'estimated_print_hours': round(fallback_hours, 2),
+                'price': _calc_profile_price(fallback_weight, fallback_hours, pricing_inputs),
+                'is_default': True,
+                'weight_needs_review': bool(calc_result.get('needs_review')),
+                'source': str((calc_result or {}).get('source') or 'fallback_default'),
+                'colors': [],
+                'image_urls': [],
+            }],
+        }
 
     if not any(bool(p.get('is_default')) for p in profiles):
         profiles[0]['is_default'] = True
@@ -1168,6 +1498,7 @@ def _calculate_model_metrics(model_url, manual_weight=None, manual_hours=None):
     result = {
         'success': False,
         'title': 'MakerWorld Model',
+        'html': '',
         'weight': 0.0,
         'hours': 0.0,
         'raw_price': 0.0,
@@ -1192,6 +1523,7 @@ def _calculate_model_metrics(model_url, manual_weight=None, manual_hours=None):
         try:
             quick = _quick_parse_model_page(model_url)
             html_text = quick.get('html') or ''
+            result['html'] = html_text
             result['title'] = quick.get('title') or result['title']
             parsed_weight = quick.get('weight')
             if parsed_weight is not None and float(parsed_weight) > 0:
@@ -1290,7 +1622,7 @@ def _scrape_makerworld_metrics(model_url):
             page.wait_for_timeout(1500)
             page_text = page.locator('body').inner_text(timeout=10000)
             block_texts = page.evaluate(
-                """
+                                r"""
                 () => {
                   const nodes = Array.from(document.querySelectorAll('section, article, div, li'));
                   return nodes
@@ -1617,7 +1949,13 @@ def _order_last_modified(order):
         if isinstance(last_msg, dict):
             candidates.append(last_msg.get('ts'))
 
-    parsed = [_parse_iso_utc(c) for c in candidates if c]
+    parsed = []
+    for candidate in candidates:
+        if not candidate:
+            continue
+        parsed_value = _parse_iso_utc(candidate)
+        if parsed_value is not None:
+            parsed.append(parsed_value)
     return max(parsed) if parsed else None
 
 
@@ -1765,8 +2103,51 @@ def _restore_soft_deleted_order(order):
     order['updated_at'] = datetime.utcnow().isoformat()
 
 
-def save_db(data, full_replace=False):
+def _execute_in_transaction(queries_and_params):
+    """Run multiple (query, params) pairs atomically in a single transaction."""
+    last_error = None
+    for _ in range(2):
+        conn = None
+        discard_conn = False
+        try:
+            conn = _get_pooled_connection()
+            cur = conn.cursor()
+            try:
+                for query, params in queries_and_params:
+                    cur.execute(query.replace('?', '%s'), params)
+                conn.commit()
+                return
+            finally:
+                cur.close()
+        except Exception as exc:
+            last_error = exc
+            discard_conn = isinstance(exc, (psycopg2.InterfaceError, psycopg2.OperationalError))
+            if conn is not None and not getattr(conn, 'closed', 1):
+                try:
+                    conn.rollback()
+                except Exception:
+                    discard_conn = True
+            if not discard_conn:
+                raise
+        finally:
+            if conn is not None:
+                _put_pooled_connection(conn, discard=discard_conn)
+    if last_error is None:
+        raise RuntimeError('Transactional database operation failed without an exception')
+    raise last_error
+
+
+def save_db(data, full_replace=False, raise_on_error=False):
     _init_db()
+    errors = []
+
+    def _record_save_error(section, exc):
+        message = f"Failed to save {section}: {exc}"
+        try:
+            app.logger.exception(message)
+        except Exception:
+            print(message)
+        errors.append((section, exc))
 
     # Settings
     try:
@@ -1775,25 +2156,30 @@ def save_db(data, full_replace=False):
             ("settings", json.dumps(data.get("settings", {"filaments": []})))
         )
     except Exception as e:
-        print(f"Failed to save settings: {e}")
+        _record_save_error("settings", e)
 
-    # Users
+    # Users — DELETE + all INSERTs run in one atomic transaction so a
+    # mid-loop failure cannot leave the table empty.
     try:
-        _execute("DELETE FROM users")
+        user_queries: list[tuple[str, tuple[Any, ...]]] = [("DELETE FROM users", ())]
         for user in data.get("users", []):
-            _execute(
+            user_queries.append((
                 "INSERT INTO users (id, json) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET json = EXCLUDED.json",
                 (user.get('id'), json.dumps(user))
-            )
+            ))
+        _execute_in_transaction(user_queries)
     except Exception as e:
-        print(f"Failed to save users: {e}")
+        _record_save_error("users", e)
 
     # Orders
     try:
         if full_replace:
             _execute("DELETE FROM orders")
+    except Exception as e:
+        _record_save_error("orders", e)
 
-        for order in data.get("orders", []):
+    for order in data.get("orders", []):
+        try:
             order_id = order.get('id')
             if not order_id:
                 continue
@@ -1823,8 +2209,8 @@ def save_db(data, full_replace=False):
                 "INSERT INTO orders (id, json) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET json = EXCLUDED.json",
                 (order_id, json.dumps(chosen))
             )
-    except Exception as e:
-        print(f"Failed to save orders: {e}")
+        except Exception as e:
+            _record_save_error("orders", e)
 
     # Featured prints
     try:
@@ -1835,7 +2221,13 @@ def save_db(data, full_replace=False):
                 (item.get('id'), json.dumps(item))
             )
     except Exception as e:
-        print(f"Failed to save featured prints: {e}")
+        _record_save_error("featured prints", e)
+
+    if errors and raise_on_error:
+        failed_sections = ', '.join(section for section, _ in errors)
+        raise RuntimeError(f"Database persistence failed for: {failed_sections}") from errors[0][1]
+
+    return errors
 
 
 def _normalize_target_users(raw_targets, fallback='ALL'):
@@ -1975,8 +2367,16 @@ def _normalize_filament_item(raw):
     if not name:
         return None
 
-    total_g = int(raw.get('total_g') or 1000)
-    remaining_g = int(raw.get('remaining_g') if raw.get('remaining_g') is not None else total_g)
+    total_g_raw = raw.get('total_g')
+    try:
+        total_g = int(total_g_raw) if total_g_raw is not None else 1000
+    except Exception:
+        total_g = 1000
+    remaining_g_raw = raw.get('remaining_g')
+    try:
+        remaining_g = int(remaining_g_raw) if remaining_g_raw is not None else total_g
+    except Exception:
+        remaining_g = total_g
     total_g = max(1, total_g)
     remaining_g = max(0, min(remaining_g, total_g))
 
@@ -2126,6 +2526,16 @@ def _estimate_order_eta(order):
             return f'About {remaining_hours}h remaining'
         return f'About {max(1, int(round(remaining_hours / 24.0)))} day(s) remaining'
 
+
+def _is_cart_visible_order(order):
+    if not isinstance(order, dict):
+        return False
+    if order.get('deleted_at'):
+        return False
+    if order.get('cart_checkout_archived_at'):
+        return False
+    return str(order.get('status') or '').strip().lower() in {'in cart', 'quoted', 'pending quote'}
+
     return 'Timeline updates after admin review'
 
 
@@ -2224,21 +2634,27 @@ def _default_featured_items():
 
 
 def _build_user_portal_context(user_id, search_query='', history_page=1, history_page_size=16, featured_page=1, featured_page_size=6):
-    db = get_db()
-    purged_ids = _purge_expired_soft_deletes(db)
+    # Optimized: Use specific query functions instead of loading entire database
+    settings = _get_settings()
+    user = _get_user_by_id(user_id)
+    
+    # Purge soft-deleted orders for this user before building context
+    all_orders = _get_all_orders()
+    purged_ids = _purge_expired_soft_deletes({'orders': all_orders, 'settings': settings})
     if purged_ids:
+        db = {'orders': all_orders, 'settings': settings}
         save_db(db)
-    settings = db.setdefault('settings', {'filaments': []})
+    
     filaments, filaments_changed = _normalize_filaments(settings)
     if filaments_changed:
-        save_db(db)
-
-    user = next((u for u in db.get('users', []) if u.get('id') == user_id), None)
+        save_db({'settings': settings})
+    
     control_settings = _load_control_center_settings()
     completed_statuses = {'completed', 'done', 'delivered'}
     inactive_statuses = completed_statuses | {'cancelled', 'declined', 'price denied', 'in cart', 'quoted'}
 
-    owned_orders = [o for o in db.get('orders', []) if o.get('owner') == user_id]
+    # Get user's orders from the full list (this is still needed for soft-delete logic)
+    owned_orders = [o for o in all_orders if o.get('owner') == user_id]
     owned_orders = sorted(
         owned_orders,
         key=lambda o: _order_last_modified(o) or datetime.min,
@@ -2246,13 +2662,10 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
     )
     owned_orders = _decorate_orders_with_pending_delete_date(owned_orders)
 
-    cart_orders = [
-        o for o in owned_orders
-        if str(o.get('status') or '').strip().lower() in {'in cart', 'quoted', 'pending quote'}
-    ]
+    cart_orders = [o for o in owned_orders if _is_cart_visible_order(o)]
     user_orders = [
         o for o in owned_orders
-        if str(o.get('status') or '').strip().lower() not in {'in cart', 'quoted', 'pending quote'}
+        if not _is_cart_visible_order(o)
     ]
 
     normalized_query = (search_query or '').strip().lower()
@@ -2278,7 +2691,7 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
     filtered_orders_page = filtered_orders[history_start:history_start + history_page_size]
 
     all_featured = [
-        f for f in db.get('featured_prints', [])
+        f for f in _get_all_featured_prints()
         if _featured_item_visible_to_user(f, user_id, str((user or {}).get('username') or '').strip())
     ]
     # Personal suggestions = items targeted specifically at THIS user (not ALL-user items)
@@ -2392,13 +2805,12 @@ def _build_user_portal_context(user_id, search_query='', history_page=1, history
         if parsed is not None:
             member_since = parsed.strftime('%b %Y')
 
-    cart_clear_ids = session.pop('cart_clear_ids', [])
+    cart_clear_ids = session.get('cart_clear_ids', [])
     if not isinstance(cart_clear_ids, list):
         cart_clear_ids = []
     cart_clear_ids = [str(i).strip() for i in cart_clear_ids if str(i).strip()]
 
     return {
-        'db': db,
         'user': user,
         'filaments': filaments,
         'featured_items': featured_items_page,
@@ -2510,21 +2922,30 @@ def order_page():
         **context,
     )
 
-
-@app.route('/browse-models')
-def browse_models():
-    if not session.get('user_id'):
-        return redirect(url_for('user_login'))
-    context = _build_user_portal_context(session.get('user_id'))
-    return render_template('browse_models.html', active_tab='browse', **context)
-
-
 @app.route('/cart')
 def user_cart():
     if not session.get('user_id'):
         return redirect(url_for('user_login'))
     context = _build_user_portal_context(session.get('user_id'))
     return render_template('user_cart.html', active_tab='cart', **context)
+
+
+@app.route('/cart/embed')
+def user_cart_embed():
+    auth_user = _extension_request_user()
+    if not auth_user:
+        return redirect(url_for('user_login'))
+    _sync_extension_session(auth_user)
+    user_id = str(auth_user.get('user_id') or '').strip()
+    if not user_id:
+        return redirect(url_for('user_login'))
+    context = _build_user_portal_context(user_id)
+    return render_template(
+        'user_cart_embed.html',
+        active_tab='cart',
+        extension_auth_token=str(auth_user.get('token') or ''),
+        **context,
+    )
 
 
 @app.route('/history')
@@ -2567,6 +2988,30 @@ def user_help():
         report_error=(report_state == 'error'),
         **context,
     )
+
+
+@app.route('/extension-install')
+def extension_install():
+    if not session.get('user_id'):
+        return redirect(url_for('user_login'))
+    context = _build_user_portal_context(session.get('user_id'))
+    shot_specs = {
+        'chrome_extensions': 'chrome_extensions',
+        'load_unpacked': 'load_unpacked',
+        'select_folder': 'select_folder',
+        'popup_login': 'popup_login',
+    }
+    extensions = ('.png', '.jpg', '.jpeg', '.webp')
+    shots = {}
+    for key, stem in shot_specs.items():
+        detected = None
+        for ext in extensions:
+            candidate = RESOURCE_BASE_DIR / 'static' / 'extension_setup' / f'{stem}{ext}'
+            if candidate.exists():
+                detected = f'/static/extension_setup/{stem}{ext}'
+                break
+        shots[key] = detected
+    return render_template('extension_install.html', active_tab='help', extension_setup_shots=shots, **context)
 
 
 @app.route('/help/report', methods=['POST'])
@@ -2682,6 +3127,234 @@ def user_logout():
     session.pop('user_id', None)
     session.pop('username', None)
     return redirect(url_for('user_login'))
+
+
+@app.route('/extension-api/user-auth-status', methods=['GET'])
+def extension_user_auth_status():
+    auth_user = _extension_request_user()
+    _sync_extension_session(auth_user)
+    user_id = str((auth_user or {}).get('user_id') or '').strip()
+    username = str((auth_user or {}).get('username') or '').strip()
+    token = _issue_extension_auth_token(user_id, username) if user_id else ''
+    return jsonify({
+        'ok': True,
+        'logged_in': bool(user_id),
+        'user_id': user_id,
+        'username': username,
+        'extension_auth_token': token,
+    })
+
+
+@app.route('/extension-api/user-login', methods=['POST'])
+def extension_user_login():
+    payload = request.get_json(silent=True) or {}
+    username = str(payload.get('username') or '').strip()
+    password = str(payload.get('password') or '')
+    if not username or not password:
+        return jsonify({'ok': False, 'error': 'Username and password are required.'}), 400
+
+    db = get_db()
+    user = next((u for u in db.get('users', []) if str(u.get('username') or '').strip() == username), None)
+    if not user or not check_password_hash(user.get('password_hash', ''), password):
+        return jsonify({'ok': False, 'error': 'Invalid credentials.'}), 401
+
+    session['user_id'] = user.get('id')
+    session['username'] = user.get('username')
+    token = _issue_extension_auth_token(user.get('id'), user.get('username'))
+    return jsonify({
+        'ok': True,
+        'user_id': str(user.get('id') or ''),
+        'username': str(user.get('username') or ''),
+        'extension_auth_token': token,
+    })
+
+
+@app.route('/extension-api/user-logout', methods=['POST'])
+def extension_user_logout():
+    session.pop('user_id', None)
+    session.pop('username', None)
+    return jsonify({'ok': True})
+
+
+def _build_extension_hover_order_item(model_url):
+    calc_result = _calculate_model_metrics(model_url)
+    profile_metrics = _extract_model_profile_metrics(model_url, calc_result=calc_result)
+    profiles = profile_metrics.get('profiles') or []
+    title = str(profile_metrics.get('title') or calc_result.get('title') or 'MakerWorld Model').strip() or 'MakerWorld Model'
+
+    default_profile = next((p for p in profiles if p.get('is_default')), profiles[0] if profiles else {})
+
+    db = get_db()
+    settings = db.get('settings', {})
+    filaments, _ = _normalize_filaments(settings)
+    filament_catalog = []
+    for row in filaments:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get('name') or '').strip()
+        if not name:
+            continue
+        filament_catalog.append({
+            'name': name,
+            'hex': str(row.get('hex') or row.get('color_hex') or '#8b8b8b').strip() or '#8b8b8b',
+            'remaining_g': float(_to_float(row.get('remaining_g', row.get('total_g', 0)), 0)),
+            'out_of_stock': bool(row.get('out_of_stock')),
+        })
+
+    html_text = str(calc_result.get('html') or '')
+    instances = _extract_makerworld_instances(html_text)
+    global_images = _extract_model_image_urls(html_text, instances)
+
+    normalized_profiles = []
+    profile_customizations = []
+    default_parts = []
+    default_suggested = []
+    for idx, profile in enumerate(profiles):
+        if not isinstance(profile, dict):
+            continue
+        profile_name = str(profile.get('name') or f'Profile {idx + 1}').strip() or f'Profile {idx + 1}'
+        profile_id = str(profile.get('id') or '').strip()
+        weight_g = float(_to_float(profile.get('weight_g'), 0))
+        hours = float(_to_float(profile.get('estimated_print_hours'), 0))
+        price_val = float(_to_float(profile.get('price'), 0))
+        colors = profile.get('colors') if isinstance(profile.get('colors'), list) else []
+        image_urls = profile.get('image_urls') if isinstance(profile.get('image_urls'), list) else []
+        profile_image = str((image_urls[0] if image_urls else (global_images[0] if global_images else '')) or '').strip()
+
+        part_rows = []
+        insufficient_by_part = {}
+        sufficient_by_part = {}
+
+        if not colors:
+            fallback_name = str((default_profile or {}).get('name') or 'Main').strip() or 'Main'
+            fallback_used = max(0.0, weight_g)
+            colors = [{'name': fallback_name, 'hex': '#8b8b8b', 'used_g': fallback_used}]
+
+        for part_idx, color in enumerate(colors):
+            color_name = str((color or {}).get('name') or f'Color {part_idx + 1}').strip() or f'Color {part_idx + 1}'
+            color_hex = str((color or {}).get('hex') or '#8b8b8b').strip() or '#8b8b8b'
+            used_g = float(_to_float((color or {}).get('used_g'), 0))
+            if used_g <= 0 and weight_g > 0:
+                used_g = max(0.0, weight_g / max(1, len(colors)))
+            part_name = f'{color_name} Part'
+            part_key = f'part_{part_idx}'
+            part_rows.append({
+                'part': part_name,
+                'suggested_filament': color_name,
+                'suggested_hex': color_hex,
+                'used_g': round(max(0.0, used_g), 2),
+            })
+
+            insufficient = []
+            sufficient = []
+            for filament in filament_catalog:
+                fname = str(filament.get('name') or '').strip()
+                if not fname:
+                    continue
+                remaining = float(_to_float(filament.get('remaining_g'), 0))
+                out_of_stock = bool(filament.get('out_of_stock'))
+                if out_of_stock or (used_g > 0 and remaining < used_g):
+                    insufficient.append(fname)
+                else:
+                    sufficient.append(fname)
+            insufficient_by_part[part_key] = insufficient
+            sufficient_by_part[part_key] = sufficient
+
+        normalized_profiles.append({
+            'id': profile_id,
+            'name': profile_name,
+            'weight_g': round(max(0.0, weight_g), 2),
+            'estimated_print_hours': round(max(0.0, hours), 2),
+            'price': round(max(0.0, price_val), 2),
+            'is_default': bool(profile.get('is_default')),
+            'colors': colors,
+        })
+
+        profile_customizations.append({
+            'profile_id': profile_id,
+            'profile_name': profile_name,
+            'image_url': profile_image,
+            'parts_configuration': part_rows,
+            'insufficient_filaments': [],
+            'insufficient_filaments_by_part': insufficient_by_part,
+            'sufficient_filaments_by_part': sufficient_by_part,
+        })
+
+        if bool(profile.get('is_default')) or (not default_parts and idx == 0):
+            default_parts = part_rows
+            default_suggested = [
+                f"{str(p.get('part') or '').strip()}: {str(p.get('suggested_filament') or '').strip()}"
+                for p in part_rows
+                if str(p.get('part') or '').strip() and str(p.get('suggested_filament') or '').strip()
+            ]
+
+    if normalized_profiles and not any(bool(p.get('is_default')) for p in normalized_profiles):
+        normalized_profiles[0]['is_default'] = True
+
+    default_profile_obj = next((p for p in normalized_profiles if p.get('is_default')), normalized_profiles[0] if normalized_profiles else {})
+    suggested_filament = ''
+    if default_parts:
+        suggested_filament = str(default_parts[0].get('suggested_filament') or '').strip()
+
+    return {
+        'id': 'ext-' + str(uuid.uuid4())[:8],
+        'title': title,
+        'description': 'Configure profile and part colors, then add to cart.',
+        'image_url': str((global_images[0] if global_images else '') or '').strip(),
+        'makerworld_url': model_url,
+        'price': round(max(0.0, _to_float(default_profile_obj.get('price'), 0)), 2),
+        'model_weight': round(max(0.0, _to_float(default_profile_obj.get('weight_g'), _to_float(calc_result.get('weight'), 0))), 2),
+        'profile_options': [str(p.get('name') or '').strip() for p in normalized_profiles if str(p.get('name') or '').strip()],
+        'profile_pricing': normalized_profiles,
+        'suggested_profile': str(default_profile_obj.get('name') or '').strip(),
+        'parts_configuration': default_parts,
+        'profile_customizations': profile_customizations,
+        'insufficient_filaments': [],
+        'suggested_filament': suggested_filament,
+        'suggested_colors': ' | '.join(default_suggested),
+        'estimated_print_hours': round(max(0.0, _to_float(default_profile_obj.get('estimated_print_hours'), _to_float(calc_result.get('hours'), 0))), 2),
+    }
+
+
+@app.route('/extension-api/hover-order-item', methods=['GET'])
+def extension_hover_order_item_api():
+    auth_user = _extension_request_user({'ext_auth': request.args.get('ext_auth')})
+    if not auth_user:
+        return jsonify({'ok': False, 'error': 'Login required.', 'error_code': 'AUTH_REQUIRED'}), 401
+    _sync_extension_session(auth_user)
+
+    model_url = str(request.args.get('model_url') or '').strip()
+    if not _is_allowed_model_link(model_url):
+        return jsonify({'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}), 400
+
+    try:
+        item = _build_extension_hover_order_item(model_url)
+        return jsonify({'ok': True, 'item': item})
+    except Exception as exc:
+        app.logger.exception('extension_hover_order_item_api failed')
+        return jsonify({'ok': False, 'error': str(exc) or 'Unable to build item data.'}), 500
+
+
+@app.route('/extension/order-overlay', methods=['GET'])
+def extension_order_overlay_page():
+    auth_user = _extension_request_user({'ext_auth': request.args.get('ext_auth')})
+    if not auth_user:
+        return jsonify({'ok': False, 'error': 'Login required.', 'error_code': 'AUTH_REQUIRED'}), 401
+    _sync_extension_session(auth_user)
+
+    model_url = str(request.args.get('model_url') or '').strip()
+    if not _is_allowed_model_link(model_url):
+        return redirect(url_for('user_home'))
+
+    context = _build_user_portal_context(auth_user.get('user_id'))
+    return render_template(
+        'extension_order_overlay.html',
+        active_tab='home',
+        model_url=model_url,
+        extension_auth_token=str(auth_user.get('token') or ''),
+        confetti_asset_name='extension_confetti.gif',
+        **context,
+    )
 
 
 @app.route('/search_orders', methods=['POST'])
@@ -2852,52 +3525,199 @@ def _parse_cart_quantity(value, default=1):
     return max(1, min(99, qty))
 
 
+def _save_cart_item_for_owner(db, owner_id, payload):
+    if not isinstance(payload, dict):
+        return {'ok': False, 'error': 'Invalid payload'}, 400
+
+    raw_link = str(payload.get('link') or '').strip()
+    if not raw_link:
+        return {'ok': False, 'error': 'Model link is required'}, 400
+
+    if not _is_allowed_model_link(raw_link):
+        return {'ok': False, 'error': 'Only makerworld.com or printables.com links are allowed.'}, 400
+    app.logger.info(f"[SAVE_ITEM] owner_id={owner_id!r}, link={raw_link!r}, payload_keys={list(payload.keys())}")
+    item_id = str(payload.get('id') or '').strip()
+    existing_order_id = str(payload.get('orderId') or payload.get('order_id') or '').strip()
+
+    if existing_order_id:
+        existing = next(
+            (
+                o for o in db.get('orders', [])
+                if str(o.get('id') or '') == existing_order_id and o.get('owner') == owner_id
+            ),
+            None,
+        )
+        if existing is not None:
+            return {'ok': True, 'order_id': existing_order_id}, 200
+
+    if item_id:
+        existing_by_item = next(
+            (
+                o for o in db.get('orders', [])
+                if o.get('owner') == owner_id
+                and str(o.get('status') or '').strip().lower() == 'in cart'
+                and str(o.get('cart_item_id') or '') == item_id
+            ),
+            None,
+        )
+        if existing_by_item is not None:
+            return {'ok': True, 'order_id': str(existing_by_item.get('id') or '')}, 200
+
+    color_mode = str(payload.get('colorMode') or 'single')
+    if color_mode == 'multi':
+        mappings = payload.get('multiMappings') or []
+        color_parts = [
+            '{}: {}'.format(str(m.get('part') or ''), str(m.get('filament') or ''))
+            for m in mappings if isinstance(m, dict) and m.get('part')
+        ]
+        color_string = ' | '.join(color_parts) if color_parts else 'Multi-color'
+    else:
+        color_string = str(payload.get('singleFilament') or 'Not Selected')
+
+    product_name = str(payload.get('displayName') or payload.get('name') or 'Unnamed Order').strip() or 'Unnamed Order'
+    profile = str(payload.get('profile') or '').strip()
+    weight = max(0.0, _to_float(payload.get('weight'), 0))
+    preferred_date = str(payload.get('preferredDeliveryDate') or '').strip()
+    quantity = _parse_cart_quantity(payload.get('quantity'), default=1)
+    est_unit_price = max(0.0, _to_float(payload.get('estimatedPrice'), 0))
+    total_price = int(round(est_unit_price * quantity))
+    signature = _cart_payload_signature(owner_id, raw_link, product_name, color_string, profile, weight, preferred_date)
+
+    existing_match = next(
+        (
+            o for o in db.get('orders', [])
+            if o.get('owner') == owner_id
+            and _is_cart_visible_order(o)
+            and str(o.get('cart_signature') or '').strip() == signature
+        ),
+        None,
+    )
+    if existing_match is not None:
+        order_id = str(existing_match.get('id') or '').strip()
+        if item_id:
+            existing_match['cart_item_id'] = item_id
+        save_db(db)
+        return {'ok': True, 'order_id': order_id}, 200
+
+    order_id = uuid.uuid4().hex[:8]
+    order = {
+        'id': order_id,
+        'created_at': datetime.utcnow().isoformat(),
+        'updated_at': datetime.utcnow().isoformat(),
+        'owner': owner_id,
+        'name': product_name,
+        'product_name': product_name,
+        'link': raw_link,
+        'profile': profile,
+        'color': color_string,
+        'print_weight_g': weight * quantity,
+        'quantity': quantity,
+        'status': 'In Cart',
+        'print_price': str(total_price),
+        'material_fee': '0',
+        'delivery_time': 'TBD',
+        'preferred_delivery_date': preferred_date,
+        'estimated_print_hours': max(0.0, _to_float(payload.get('estimated_print_hours'), 0)),
+        'messages': [],
+        'admin_note': '',
+        'cart_item_id': item_id,
+        'cart_signature': signature,
+    }
+    db.setdefault('orders', []).append(order)
+    save_db(db)
+    return {'ok': True, 'order_id': order_id}, 200
+
+
+def _checkout_error(message, status_code, wants_json=False):
+    if wants_json:
+        return jsonify({'ok': False, 'error': str(message or 'Checkout failed')}), int(status_code)
+    return redirect(url_for('user_cart'))
+
+
 @app.route('/checkout', methods=['POST'])
 def checkout():
-    if not session.get('user_id'):
+    wants_json = str(request.args.get('response_mode') or '').strip().lower() == 'json'
+
+    payload_for_auth = request.get_json(silent=True) if request.is_json else None
+    auth_user = _extension_request_user(payload_for_auth or {})
+    if not auth_user:
+        if wants_json:
+            return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
         return redirect(url_for('user_login'))
 
-    import json as _json
-    cart_json_str = request.form.get('cart_json', '[]')
-    try:
-        items = _json.loads(cart_json_str)
-        if not isinstance(items, list):
-            items = []
-    except Exception:
-        items = []
+    _sync_extension_session(auth_user)
+    owner_id = str(auth_user.get('user_id') or '').strip()
+    if not owner_id:
+        return _checkout_error('Unauthorized', 401, wants_json=wants_json)
 
-    if not items:
-        return redirect(url_for('user_cart'))
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        if isinstance(body, list):
+            items = body
+        else:
+            items = body.get('items') or []
+    else:
+        raw = str(request.form.get('cart_json') or '').strip()
+        try:
+            items = json.loads(raw) if raw else []
+        except Exception:
+            items = []
+
+    if not isinstance(items, list) or not items:
+        return _checkout_error('No items selected for checkout.', 400, wants_json=wants_json)
 
     db = get_db()
-    owner_id = session.get('user_id')
-    checked_out_item_ids = []
-    processed_order_ids = set()
-    orders = db.setdefault('orders', [])
     created_checkout_ids = []
-    remove_cart_order_ids = set()
+    created_checkout_orders = []
+    checked_out_item_ids = []
 
     for item in items:
         if not isinstance(item, dict):
             continue
 
-        incoming_order_id = str(item.get('orderId') or item.get('order_id') or '').strip()
-        if not incoming_order_id or incoming_order_id in processed_order_ids:
-            continue
+        incoming_order_id = str(item.get('orderId') or item.get('order_id') or item.get('id') or '').strip()
+        existing = None
+        if incoming_order_id:
+            existing = next(
+                (
+                    o for o in db.get('orders', [])
+                    if str(o.get('id') or '').strip() == incoming_order_id
+                    and str(o.get('owner') or '').strip() == owner_id
+                    and _is_cart_visible_order(o)
+                ),
+                None,
+            )
 
-        existing = next(
-            (
-                o for o in orders
-                if str(o.get('id') or '') == incoming_order_id
-                and o.get('owner') == owner_id
-            ),
-            None,
-        )
         if existing is None:
-            continue
+            fallback_link = str(item.get('link') or '').strip()
+            fallback_name = str(item.get('displayName') or item.get('name') or '').strip().lower()
+            fallback_profile = str(item.get('profile') or '').strip().lower()
+            fallback_match = next(
+                (
+                    o for o in db.get('orders', [])
+                    if str(o.get('owner') or '').strip() == owner_id
+                    and _is_cart_visible_order(o)
+                    and (
+                        (fallback_link and str(o.get('link') or '').strip() == fallback_link)
+                        or (
+                            fallback_name
+                            and str(o.get('product_name') or o.get('name') or '').strip().lower() == fallback_name
+                            and (
+                                not fallback_profile
+                                or str(o.get('profile') or '').strip().lower() == fallback_profile
+                            )
+                        )
+                    )
+                ),
+                None,
+            )
+            if fallback_match is None:
+                continue
+            existing = fallback_match
+            incoming_order_id = str(existing.get('id') or '').strip()
 
         status_key = str(existing.get('status') or '').strip().lower()
-        if status_key not in {'in cart', 'quoted', 'pending quote'}:
+        if status_key not in {'in cart', 'quoted', 'pending quote', 'pending'}:
             continue
 
         quantity = _parse_cart_quantity(item.get('quantity'), default=1)
@@ -2907,10 +3727,10 @@ def checkout():
             existing_qty = _parse_cart_quantity(existing.get('quantity'), default=1)
             quoted_unit_price = existing_total / existing_qty if existing_qty > 0 else existing_total
         if quoted_unit_price <= 0:
-            # Enforce priced-only checkout from cart.
             continue
 
-        selected_profile = str(existing.get('profile') or item.get('profile') or 'Standard').strip() or 'Standard'
+        selected_profile = existing.get('profile') if existing.get('profile') is not None else item.get('profile')
+        selected_profile = '' if selected_profile is None else str(selected_profile)
         selected_colors = str(existing.get('color') or '').strip()
         if not selected_colors:
             if str(item.get('colorMode') or '').strip().lower() == 'multi':
@@ -2926,59 +3746,73 @@ def checkout():
         model_weight = max(0.0, _to_float(item.get('weight'), existing.get('print_weight_g') or 0))
         est_hours_per_unit = max(0.0, _to_float(existing.get('estimated_print_hours'), 0))
 
-        new_order_id = str(uuid.uuid4())[:8]
-        checkout_order = {
-            'id': new_order_id,
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat(),
-            'name': existing.get('name') or existing.get('product_name') or str(item.get('displayName') or 'Unnamed Order'),
-            'nickname': existing.get('nickname'),
-            'owner': owner_id,
-            'product_name': existing.get('product_name') or existing.get('name') or str(item.get('displayName') or 'Unnamed Order'),
-            'admin_note': existing.get('admin_note', ''),
-            'messages': [],
-            'link': existing.get('link') or str(item.get('link') or ''),
-            'print_weight_g': model_weight * quantity,
-            'profile': selected_profile,
-            'color': selected_colors,
-            'quantity': quantity,
-            'status': 'Pending',
-            'print_price': str(total_price),
-            'material_fee': '0',
-            'delivery_time': 'TBD',
-            'preferred_delivery_date': existing.get('preferred_delivery_date') or str(item.get('preferredDeliveryDate') or ''),
-            'estimated_print_hours': est_hours_per_unit * quantity,
-            'source_cart_order_id': incoming_order_id,
-            'final_unit_price': int(round(quoted_unit_price)),
-            'final_total_price': total_price,
-            'selected_print_profile': selected_profile,
-            'selected_colors': selected_colors,
-            'payment_status': 'Unpaid',
-        }
-        orders.append(checkout_order)
-        created_checkout_ids.append(new_order_id)
-        remove_cart_order_ids.add(incoming_order_id)
-        processed_order_ids.add(incoming_order_id)
+        existing['updated_at'] = datetime.utcnow().isoformat()
+        existing['name'] = existing.get('name') or existing.get('product_name') or str(item.get('displayName') or 'Unnamed Order')
+        existing['owner'] = owner_id
+        existing['product_name'] = existing.get('product_name') or existing.get('name') or str(item.get('displayName') or 'Unnamed Order')
+        existing['link'] = existing.get('link') or str(item.get('link') or '')
+        existing['print_weight_g'] = model_weight * quantity
+        existing['profile'] = selected_profile
+        existing['color'] = selected_colors
+        existing['quantity'] = quantity
+        existing['status'] = 'Pending'
+        existing['cart_checkout_archived_at'] = datetime.utcnow().isoformat()
+        existing['fixed_price'] = True
+        existing['suggested_profile'] = selected_profile
+        existing['suggested_colors'] = selected_colors
+        existing['print_price'] = str(total_price)
+        existing['material_fee'] = '0'
+        existing['delivery_time'] = existing.get('delivery_time') or 'TBD'
+        existing['preferred_delivery_date'] = existing.get('preferred_delivery_date') or str(item.get('preferredDeliveryDate') or '')
+        existing['estimated_print_hours'] = est_hours_per_unit * quantity
+        existing['final_unit_price'] = int(round(quoted_unit_price))
+        existing['final_total_price'] = total_price
+        existing['selected_print_profile'] = selected_profile
+        existing['selected_colors'] = selected_colors
+        existing['payment_status'] = existing.get('payment_status') or 'Unpaid'
+        if not existing.get('quote_notified_at'):
+            existing['quote_notified_at'] = datetime.utcnow().isoformat()
+        if not existing.get('checkout_confirmed_at'):
+            existing['checkout_confirmed_at'] = datetime.utcnow().isoformat()
 
-        item_id = str(item.get('id') or '').strip()
-        if item_id:
-            checked_out_item_ids.append(item_id)
+        created_checkout_ids.append(incoming_order_id)
+        created_checkout_orders.append(existing)
+
+        checked_item_id = str(item.get('id') or '').strip()
+        if checked_item_id:
+            checked_out_item_ids.append(checked_item_id)
+
+    app.logger.info(f"[CHECKOUT] created_checkout_ids={created_checkout_ids}, skipped={len(items) - len(created_checkout_ids)}")
 
     if not created_checkout_ids:
-        return redirect(url_for('user_cart'))
+        return _checkout_error('No eligible cart items found for checkout.', 400, wants_json=wants_json)
 
-    if remove_cart_order_ids:
-        db['orders'] = [
-            o for o in db.get('orders', [])
-            if str(o.get('id') or '') not in remove_cart_order_ids
-        ]
-        for old_id in remove_cart_order_ids:
-            _execute("DELETE FROM orders WHERE id = %s", (old_id,))
+    try:
+        save_db(db, raise_on_error=True)
+    except Exception as exc:
+        app.logger.exception(f"[CHECKOUT] ERROR: Failed to persist checkout orders {created_checkout_ids}: {exc}")
+        return _checkout_error('Failed to save checkout to database.', 500, wants_json=wants_json)
 
-    save_db(db)
     if checked_out_item_ids:
         session['cart_clear_ids'] = checked_out_item_ids
     session['last_checkout_order_ids'] = created_checkout_ids
+
+    if wants_json:
+        grand_total = int(round(sum(
+            max(0.0, _to_float(o.get('final_total_price', o.get('print_price')), 0))
+            for o in created_checkout_orders
+        )))
+        unit_count = int(sum(max(1, _parse_cart_quantity(o.get('quantity'), default=1)) for o in created_checkout_orders))
+        return jsonify({
+            'ok': True,
+            'message': 'Checkout complete.',
+            'order_ids': created_checkout_ids,
+            'order_count': len(created_checkout_orders),
+            'unit_count': unit_count,
+            'grand_total': grand_total,
+            'count': len(created_checkout_orders),
+        }), 200
+
     return redirect(url_for('checkout_thank_you'))
 
 
@@ -3017,147 +3851,94 @@ def checkout_thank_you():
 
 @app.route('/cart/save-item', methods=['POST'])
 def save_cart_item():
-    if not session.get('user_id'):
+    payload = request.get_json(silent=True) or {}
+    app.logger.info(f"[CART_SAVE] Received save-item request, payload keys: {list(payload.keys())}")
+    
+    auth_user = _extension_request_user(payload)
+    if not auth_user:
+        app.logger.warning(f"[CART_SAVE] Unauthorized: no auth_user")
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
-    payload = request.get_json(silent=True) or {}
-    if not isinstance(payload, dict):
-        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
+    _sync_extension_session(auth_user)
+    owner_id = str(auth_user.get('user_id') or '').strip()
+    if not owner_id:
+        app.logger.warning(f"[CART_SAVE] Unauthorized: no owner_id from auth_user={auth_user}")
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
-    raw_link = str(payload.get('link') or '').strip()
-    if not raw_link:
-        return jsonify({'ok': False, 'error': 'Model link is required'}), 400
-
-    item_id = str(payload.get('id') or '').strip()
-    existing_order_id = str(payload.get('orderId') or '').strip()
-
+    app.logger.info(f"[CART_SAVE] Saving item for owner={owner_id!r}, item_link={payload.get('link')!r}, item_id={payload.get('id')!r}")
     db = get_db()
-    owner_id = session.get('user_id')
-
-    # If this client item was already saved, reuse its order id.
-    if existing_order_id:
-        existing = next(
-            (
-                o for o in db.get('orders', [])
-                if str(o.get('id') or '') == existing_order_id and o.get('owner') == owner_id
-            ),
-            None,
-        )
-        if existing is not None:
-            return jsonify({'ok': True, 'order_id': existing_order_id})
-
-    if item_id:
-        existing_by_item = next(
-            (
-                o for o in db.get('orders', [])
-                if o.get('owner') == owner_id
-                and str(o.get('status') or '').strip().lower() == 'in cart'
-                and str(o.get('cart_item_id') or '') == item_id
-            ),
-            None,
-        )
-        if existing_by_item is not None:
-            return jsonify({'ok': True, 'order_id': str(existing_by_item.get('id') or '')})
-
-    color_mode = str(payload.get('colorMode') or 'single')
-    if color_mode == 'multi':
-        mappings = payload.get('multiMappings') or []
-        color_parts = [
-            '{}: {}'.format(str(m.get('part') or ''), str(m.get('filament') or ''))
-            for m in mappings if isinstance(m, dict) and m.get('part')
-        ]
-        color_string = ' | '.join(color_parts) if color_parts else 'Multi-color'
-    else:
-        color_string = str(payload.get('singleFilament') or 'Not Selected')
-
-    product_name = str(payload.get('displayName') or 'Unnamed Order')
-    weight = max(0.0, _to_float(payload.get('weight') or 0))
-    profile = str(payload.get('profile') or '1').strip() or '1'
-    preferred_date = str(payload.get('preferredDeliveryDate') or '').strip()
-    if preferred_date:
-        try:
-            chosen_date = date.fromisoformat(preferred_date)
-            if chosen_date < date.today():
-                preferred_date = ''
-        except Exception:
-            preferred_date = ''
-
-    incoming_signature = _cart_payload_signature(owner_id, raw_link, product_name, color_string, profile, weight, preferred_date)
-    existing_by_signature = next(
-        (
-            o for o in db.get('orders', [])
-            if o.get('owner') == owner_id
-            and str(o.get('status') or '').strip().lower() == 'in cart'
-            and _cart_payload_signature(
-                owner_id,
-                o.get('link'),
-                o.get('name') or o.get('product_name'),
-                o.get('color'),
-                o.get('profile'),
-                o.get('print_weight_g'),
-                o.get('preferred_delivery_date'),
-            ) == incoming_signature
-        ),
-        None,
-    )
-    if existing_by_signature is not None:
-        return jsonify({'ok': True, 'order_id': str(existing_by_signature.get('id') or '')})
-
-    quantity = _parse_cart_quantity(payload.get('quantity'), default=1)
-    total_price = 0
-    order_id = str(uuid.uuid4())[:8]
-
-    new_order = {
-        'id': order_id,
-        'created_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat(),
-        'name': product_name,
-        'nickname': None,
-        'owner': owner_id,
-        'product_name': product_name,
-        'admin_note': '',
-        'messages': [],
-        'link': raw_link,
-        'print_weight_g': weight * quantity,
-        'profile': profile,
-        'color': color_string,
-        'quantity': quantity,
-        'status': 'In Cart',
-        'print_price': str(total_price),
-        'material_fee': '0',
-        'delivery_time': 'TBD',
-        'preferred_delivery_date': preferred_date,
-        'estimated_print_hours': 0.0,
-        'cart_item_id': item_id,
-    }
-    db['orders'].append(new_order)
-    save_db(db)
-    return jsonify({'ok': True, 'order_id': order_id})
+    response_body, status_code = _save_cart_item_for_owner(db, owner_id, payload)
+    app.logger.info(f"[CART_SAVE] Response: status={status_code}, ok={response_body.get('ok')}, order_id={response_body.get('order_id')}")
+    return jsonify(response_body), status_code
 
 
 @app.route('/cart/remove/<order_id>', methods=['POST'])
 def remove_cart_item(order_id):
-    if not session.get('user_id'):
-        return redirect(url_for('user_login'))
+    auth_user = _extension_request_user()
+    if not auth_user:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    user_id = str(auth_user.get('user_id') or '').strip()
+    target_id = str(order_id or '').strip()
+    if not target_id:
+        return jsonify({'ok': False, 'error': 'Missing order id'}), 400
 
     db = get_db()
     remaining_orders = []
     removed = False
     for order in db.get('orders', []):
         if (
-            order.get('id') == order_id
-            and order.get('owner') == session.get('user_id')
-            and str(order.get('status') or '').strip().lower() == 'in cart'
+            str(order.get('id') or '').strip() == target_id
+            and str(order.get('owner') or '').strip() == user_id
+            and _is_cart_visible_order(order)
         ):
+            app.logger.info(f"[CART_DELETE] Removing order {target_id} for user {user_id} from cart")
             removed = True
             continue
         remaining_orders.append(order)
 
     if removed:
         db['orders'] = remaining_orders
+        app.logger.info(f"[CART_DELETE] Deleting order {target_id} from database")
+        _execute("DELETE FROM orders WHERE id = %s", (target_id,))
         save_db(db)
+        app.logger.info(f"[CART_DELETE] Successfully deleted order {target_id}")
+    else:
+        app.logger.warning(f"[CART_DELETE] Order {target_id} not found for user {user_id}")
 
-    return redirect(url_for('user_cart'))
+    return jsonify({'ok': True, 'removed': removed, 'order_id': target_id}), 200
+
+
+@app.route('/cart/orders', methods=['GET'])
+def get_cart_orders():
+    auth_user = _extension_request_user()
+    if not auth_user:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    _sync_extension_session(auth_user)
+    user_id = str(auth_user.get('user_id') or '').strip()
+
+    db = get_db()
+    cart_orders = [
+        o for o in db.get('orders', [])
+        if str(o.get('owner') or '').strip() == user_id
+        and _is_cart_visible_order(o)
+    ]
+    
+    # OPTIMIZATION: Return only essential fields for list view
+    # Details endpoint can be added later if needed for full order expansion
+    minimal_items = [
+        {
+            'orderId': str(o.get('id') or ''),
+            'displayName': str(o.get('product_name') or o.get('name') or ''),
+            'link': str(o.get('link') or ''),
+            'status': str(o.get('status') or ''),
+            'print_price': float(o.get('print_price') or 0),
+            'quantity': int(o.get('quantity') or 1),
+        }
+        for o in cart_orders
+    ]
+    
+    return jsonify({'ok': True, 'items': minimal_items}), 200
 
 
 @app.route('/order/<order_id>/messages', methods=['GET', 'POST'])
@@ -3380,171 +4161,6 @@ def _extract_makerworld_live_rows(html_text, query=''):
     return rows
 
 
-def _build_internal_browse_rows(user_id, query=''):
-    context = _build_user_portal_context(user_id)
-    browse_items = context.get('browse_items') if isinstance(context, dict) else []
-    if not isinstance(browse_items, list):
-        browse_items = []
-    if not browse_items:
-        browse_items = _default_featured_items()
-
-    filtered = []
-    normalized_query = str(query or '').strip().lower()
-    for idx, item in enumerate(browse_items):
-        if not isinstance(item, dict):
-            continue
-        title = str(item.get('title') or '').strip()
-        description = str(item.get('description') or '').strip()
-        makerworld_url = str(item.get('makerworld_url') or item.get('link') or '').strip()
-        profile_options = item.get('profile_options') if isinstance(item.get('profile_options'), list) else []
-        haystack = ' '.join([
-            title.lower(),
-            description.lower(),
-            makerworld_url.lower(),
-            ' '.join(str(p or '').strip().lower() for p in profile_options),
-        ])
-        if normalized_query and normalized_query not in haystack:
-            continue
-
-        raw_id = str(item.get('id') or '').strip()
-        filtered.append({
-            'id': raw_id or f'browse-{idx + 1}',
-            'title': title or 'MakerWorld Model',
-            'description': description,
-            'image_url': str(item.get('image_url') or '').strip(),
-            'makerworld_url': makerworld_url,
-            'price': _to_float(item.get('price'), 0.0),
-            'model_weight': _to_float(item.get('base_weight'), _to_float(item.get('model_weight'), 0.0)),
-            'profile_options': profile_options,
-            'profile_pricing': item.get('profile_pricing') if isinstance(item.get('profile_pricing'), list) else [],
-            'suggested_profile': str(item.get('suggested_profile') or '').strip(),
-            'parts_configuration': item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [],
-            'profile_customizations': item.get('profile_customizations') if isinstance(item.get('profile_customizations'), list) else [],
-            'insufficient_filaments': item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [],
-        })
-    return filtered
-
-
-@app.route('/api/live-browse-models', methods=['GET'])
-def live_browse_models_api():
-    if not session.get('user_id'):
-        return jsonify({
-            'ok': False,
-            'error': 'Authentication required.',
-            'error_code': 'AUTH_REQUIRED',
-            'diagnostics': {
-                'http_status': 401,
-                'reason': 'No active user session.',
-            },
-        }), 401
-
-    offset = _to_int(request.args.get('offset'), default=0, min_value=0)
-    page_size = _to_int(request.args.get('page_size'), default=40, min_value=1, max_value=80)
-    query = str(request.args.get('q') or '').strip().lower()
-    allow_fallback = _to_bool(request.args.get('allow_fallback'), default=False)
-
-    try:
-        encoded_query = quote_plus(query)
-        candidate_urls = (
-            [
-                f'https://makerworld.com/en/search/models?keyword={encoded_query}',
-                f'https://makerworld.com/en/models?from=search&keyword={encoded_query}',
-            ] if query else [
-                'https://makerworld.com/en/models?from=discover',
-                'https://makerworld.com/en/models',
-            ]
-        )
-
-        attempts = []
-        source_url = ''
-        live_rows = []
-        last_status = 0
-
-        for url in candidate_urls:
-            status_code, html_text = _makerworld_http_get(url)
-            last_status = status_code
-            parsed_rows = _extract_makerworld_live_rows(html_text, query=query)
-            attempts.append({
-                'url': url,
-                'status_code': status_code,
-                'parsed_rows': len(parsed_rows),
-            })
-            if status_code < 400 and parsed_rows:
-                source_url = url
-                live_rows = parsed_rows
-                break
-
-        if not live_rows:
-            error_message = (
-                f'MakerWorld source unreachable or returned no parsable models (last HTTP {last_status}).'
-                if last_status > 0
-                else 'MakerWorld source unreachable or returned no parsable models.'
-            )
-            if not allow_fallback:
-                return jsonify({
-                    'ok': False,
-                    'error': error_message,
-                    'error_code': 'LIVE_SOURCE_UNAVAILABLE',
-                    'diagnostics': {
-                        'query': query,
-                        'attempts': attempts,
-                        'reason': 'Upstream source denied, unavailable, or changed markup.',
-                    },
-                }), 502
-
-            fallback_rows = _build_internal_browse_rows(session.get('user_id'), query=query)
-            total_available = len(fallback_rows)
-            safe_offset = min(offset, total_available)
-            next_offset = min(safe_offset + page_size, total_available)
-            results = fallback_rows[safe_offset:next_offset]
-            return jsonify({
-                'ok': True,
-                'results': results,
-                'offset': safe_offset,
-                'next_offset': next_offset,
-                'has_more': next_offset < total_available,
-                'total_available_on_source': total_available,
-                'source': 'internal_featured_catalog_fallback',
-                'diagnostics': {
-                    'query': query,
-                    'returned_count': len(results),
-                    'reason': error_message,
-                    'attempts': attempts,
-                },
-            })
-
-        total_available = len(live_rows)
-        safe_offset = min(offset, total_available)
-        next_offset = min(safe_offset + page_size, total_available)
-        results = live_rows[safe_offset:next_offset]
-
-        return jsonify({
-            'ok': True,
-            'results': results,
-            'offset': safe_offset,
-            'next_offset': next_offset,
-            'has_more': next_offset < total_available,
-            'total_available_on_source': total_available,
-            'source': 'makerworld_public_web',
-            'diagnostics': {
-                'query': query,
-                'returned_count': len(results),
-                'source_url': source_url,
-            },
-        })
-    except Exception as exc:
-        app.logger.exception('live_browse_models_api failed')
-        return jsonify({
-            'ok': False,
-            'error': 'Unable to load live models from the server.',
-            'error_code': 'LIVE_BROWSE_INTERNAL_ERROR',
-            'diagnostics': {
-                'exception_type': type(exc).__name__,
-                'exception_message': str(exc),
-            },
-        }), 500
-
-
 @app.route('/api/user/updates')
 def user_updates_api():
     if not session.get('user_id'):
@@ -3757,6 +4373,37 @@ def login():
             return redirect(next_path)
     return render_template('login.html', next_path=next_path)
 
+# --- EGRESS DIAGNOSTICS ENDPOINT ---
+@app.route('/admin/egress-stats')
+def admin_egress_stats():
+    """Admin-only endpoint to view egress diagnostics and high-traffic routes."""
+    if not session.get('logged_in'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    
+    stats = _get_egress_stats()
+    sorted_routes = sorted(
+        stats['requests'].items(),
+        key=lambda x: x[1]['total_bytes'],
+        reverse=True
+    )
+    
+    return jsonify({
+        'ok': True,
+        'total_requests': stats['total_tracked_requests'],
+        'total_bytes': stats['total_tracked_bytes'],
+        'top_talkers': [
+            {
+                'route': route,
+                'count': data['count'],
+                'total_bytes': data['total_bytes'],
+                'avg_bytes': data['avg_bytes'],
+                'percent_of_total': round(100.0 * data['total_bytes'] / max(1, stats['total_tracked_bytes']), 2),
+            }
+            for route, data in sorted_routes[:20]
+        ],
+        'measurement_note': 'Tracking JSON/HTML responses only (not static assets)',
+    })
+
 @app.route('/dashboard')
 def dashboard():
     if not session.get('logged_in'): return redirect(url_for('login'))
@@ -3778,6 +4425,7 @@ def dashboard():
         'in cart': 0,
         'quoted': 1,
         'pending quote': 1,
+        'pending': 2,
         'requested': 2,
         'waiting for approval': 2,
         'approved': 2,
@@ -4032,8 +4680,7 @@ def reset_financials():
 @app.route('/extension-api/desktop-capture/push', methods=['POST'])
 def extension_push_desktop_capture_link():
     payload = request.get_json(silent=True) or {}
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized(payload)):
+    if not _extension_request_authorized(payload):
         return jsonify({'ok': False, 'error': 'Unauthorized extension API key.'}), 401
 
     model_url = str(payload.get('model_url') or payload.get('makerworld_link') or '').strip()
@@ -4056,8 +4703,7 @@ def extension_push_desktop_capture_link():
 @app.route('/extension-api/desktop-capture/poll', methods=['GET'])
 def extension_poll_desktop_capture_link():
     api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+    if not _extension_request_authorized({'api_key': api_key}):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
     try:
@@ -4085,8 +4731,7 @@ def extension_poll_desktop_capture_link():
 @app.route('/extension-api/confirm-capture', methods=['POST'])
 def extension_confirm_capture():
     payload = request.get_json(silent=True) or {}
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized(payload)):
+    if not _extension_request_authorized(payload):
         return jsonify({'ok': False, 'error': 'Unauthorized extension API key.'}), 401
 
     target_user_id = str(payload.get('target_user_id') or '').strip()
@@ -4172,8 +4817,24 @@ def extension_confirm_capture():
 
     raw_profile_customizations = payload.get('profile_customizations')
     profile_customizations = raw_profile_customizations if isinstance(raw_profile_customizations, list) else []
-    profile_customizations = [
-        {
+    normalized_profile_customizations = []
+    for item in profile_customizations:
+        if not isinstance(item, dict):
+            continue
+        sufficient_filaments_by_part = item.get('sufficient_filaments_by_part')
+        if not isinstance(sufficient_filaments_by_part, dict):
+            sufficient_filaments_by_part = {}
+        insufficient_filaments_by_part = item.get('insufficient_filaments_by_part')
+        if not isinstance(insufficient_filaments_by_part, dict):
+            insufficient_filaments_by_part = {}
+        insufficient_filaments = item.get('insufficient_filaments')
+        if not isinstance(insufficient_filaments, list):
+            insufficient_filaments = []
+        parts_configuration = item.get('parts_configuration')
+        if not isinstance(parts_configuration, list):
+            parts_configuration = []
+
+        normalized_profile_customizations.append({
             'profile_id': str(item.get('profile_id') or '').strip(),
             'profile_name': str(item.get('profile_name') or '').strip(),
             'is_default': bool(item.get('is_default')),
@@ -4183,24 +4844,24 @@ def extension_confirm_capture():
             'sufficient_filaments_by_part': {
                 str(k).strip(): [
                     str(n).strip()
-                    for n in (v if isinstance(v, list) else [])
+                    for n in v
                     if str(n).strip()
                 ]
-                for k, v in ((item.get('sufficient_filaments_by_part') if isinstance(item.get('sufficient_filaments_by_part'), dict) else {}).items())
-                if str(k).strip()
+                for k, v in sufficient_filaments_by_part.items()
+                if str(k).strip() and isinstance(v, list)
             },
             'insufficient_filaments_by_part': {
                 str(k).strip(): [
                     str(n).strip()
-                    for n in (v if isinstance(v, list) else [])
+                    for n in v
                     if str(n).strip()
                 ]
-                for k, v in ((item.get('insufficient_filaments_by_part') if isinstance(item.get('insufficient_filaments_by_part'), dict) else {}).items())
-                if str(k).strip()
+                for k, v in insufficient_filaments_by_part.items()
+                if str(k).strip() and isinstance(v, list)
             },
             'insufficient_filaments': [
                 str(n).strip()
-                for n in (item.get('insufficient_filaments') if isinstance(item.get('insufficient_filaments'), list) else [])
+                for n in insufficient_filaments
                 if str(n).strip()
             ],
             'parts_configuration': [
@@ -4208,13 +4869,11 @@ def extension_confirm_capture():
                     'part': str(p.get('part') or '').strip(),
                     'suggested_filament': str(p.get('suggested_filament') or '').strip(),
                 }
-                for p in (item.get('parts_configuration') if isinstance(item.get('parts_configuration'), list) else [])
+                for p in parts_configuration
                 if isinstance(p, dict)
             ],
-        }
-        for item in profile_customizations
-        if isinstance(item, dict)
-    ]
+        })
+    profile_customizations = normalized_profile_customizations
 
     profile_pricing = _normalize_profile_pricing(payload.get('profile_pricing'))
     if profile_pricing:
@@ -4284,8 +4943,7 @@ def extension_confirm_capture():
 @app.route('/extension-api/scrape-model-metrics', methods=['GET'])
 def extension_scrape_model_metrics():
     api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+    if not _extension_request_authorized({'api_key': api_key}):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
     model_url = str(request.args.get('model_url') or '').strip()
@@ -4306,6 +4964,7 @@ def extension_scrape_model_metrics():
                 'power_cost_per_hour': request.args.get('power_cost_per_hour'),
                 'profit_margin': request.args.get('profit_margin'),
             },
+            calc_result=calc_result,
         )
     except Exception as exc:
         profile_extract_error = str(exc)
@@ -4345,8 +5004,7 @@ def extension_scrape_model_metrics():
 @app.route('/extension-api/debug-model-text', methods=['GET'])
 def extension_debug_model_text():
     api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+    if not _extension_request_authorized({'api_key': api_key}):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
     model_url = str(request.args.get('model_url') or '').strip()
@@ -4403,32 +5061,80 @@ def extension_debug_model_text():
 @app.route('/extension-api/pricing-config', methods=['GET'])
 def extension_pricing_config():
     api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+    if not _extension_request_authorized({'api_key': api_key}):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     settings = _load_control_center_settings()
-    return jsonify({
+    response_data = {
         'ok': True,
         'base_service_fee': settings['base_service_fee'],
         'price_per_gram': settings['price_per_gram'],
         'power_cost_per_hour': settings['power_cost_per_hour'],
         'profit_margin': settings['profit_margin'],
-    })
+    }
+    # Cache pricing config for 1 hour (changes rarely)
+    resp = make_response(jsonify(response_data))
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
+
+# --- PAGINATED FEATURED ITEMS API (CACHEABLE) ---
+@app.route('/api/featured-items', methods=['GET'])
+def api_featured_items():
+    """
+    Paginated featured items endpoint with cache headers.
+    Query params: page (1-indexed), page_size (3-12, default 6)
+    """
+    user_id = session.get('user_id')
+    username = ''
+    
+    if user_id:
+        user = _get_user_by_id(user_id)
+        if user:
+            username = str(user.get('username') or '').strip()
+    
+    page = _to_int(request.args.get('page'), default=1, min_value=1)
+    page_size = _to_int(request.args.get('page_size'), default=6, min_value=3, max_value=12)
+    
+    # Fetch featured items that are visible to this user
+    all_featured = [
+        f for f in _get_all_featured_prints()
+        if _featured_item_visible_to_user(f, user_id or '', username)
+    ]
+    
+    total = len(all_featured)
+    total_pages = max(1, int(math.ceil(total / float(page_size))))
+    page = min(page, total_pages)
+    
+    start = (page - 1) * page_size
+    items_page = all_featured[start:start + page_size]
+    
+    response_data = {
+        'ok': True,
+        'items': items_page,
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'total_pages': total_pages,
+    }
+    
+    # Cache this response for 1 hour since featured items change rarely
+    resp = make_response(jsonify(response_data))
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 
 @app.route('/extension-api/app-data', methods=['GET'])
 def extension_app_data():
     api_key = request.args.get('api_key') or request.headers.get('X-Api-Key', '')
-    desktop_client = request.headers.get('X-Desktop-Client') == '1'
-    if (not desktop_client) and (not _extension_api_authorized({'api_key': api_key})):
+    if not _extension_request_authorized({'api_key': api_key}):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-    db = get_db()
+    # Optimized: Only load users and settings, not full db
     users = [
         {'id': str(u.get('id') or ''), 'username': str(u.get('username') or '')}
-        for u in db.get('users', [])
+        for u in _get_all_users()
         if u.get('id') and u.get('username')
     ]
-    settings = db.get('settings', {})
+    settings = _get_settings()
     filaments, _ = _normalize_filaments(settings)
     filament_data = [
         {
@@ -4760,7 +5466,7 @@ def add_featured_print():
     show_in_slideshow = _to_bool(request.form.get('show_in_slideshow'), default=True)
 
     if not (title and image_url and makerworld_url):
-        return _redirect_back_to_dashboard('#suggested-section')
+        return _redirect_back_to_dashboard('#home-section')
 
     new_item = {
         'id': str(uuid.uuid4())[:10],
@@ -4784,7 +5490,7 @@ def add_featured_print():
 
     db.setdefault('featured_prints', []).append(new_item)
     save_db(db)
-    return _redirect_back_to_dashboard('#suggested-section')
+    return _redirect_back_to_dashboard('#home-section')
 
 
 @app.route('/dashboard/featured/edit/<item_id>', methods=['POST'])
@@ -4794,7 +5500,7 @@ def edit_featured_print(item_id):
     items = db.get('featured_prints', [])
     item = next((f for f in items if f.get('id') == item_id), None)
     if not item:
-        return _redirect_back_to_dashboard('#suggested-section')
+        return _redirect_back_to_dashboard('#home-section')
 
     title = request.form.get('title', '').strip()
     image_url = request.form.get('image_url', '').strip()
@@ -4847,7 +5553,7 @@ def edit_featured_print(item_id):
     show_in_slideshow = _to_bool(request.form.get('show_in_slideshow'), default=_to_bool(item.get('show_in_slideshow'), default=False))
 
     if not (title and image_url and makerworld_url):
-        return _redirect_back_to_dashboard('#suggested-section')
+        return _redirect_back_to_dashboard('#home-section')
 
     item['title'] = title
     item['image_url'] = image_url
@@ -4866,7 +5572,7 @@ def edit_featured_print(item_id):
     item['target_users'] = target_users
 
     save_db(db)
-    return _redirect_back_to_dashboard('#suggested-section')
+    return _redirect_back_to_dashboard('#home-section')
 
 @app.route('/dashboard/featured/delete/<item_id>', methods=['POST'])
 def delete_featured_print(item_id):
@@ -4874,7 +5580,7 @@ def delete_featured_print(item_id):
     db = get_db()
     db['featured_prints'] = [f for f in db.get('featured_prints', []) if f.get('id') != item_id]
     save_db(db)
-    return _redirect_back_to_dashboard('#suggested-section')
+    return _redirect_back_to_dashboard('#home-section')
 
 @app.route('/dashboard/featured/toggle-slideshow/<item_id>', methods=['POST'])
 def toggle_featured_slideshow(item_id):
@@ -4990,41 +5696,53 @@ def delete_print_profile(profile_id):
 
 @app.route('/create_featured_order', methods=['POST'])
 def create_featured_order():
-    if not session.get('user_id'):
-        return jsonify({'error': 'Not authorized'}), 401
-
+    app.logger.info("[CART] POST /create_featured_order - START")
     data = request.get_json() or {}
+    app.logger.info(f"[CART] Request data: {data}")
+    auth_user = _extension_request_user(data)
+    app.logger.info(f"[CART] Auth user: {auth_user}")
+    if not auth_user:
+        app.logger.warning("[CART] ERROR: Not authorized")
+        return jsonify({'error': 'Not authorized'}), 401
+    _sync_extension_session(auth_user)
+    owner_id = str(auth_user.get('user_id') or '').strip()
+    owner_username = str(auth_user.get('username') or '').strip()
     title = (data.get('title') or '').strip()
     makerworld_link = (data.get('makerworld_link') or '').strip()
     try:
         price_val = float(data.get('price', 0))
     except Exception:
         price_val = 0
+    app.logger.info(f"[CART] Title: {title}, Link: {makerworld_link}, Price: {price_val}")
 
     # allow featured items to suggest a specific profile and/or multi-color mapping
-    profile_choice = (data.get('profile') or data.get('suggested_profile') or '').strip() or 'Standard'
+    incoming_profile = data.get('profile')
+    profile_choice = incoming_profile if incoming_profile is not None else data.get('suggested_profile')
+    profile_choice = '' if profile_choice is None else str(profile_choice)
     suggested_colors = (data.get('suggested_colors') or data.get('filament') or '').strip()
     category_choices = data.get('category_choices') or []
     if not isinstance(category_choices, list):
         category_choices = []
 
-    if not title or not makerworld_link or price_val <= 0:
+    if not title or not makerworld_link:
+        app.logger.warning("[CART] ERROR: Missing required fields")
         return jsonify({'error': 'Missing required fields'}), 400
 
+    app.logger.info("[CART] Getting database...")
     db = get_db()
-    owner_id = session.get('user_id')
+    app.logger.info(f"[CART] Got database, checking for duplicates...")
     now = datetime.utcnow()
     for existing in db.get('orders', []):
         if existing.get('owner') != owner_id:
             continue
         status_key = str(existing.get('status') or '').strip().lower()
-        if status_key not in {'quoted', 'in cart', 'requested', 'pending quote'}:
+        if status_key not in {'quoted', 'in cart', 'pending quote', 'pending'}:
             continue
         if str(existing.get('link') or '').strip() != makerworld_link:
             continue
         if str(existing.get('name') or existing.get('product_name') or '').strip() != title:
             continue
-        if str(existing.get('profile') or '').strip() != profile_choice:
+        if str(existing.get('profile') or '') != profile_choice:
             continue
         if str(existing.get('color') or '').strip() != suggested_colors:
             continue
@@ -5040,7 +5758,7 @@ def create_featured_order():
         'id': order_id,
         'name': title,
         'nickname': None,
-        'owner': session.get('user_id'),
+        'owner': owner_id,
         'product_name': title,
         'admin_note': '',
         'messages': [],
@@ -5060,7 +5778,8 @@ def create_featured_order():
     }
 
     db.setdefault('orders', []).append(new_order)
-    username = session.get('username') or owner_id or 'A user'
+    username = owner_username or owner_id or 'A user'
+    app.logger.info(f"[CART] Creating order {order_id}, adding admin notification...")
     _add_admin_notification(
         db,
         notif_type='featured_order',
@@ -5069,8 +5788,13 @@ def create_featured_order():
         order_id=order_id,
         actor_user_id=owner_id,
     )
-    save_db(db)
-
+    app.logger.info(f"[CART] Saving database with order {order_id}...")
+    try:
+        save_db(db, raise_on_error=True)
+    except Exception as exc:
+        app.logger.exception(f"[CART] ERROR: Failed to persist order {order_id}: {exc}")
+        return jsonify({'error': 'Failed to save order to database.'}), 500
+    app.logger.info(f"[CART] SUCCESS: Order {order_id} saved")
     return jsonify({'order_id': order_id})
 
 @app.route('/update_order/<order_id>', methods=['POST'])
@@ -5371,6 +6095,9 @@ app.register_blueprint(
 
 
 if __name__ == '__main__':
+    # Validate required environment configuration before starting
+    _validate_startup_environment()
+    
     parser = argparse.ArgumentParser(description='Run the 3D print orders app.')
     parser.add_argument('--import', dest='import_path', help='Import JSONBin dump (exported JSON) into Postgres (full replace).')
     parser.add_argument('--port', type=int, default=5000, help='Port to run the Flask server on')

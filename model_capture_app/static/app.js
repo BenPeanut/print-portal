@@ -14,8 +14,6 @@
     const els = {
         settingsForm: document.getElementById('settings-form'),
         settingsStatus: document.getElementById('settings-status'),
-        copyBookmarklet: document.getElementById('copy-bookmarklet'),
-        bookmarklet: document.getElementById('bookmarklet'),
         captureEmpty: document.getElementById('capture-empty'),
         confirmForm: document.getElementById('confirm-form'),
         confirmStatus: document.getElementById('confirm-status'),
@@ -83,15 +81,6 @@
     }
 
     setInterval(pollLatestCapture, 3000);
-
-    els.copyBookmarklet?.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(els.bookmarklet.value || '');
-            setStatus(els.settingsStatus, 'Bookmarklet copied.', false);
-        } catch (err) {
-            setStatus(els.settingsStatus, 'Copy failed. Select and copy manually.', true);
-        }
-    });
 
     els.settingsForm?.addEventListener('submit', async (evt) => {
         evt.preventDefault();

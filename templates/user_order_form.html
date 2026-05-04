@@ -301,12 +301,89 @@
         gap: 8px;
     }
 
-    .profile-pill {
+    .profile-select-wrap {
+        display: none;
+    }
+
+    .profile-select {
+        width: 100%;
         border: 1px solid #cfe0d7;
         background: #f7fcf9;
         color: #235743;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 0.9rem;
+        font-weight: 700;
+    }
+
+    .ts-wrapper.single .ts-control {
+        border: 1px solid #cfe0d7;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #f9fdfb 0%, #f2faf6 100%);
+        padding: 9px 11px;
+        min-height: 44px;
+        box-shadow: 0 4px 12px rgba(21, 85, 57, 0.08);
+    }
+
+    .ts-wrapper.single .ts-control .item {
+        color: #235743;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+    }
+
+    .ts-dropdown {
+        border: 1px solid #cfe0d7;
+        border-radius: 12px;
+        overflow: hidden;
+        z-index: 2400 !important;
+        box-shadow: 0 16px 30px rgba(10, 44, 31, 0.22);
+        margin-top: 6px;
+    }
+
+    .profile-option-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .profile-option-name {
+        color: #163f2f;
+        font-weight: 700;
+    }
+
+    .profile-option-price {
+        background: #e7f8ef;
+        color: #176241;
+        border: 1px solid #bfe7d0;
         border-radius: 999px;
-        padding: 8px 14px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        padding: 3px 8px;
+        white-space: nowrap;
+    }
+
+    .profile-item-chip {
+        background: #00ae42;
+        color: #ffffff !important;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        padding: 6px 16px;
+    }
+
+    .ts-dropdown .option.active {
+        background: #eef8f3;
+        color: #163f2f;
+    }
+
+    .profile-pill {
+        border: 1px solid #4caf80;
+        background: #4caf80;
+        color: #ffffff;
+        border-radius: 999px;
+        padding: 10px 20px;
         font-size: 0.85rem;
         font-weight: 800;
         cursor: pointer;
@@ -314,15 +391,15 @@
     }
 
     .profile-pill:hover {
-        background: #eef8f3;
-        border-color: #b9d8c9;
+        background: #3a9e6f;
+        border-color: #3a9e6f;
     }
 
     .profile-pill.active {
         background: #00ae42;
         color: #ffffff;
         border-color: #00ae42;
-        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.26);
+        box-shadow: 0 8px 18px rgba(0, 174, 66, 0.3);
     }
 
     .parts-stack {
@@ -710,6 +787,9 @@
             <section class="config-section">
                 <p class="config-section-title">Print Profile</p>
                 <div id="featured-modal-profile-pills" class="profile-pills"></div>
+                <div id="featured-modal-profile-select-wrap" class="profile-select-wrap">
+                    <select id="featured-modal-profile-select" class="profile-select"></select>
+                </div>
             </section>
 
             <section class="config-section">
@@ -729,6 +809,7 @@
 (function() {
     let addCartInProgress = false;
     let modalConfirmInProgress = false;
+    let profileSelectControl = null;
     const modalState = {
         item: null,
         profiles: [],
@@ -912,16 +993,39 @@
 
     function renderModalProfiles() {
         const wrap = document.getElementById('featured-modal-profile-pills');
-        if (!wrap) return;
-        wrap.innerHTML = '';
+        const selectWrap = document.getElementById('featured-modal-profile-select-wrap');
+        const selectEl = document.getElementById('featured-modal-profile-select');
+        if (!wrap || !selectWrap || !selectEl) return;
 
-        modalState.profiles.forEach(function (profileObj) {
+        const profiles = modalState.profiles || [];
+        wrap.innerHTML = '';
+        if (profileSelectControl) {
+            profileSelectControl.destroy();
+            profileSelectControl = null;
+        }
+        selectEl.innerHTML = '';
+
+        const useDropdown = profiles.length > 4;
+        wrap.style.display = useDropdown ? 'none' : 'flex';
+        selectWrap.style.display = useDropdown ? 'block' : 'none';
+
+        profiles.forEach(function (profileObj) {
             const profileName = profileObj.name || '';
+            const profilePrice = Number(profileObj.price || 0);
+            const label = profilePrice > 0 ? profileName + ' — Rp' + profilePrice.toLocaleString('id-ID') : profileName;
+
+            if (useDropdown) {
+                const opt = document.createElement('option');
+                opt.value = profileName;
+                opt.textContent = label;
+                opt.selected = modalState.profile === profileName;
+                selectEl.appendChild(opt);
+                return;
+            }
+
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'profile-pill' + (modalState.profile === profileName ? ' active' : '');
-            const profilePrice = Number(profileObj.price || 0);
-            const label = profilePrice > 0 ? profileName + ' - Rp' + profilePrice.toLocaleString('id-ID') : profileName;
             btn.textContent = label;
             btn.addEventListener('click', function () {
                 modalState.profile = profileName;
@@ -931,6 +1035,53 @@
             });
             wrap.appendChild(btn);
         });
+
+        if (useDropdown) {
+            selectEl.onchange = function () {
+                const chosen = String(selectEl.value || '').trim();
+                const matched = profiles.find(function (p) { return String(p.name || '').trim() === chosen; }) || profiles[0] || null;
+                if (!matched) return;
+                modalState.profile = matched.name;
+                modalState.profileObj = matched;
+                renderModalPrice();
+            };
+
+            if (typeof window.TomSelect === 'function') {
+                profileSelectControl = new window.TomSelect(selectEl, {
+                    create: false,
+                    maxItems: 1,
+                    controlInput: null,
+                    searchField: ['text'],
+                    dropdownParent: 'body',
+                    render: {
+                        option: function (data, escape) {
+                            const raw = String(data.text || '');
+                            const parts = raw.split(' — ');
+                            const name = escape(parts[0] || raw);
+                            const price = parts[1] ? escape(parts[1]) : '';
+                            return '<div class="profile-option-row">'
+                                + '<span class="profile-option-name">' + name + '</span>'
+                                + (price ? '<span class="profile-option-price">' + price + '</span>' : '')
+                                + '</div>';
+                        },
+                        item: function (data, escape) {
+                            const raw = String(data.text || '');
+                            const parts = raw.split(' — ');
+                            const name = escape(parts[0] || raw);
+                            return '<div class="profile-item-chip">' + name + '</div>';
+                        },
+                    },
+                });
+                profileSelectControl.on('change', function (value) {
+                    const chosen = String(value || '').trim();
+                    const matched = profiles.find(function (p) { return String(p.name || '').trim() === chosen; }) || profiles[0] || null;
+                    if (!matched) return;
+                    modalState.profile = matched.name;
+                    modalState.profileObj = matched;
+                    renderModalPrice();
+                });
+            }
+        }
     }
 
     function renderModalParts() {
@@ -991,7 +1142,11 @@
         modalState.parts.forEach(function (part) {
             modalState.selections[part.key] = part.suggested || '';
         });
-        modalState.profiles = Array.isArray(modalItem.profiles) && modalItem.profiles.length ? modalItem.profiles : [{ name: 'Standard', price: Number(modalItem.estimatedPrice || 0), is_default: true }];
+        modalState.profiles = Array.isArray(modalItem.profiles) && modalItem.profiles.length
+            ? modalItem.profiles
+            : (String(modalItem.suggested_profile || '')
+                ? [{ name: String(modalItem.suggested_profile || ''), price: Number(modalItem.estimatedPrice || 0), is_default: true }]
+                : []);
         modalState.profileObj = modalState.profiles.find(function (p) { return p.is_default; }) || modalState.profiles[0];
         modalState.profile = modalState.profileObj ? modalState.profileObj.name : '';
 
@@ -1228,6 +1383,8 @@
                 estimatedPrice: dynamicPrice,
             };
 
+            closeOrderConfigModal();
+
             if (window.addToCart) {
                 await window.addToCart(cartItem);
             } else {
@@ -1237,8 +1394,6 @@
                     localStorage.setItem('bcart_v1', JSON.stringify(cartData));
                 } catch (e) {}
             }
-
-            closeOrderConfigModal();
             if (window.openCartDrawer) window.openCartDrawer();
         } finally {
             modalConfirmInProgress = false;
