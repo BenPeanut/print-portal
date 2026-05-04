@@ -1,14 +1,15 @@
-const STORAGE_KEYS = {
+﻿const STORAGE_KEYS = {
   settings: "capture_settings",
   latest: "latest_capture",
   authToken: "extension_auth_token",
 };
 
-const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com";
-const HOSTED_EXTENSION_SETUP_URL = `${HOSTED_PORTAL_BASE}/extension-install`;
+const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com/";
+const CHROMEBOOK_API_BASE = "https://print-portal-qm9p.onrender.com/";
+const HOSTED_EXTENSION_SETUP_URL = `${HOSTED_PORTAL_BASE}extension-install`;
 
 const DEFAULT_SETTINGS = {
-  apiBase: "http://127.0.0.1:5000",
+  apiBase: CHROMEBOOK_API_BASE,
   apiKey: "",
   targetUserId: "",
   targetUsername: "",
@@ -22,13 +23,12 @@ const DEFAULT_SETTINGS = {
 };
 
 function normalizeLocalApiBase(raw) {
-  const fallback = DEFAULT_SETTINGS.apiBase;
+  const fallback = CHROMEBOOK_API_BASE;
   const text = String(raw || "").trim() || fallback;
   try {
     const parsed = new URL(text);
-    const host = String(parsed.hostname || "").toLowerCase();
-    if (host !== "127.0.0.1" && host !== "localhost") {
-      return fallback;
+    if (!/^https?:$/i.test(parsed.protocol)) {
+      return fallback.replace(/\/$/, "");
     }
     return `${parsed.protocol}//${parsed.host}`.replace(/\/$/, "");
   } catch {
@@ -319,7 +319,7 @@ async function clearBadge() {
 }
 
 function buildDesktopCapturePushUrl(apiBase) {
-  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000");
+  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || CHROMEBOOK_API_BASE);
   return `${base}/extension-api/desktop-capture/push`;
 }
 
@@ -329,7 +329,7 @@ async function openIsolatedQuickPopup() {
 }
 
 function buildDesktopCaptureFrameUrl(apiBase, modelUrl) {
-  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000");
+  const base = normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || CHROMEBOOK_API_BASE);
   const params = new URLSearchParams({
     source: "extension_overlay",
     embedded: "1",
@@ -346,7 +346,7 @@ function buildDesktopCaptureFrameUrl(apiBase, modelUrl) {
 function buildOrderOverlayFrameUrl(apiBase, modelUrl, authToken) {
   const params = new URLSearchParams({
     model_url: String(modelUrl || "").trim(),
-    api_base: normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || "http://127.0.0.1:5000"),
+    api_base: normalizeLocalApiBase(apiBase || DEFAULT_SETTINGS.apiBase || CHROMEBOOK_API_BASE),
     _ts: String(Date.now()),
   });
   if (String(authToken || "").trim()) {

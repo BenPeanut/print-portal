@@ -24,6 +24,37 @@ function Write-Log {
     Add-Content -Path $logPath -Value $logEntry -ErrorAction SilentlyContinue
 }
 
+function Get-PythonLaunchCommand {
+    param([string]$ProjectRoot)
+
+    $venvPythonw = Join-Path $ProjectRoot '.venv\Scripts\pythonw.exe'
+    if (Test-Path $venvPythonw) {
+        return @{ Path = $venvPythonw; Args = @() }
+    }
+
+    $venvPython = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
+    if (Test-Path $venvPython) {
+        return @{ Path = $venvPython; Args = @() }
+    }
+
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pyLauncher -and $pyLauncher.Source) {
+        return @{ Path = $pyLauncher.Source; Args = @('-3') }
+    }
+
+    $pythonwCmd = Get-Command pythonw -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pythonwCmd -and $pythonwCmd.Source) {
+        return @{ Path = $pythonwCmd.Source; Args = @() }
+    }
+
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pythonCmd -and $pythonCmd.Source) {
+        return @{ Path = $pythonCmd.Source; Args = @() }
+    }
+
+    return $null
+}
+
 Write-Log "=========================================="
 Write-Log "MakerWorld Extension Bootstrap Setup"
 Write-Log "=========================================="
@@ -115,16 +146,12 @@ catch {
 # Step 4: Launch backend immediately for verification
 Write-Log "Step 4: Launching Flask backend for immediate testing"
 try {
-    $pythonw = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'
-    if (-not (Test-Path $pythonw)) {
-        Write-Log "WARNING: pythonw.exe not found, will try python.exe" "WARN"
-        $pythonw = Join-Path $projectRoot '.venv\Scripts\python.exe'
-    }
-    
-    if (-not (Test-Path $pythonw)) {
-        Write-Log "ERROR: Python executable not found at $pythonw" "ERROR"
+    $pythonLaunch = Get-PythonLaunchCommand -ProjectRoot $projectRoot
+    if (-not $pythonLaunch) {
+        Write-Log "ERROR: Python executable not found (.venv, py launcher, and PATH were checked)" "ERROR"
         throw "Python not found"
     }
+    Write-Log "Python executable resolved: $($pythonLaunch.Path)"
     
     # Kill any existing Flask processes on port 5000
     $listeningPids = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
@@ -136,7 +163,12 @@ try {
     Start-Sleep -Milliseconds 500
     
     # Start Flask backend
-    Start-Process -FilePath $pythonw -ArgumentList @('app.py', '--port', '5000') -WorkingDirectory $projectRoot -WindowStyle Hidden
+    $launchArgs = @()
+    if ($pythonLaunch.Args) {
+        $launchArgs += $pythonLaunch.Args
+    }
+    $launchArgs += @('app.py', '--port', '5000')
+    Start-Process -FilePath $pythonLaunch.Path -ArgumentList $launchArgs -WorkingDirectory $projectRoot -WindowStyle Hidden
     
     Write-Log "[OK] Flask backend process launched (port 5000)"
     

@@ -57,8 +57,7 @@ function getPlatformInfoSafe() {
 }
 
 async function isChromeOS() {
-  return true; // TESTING: force Chromebook mode — revert before deploying
-  const info = await getPlatformInfoSafe(); // eslint-disable-line no-unreachable
+  const info = await getPlatformInfoSafe();
   return String((info && info.os) || "").toLowerCase() === "cros";
 }
 
