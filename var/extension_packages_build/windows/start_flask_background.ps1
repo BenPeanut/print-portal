@@ -3,53 +3,77 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectRoot
 
-function Get-PythonLaunchCommand {
-    param([string]$ProjectRoot)
+function Unblock-BackendArtifacts {
+    param([string]$Root)
 
-    $venvPythonw = Join-Path $ProjectRoot '.venv\Scripts\pythonw.exe'
-    if (Test-Path $venvPythonw) {
-        return @{ Path = $venvPythonw; Args = @() }
+    $paths = @(
+        (Join-Path $Root 'backend'),
+        (Join-Path $Root 'dist')
+    )
+
+    foreach ($path in $paths) {
+        if (-not (Test-Path $path)) {
+            continue
+        }
+        try {
+            if (Test-Path $path -PathType Container) {
+                Get-ChildItem -Path $path -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+                    Unblock-File -Path $_.FullName -ErrorAction SilentlyContinue
+                }
+            }
+            else {
+                Unblock-File -Path $path -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            # Best-effort unblock only.
+        }
+    }
+}
+
+function Resolve-BackendCommand {
+    param(
+        [string]$Root,
+        [int]$Port
+    )
+
+    $bundledExe = Join-Path $Root 'backend\PrintingBusinessApp.exe'
+    if (Test-Path $bundledExe) {
+        return @{
+            filePath = $bundledExe
+            args = @('--no-gui', '--port', "$Port", '--open-path', '/desktop-capture')
+            mode = 'bundled-exe'
+        }
     }
 
-    $venvPython = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
-    if (Test-Path $venvPython) {
-        return @{ Path = $venvPython; Args = @() }
+    $distExe = Join-Path $Root 'dist\PrintingBusinessApp.exe'
+    if (Test-Path $distExe) {
+        return @{
+            filePath = $distExe
+            args = @('--no-gui', '--port', "$Port", '--open-path', '/desktop-capture')
+            mode = 'dist-exe'
+        }
     }
 
-    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pyLauncher -and $pyLauncher.Source) {
-        return @{ Path = $pyLauncher.Source; Args = @('-3') }
+    $pythonw = Join-Path $Root '.venv\Scripts\pythonw.exe'
+    if ((Test-Path $pythonw) -and (Test-Path (Join-Path $Root 'app.py'))) {
+        return @{
+            filePath = $pythonw
+            args = @('app.py', '--port', "$Port")
+            mode = 'venv-pythonw'
+        }
     }
 
-    $pythonwCmd = Get-Command pythonw -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pythonwCmd -and $pythonwCmd.Source) {
-        return @{ Path = $pythonwCmd.Source; Args = @() }
-    }
-
-    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pythonCmd -and $pythonCmd.Source) {
-        return @{ Path = $pythonCmd.Source; Args = @() }
+    $python = Join-Path $Root '.venv\Scripts\python.exe'
+    if ((Test-Path $python) -and (Test-Path (Join-Path $Root 'app.py'))) {
+        return @{
+            filePath = $python
+            args = @('app.py', '--port', "$Port")
+            mode = 'venv-python'
+        }
     }
 
     return $null
-}
-
-function Test-PortOpen {
-    param([int]$Port)
-    try {
-        $client = New-Object System.Net.Sockets.TcpClient
-        $iar = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
-        $ok = $iar.AsyncWaitHandle.WaitOne(400)
-        if ($ok -and $client.Connected) {
-            $client.EndConnect($iar) | Out-Null
-            $client.Close()
-            return $true
-        }
-        $client.Close()
-        return $false
-    } catch {
-        return $false
-    }
 }
 
 $port = 5000
@@ -67,16 +91,40 @@ if ($listeningPids) {
     Start-Sleep -Milliseconds 500
 }
 
-$pythonLaunch = Get-PythonLaunchCommand -ProjectRoot $projectRoot
-if (-not $pythonLaunch) {
-    throw 'Python executable not found. Checked .venv, py launcher, and PATH.'
+$command = Resolve-BackendCommand -Root $projectRoot -Port $port
+if (-not $command) {
+    throw @"
+No runnable backend was found.
+
+Expected one of:
+  1) backend\PrintingBusinessApp.exe (installer bundle runtime)
+  2) dist\PrintingBusinessApp.exe (local built runtime)
+  3) .venv\Scripts\pythonw.exe + app.py (source/dev runtime)
+
+This usually means the extension package was installed without a backend runtime.
+Rebuild the package using build_extension_packages.ps1 and redistribute that ZIP.
+"@
 }
 
-$launchArgs = @()
-if ($pythonLaunch.Args) {
-    $launchArgs += $pythonLaunch.Args
+Unblock-BackendArtifacts -Root $projectRoot
+try {
+    Start-Process -FilePath $command.filePath -ArgumentList $command.args -WorkingDirectory $projectRoot -WindowStyle Hidden -ErrorAction Stop
 }
-$launchArgs += @('app.py', '--port', "$port")
+catch {
+    $message = @"
+Unable to start backend runtime.
 
-Start-Process -FilePath $pythonLaunch.Path -ArgumentList $launchArgs -WorkingDirectory $projectRoot -WindowStyle Hidden
-Write-Host "Started Flask app in background on 127.0.0.1:$port"
+Executable: $($command.filePath)
+Mode: $($command.mode)
+
+Windows may still be blocking this downloaded EXE.
+Try one of these, then run Setup.bat again:
+  1) Right-click backend\\PrintingBusinessApp.exe -> Properties -> check Unblock -> Apply
+  2) In PowerShell: Unblock-File .\\backend\\PrintingBusinessApp.exe
+  3) If antivirus blocked it, allow/restore the file and rerun setup
+
+Original error: $($_.Exception.Message)
+"@
+    throw $message
+}
+Write-Host "Started Flask app in background on 127.0.0.1:$port (mode: $($command.mode))"

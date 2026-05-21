@@ -1,137 +1,161 @@
-# Build Extension Packages
-# Copies source extension to each platform build folder and applies platform-specific patches.
-# Run from the project root: .\build_extension_packages.ps1
-#
-# Platforms produced:
-#   var/extension_packages_build/windows/makerworld_capture_extension/
-#   var/extension_packages_build/macos/makerworld_capture_extension/
-#   var/extension_packages_build/chromebook/makerworld_capture_extension/
-#
-# Chromebook build: replaces localhost defaults with the hosted portal URL.
-# Windows/macOS builds: keep localhost defaults (local Flask backend required).
-
 $ErrorActionPreference = 'Stop'
 
-$projectRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourceExt    = Join-Path $projectRoot 'makerworld_capture_extension'
-$buildBase    = Join-Path $projectRoot 'var\extension_packages_build'
+Write-Host 'Extension packaging is no longer supported. The MakerWorld capture workflow is now integrated into the desktop app.' -ForegroundColor Yellow
+Write-Host 'Run .\run_app.ps1 or python main.py to start the desktop app.' -ForegroundColor Yellow
+return
 
-$hostedPortal = 'https://print-portal-qm9p.onrender.com/'
-
-$platforms = @('windows', 'macos', 'chromebook')
-
-function Write-Step {
-    param([string]$Message)
-    Write-Host ""
-    Write-Host ">> $Message" -ForegroundColor Cyan
+$downloadsDir = Join-Path $projectRoot 'static\downloads'
+if (-not (Test-Path $downloadsDir)) {
+    New-Item -ItemType Directory -Path $downloadsDir -Force | Out-Null
 }
 
-function Copy-ExtensionSource {
-    param([string]$DestDir)
-    if (Test-Path $DestDir) {
-        Remove-Item -Recurse -Force $DestDir
-    }
-    Copy-Item -Recurse -Force $sourceExt $DestDir
+$stageRoot = Join-Path $projectRoot 'var\extension_package_stage'
+if (Test-Path $stageRoot) {
+    Remove-Item $stageRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+
+function New-StageDir {
+    param([string]$Name)
+    $path = Join-Path $stageRoot $Name
+    New-Item -ItemType Directory -Path $path -Force | Out-Null
+    return $path
 }
 
-function Patch-ChromebookBackground {
-    param([string]$BackgroundJs)
+function Build-WindowsBundle {
+    $windowsStage = New-StageDir -Name 'windows'
 
-    $content = [System.IO.File]::ReadAllText($BackgroundJs, [System.Text.Encoding]::UTF8)
+    $required = @(
+        'makerworld_capture_extension',
+        'Setup.bat',
+        'bootstrap_extension_setup.ps1',
+        'start_flask_background.ps1',
+        'enable_flask_autostart.ps1',
+        'disable_flask_autostart.ps1',
+        'EXTENSION_SETUP.txt'
+    )
 
-    # Normalize to LF so all string replacements work regardless of original line endings
-    $content = $content.Replace("`r`n", "`n")
-
-    # 1. HOSTED_PORTAL_BASE - ensure trailing slash
-    $content = $content.Replace(
-        'const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com";',
-        'const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com/";')
-
-    # 2. Add CHROMEBOOK_API_BASE after HOSTED_PORTAL_BASE (idempotent)
-    if (-not $content.Contains('const CHROMEBOOK_API_BASE')) {
-        $content = $content.Replace(
-            'const HOSTED_PORTAL_BASE = "https://print-portal-qm9p.onrender.com/";',
-            "const HOSTED_PORTAL_BASE = `"https://print-portal-qm9p.onrender.com/`";`nconst CHROMEBOOK_API_BASE = `"https://print-portal-qm9p.onrender.com/`";")
-    }
-
-    # 3. Fix HOSTED_EXTENSION_SETUP_URL double-slash
-    $content = $content.Replace(
-        'const HOSTED_EXTENSION_SETUP_URL = `${HOSTED_PORTAL_BASE}/extension-install`;',
-        'const HOSTED_EXTENSION_SETUP_URL = `${HOSTED_PORTAL_BASE}extension-install`;')
-
-    # 4. Replace localhost default in DEFAULT_SETTINGS
-    $content = $content.Replace(
-        'apiBase: "http://127.0.0.1:5000"',
-        'apiBase: CHROMEBOOK_API_BASE')
-
-    # 5. Replace remaining "http://127.0.0.1:5000" string literals
-    $content = $content.Replace(
-        '"http://127.0.0.1:5000"',
-        'CHROMEBOOK_API_BASE')
-
-    # 6. Point normalizeLocalApiBase fallback to CHROMEBOOK_API_BASE
-    $content = $content.Replace(
-        'const fallback = DEFAULT_SETTINGS.apiBase;',
-        'const fallback = CHROMEBOOK_API_BASE;')
-
-    # 7. Loosen the host restriction: replace the localhost-only guard with a
-    #    protocol check so any valid https?:// URL is accepted
-    $content = $content.Replace(
-        '    const host = String(parsed.hostname || "").toLowerCase();' + "`n" +
-        '    if (host !== "127.0.0.1" && host !== "localhost") {' + "`n" +
-        '      return fallback;' + "`n" +
-        '    }',
-        '    if (!/^https?:$/i.test(parsed.protocol)) {' + "`n" +
-        '      return fallback.replace(/\/$/, "");' + "`n" +
-        '    }')
-
-    # 8. Remove the debug force-true line in isChromeOS if it crept back in
-    #    (source file should already have this removed; this is a safety pass)
-    $debugLine  = '  return true; // TESTING:'
-    if ($content.Contains($debugLine)) {
-        $lines = $content -split "`n"
-        $filtered = $lines | Where-Object { -not $_.TrimStart().StartsWith('return true; // TESTING:') -and
-                                             -not $_.Contains('eslint-disable-line no-unreachable') }
-        $content = $filtered -join "`n"
-    }
-
-    [System.IO.File]::WriteAllText($BackgroundJs, $content, [System.Text.Encoding]::UTF8)
-}
-
-# == Main ==
-
-Write-Step "Building extension packages from source: $sourceExt"
-
-foreach ($platform in $platforms) {
-    Write-Step "[$platform] Copying source..."
-    $destExt = Join-Path $buildBase "$platform\makerworld_capture_extension"
-    Copy-ExtensionSource -DestDir $destExt
-    Write-Host "  Copied to: $destExt"
-
-    if ($platform -eq 'chromebook') {
-        Write-Step "[chromebook] Patching background.js for hosted portal..."
-        $bgJs = Join-Path $destExt 'background.js'
-        Patch-ChromebookBackground -BackgroundJs $bgJs
-        Write-Host "  API base locked to: $hostedPortal"
-
-        # Verify no localhost strings remain
-        $check = Get-Content -Raw $bgJs
-        if ($check -match '127\.0\.0\.1') {
-            Write-Host '  WARNING: 127.0.0.1 still found in patched file -- check regex' -ForegroundColor Yellow
-        } else {
-            Write-Host "  [OK] No localhost/127 references remain" -ForegroundColor Green
+    foreach ($item in $required) {
+        $src = Join-Path $projectRoot $item
+        if (-not (Test-Path $src)) {
+            throw "Missing required file/folder for Windows bundle: $src"
         }
+        Copy-Item -Path $src -Destination $windowsStage -Recurse -Force
+    }
+
+    $backendExe = Join-Path $projectRoot 'dist\PrintingBusinessApp.exe'
+    if (-not (Test-Path $backendExe)) {
+        throw @"
+Missing backend runtime: dist\\PrintingBusinessApp.exe
+Run .\\build_webview_exe.ps1 first, then rerun this packaging script.
+"@
+    }
+
+    $backendDir = Join-Path $windowsStage 'backend'
+    New-Item -ItemType Directory -Path $backendDir -Force | Out-Null
+    Copy-Item -Path $backendExe -Destination (Join-Path $backendDir 'PrintingBusinessApp.exe') -Force
+
+    $backendReadme = @'
+Bundled backend runtime for MakerWorld extension.
+
+This executable is started by start_flask_background.ps1 with:
+  PrintingBusinessApp.exe --no-gui --port 5000 --open-path /desktop-capture
+
+Do not remove this file. Without it, extension desktop mode will not start on machines without source code.
+'@
+    Set-Content -Path (Join-Path $backendDir 'README.txt') -Value $backendReadme -Encoding UTF8
+
+    $zipPath = Join-Path $downloadsDir 'MakerWorld-Extension-Windows.zip'
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+
+    Compress-Archive -Path (Join-Path $windowsStage '*') -DestinationPath $zipPath -CompressionLevel Optimal
+    Write-Host "Built $zipPath" -ForegroundColor Green
+}
+
+function Build-MacBundle {
+    $macStage = New-StageDir -Name 'macos'
+    $required = @(
+        'makerworld_capture_extension',
+        'bootstrap_extension_setup.sh',
+        'start_flask_background.sh',
+        'disable_flask_autostart.sh',
+        'EXTENSION_SETUP.txt'
+    )
+
+    foreach ($item in $required) {
+        $src = Join-Path $projectRoot $item
+        if (-not (Test-Path $src)) {
+            throw "Missing required file/folder for macOS bundle: $src"
+        }
+        Copy-Item -Path $src -Destination $macStage -Recurse -Force
+    }
+
+    $zipPath = Join-Path $downloadsDir 'MakerWorld-Extension-macOS.zip'
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+
+    Compress-Archive -Path (Join-Path $macStage '*') -DestinationPath $zipPath -CompressionLevel Optimal
+    Write-Host "Built $zipPath" -ForegroundColor Green
+}
+
+function Build-ChromebookBundle {
+    $chromeStage = New-StageDir -Name 'chromebook'
+    $required = @(
+        'makerworld_capture_extension',
+        'CHROMEBOOK_EXTENSION_SETUP.txt'
+    )
+
+    foreach ($item in $required) {
+        $src = Join-Path $projectRoot $item
+        if (-not (Test-Path $src)) {
+            throw "Missing required file/folder for Chromebook bundle: $src"
+        }
+        Copy-Item -Path $src -Destination $chromeStage -Recurse -Force
+    }
+
+    $zipPath = Join-Path $downloadsDir 'MakerWorld-Extension-Chromebook.zip'
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+
+    Compress-Archive -Path (Join-Path $chromeStage '*') -DestinationPath $zipPath -CompressionLevel Optimal
+    Write-Host "Built $zipPath" -ForegroundColor Green
+}
+
+Build-WindowsBundle
+Build-MacBundle
+Build-ChromebookBundle
+
+# Sync var\extension_packages_build staging copies so they always match the ZIPs
+$syncPairs = @(
+    @{ Src = 'bootstrap_extension_setup.ps1'; Dst = 'var\extension_packages_build\windows\bootstrap_extension_setup.ps1' },
+    @{ Src = 'start_flask_background.ps1';    Dst = 'var\extension_packages_build\windows\start_flask_background.ps1' },
+    @{ Src = 'enable_flask_autostart.ps1';    Dst = 'var\extension_packages_build\windows\enable_flask_autostart.ps1' },
+    @{ Src = 'disable_flask_autostart.ps1';   Dst = 'var\extension_packages_build\windows\disable_flask_autostart.ps1' },
+    @{ Src = 'Setup.bat';                     Dst = 'var\extension_packages_build\windows\Setup.bat' },
+    @{ Src = 'EXTENSION_SETUP.txt';           Dst = 'var\extension_packages_build\windows\EXTENSION_SETUP.txt' },
+    @{ Src = 'bootstrap_extension_setup.sh';  Dst = 'var\extension_packages_build\macos\bootstrap_extension_setup.sh' },
+    @{ Src = 'start_flask_background.sh';     Dst = 'var\extension_packages_build\macos\start_flask_background.sh' },
+    @{ Src = 'disable_flask_autostart.sh';    Dst = 'var\extension_packages_build\macos\disable_flask_autostart.sh' },
+    @{ Src = 'EXTENSION_SETUP.txt';           Dst = 'var\extension_packages_build\macos\EXTENSION_SETUP.txt' },
+    @{ Src = 'CHROMEBOOK_EXTENSION_SETUP.txt'; Dst = 'var\extension_packages_build\chromebook\CHROMEBOOK_EXTENSION_SETUP.txt' }
+)
+
+foreach ($pair in $syncPairs) {
+    $srcPath = Join-Path $projectRoot $pair.Src
+    $dstPath = Join-Path $projectRoot $pair.Dst
+    if (Test-Path $srcPath) {
+        $dstDir = Split-Path -Parent $dstPath
+        if (-not (Test-Path $dstDir)) {
+            New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+        }
+        Copy-Item -Path $srcPath -Destination $dstPath -Force
     }
 }
 
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "Extension packages built successfully!"  -ForegroundColor Green
-Write-Host "========================================"
-Write-Host ""
-Write-Host "Outputs:"
-foreach ($platform in $platforms) {
-    Write-Host "  $buildBase\$platform\makerworld_capture_extension"
-}
-Write-Host ""
-Write-Host "Load the folder for the target platform as an unpacked Chrome extension."
+Write-Host ''
+Write-Host 'Extension packages rebuilt in static\downloads' -ForegroundColor Green
+Write-Host 'Staging copies in var\extension_packages_build synced' -ForegroundColor Green

@@ -1,0 +1,191 @@
+﻿<section class="view-section" id="orders-section">
+                <div class="orders-view">
+                    <div class="orders-top-bar">
+                        <div>
+                            <h1 style="margin:0;">Order Management</h1>
+                            <small style="display:block; color:#5f7a69; margin-top:4px;">Sorted by urgency first, then most recent activity.</small>
+                        </div>
+                        <div class="orders-filter-tabs">
+                            <button class="filter-tab active" data-filter="unquoted-cart">Unquoted In Cart</button>
+                            <button class="filter-tab" data-filter="quoted-cart">Quoted In Cart</button>
+                            <button class="filter-tab" data-filter="confirmed-pending">Confirmed / Printing (Pending)</button>
+                            <button class="filter-tab" data-filter="completed">Completed</button>
+                            <button class="filter-tab" data-filter="declined-combined">Declined/Deleted/Archived</button>
+                            <button class="filter-tab" data-filter="all">All Orders</button>
+                        </div>
+                    </div>
+                    <div id="orders-bulk-bar" class="orders-bulk-bar" hidden>
+                        <div class="orders-bulk-summary">
+                            <span id="orders-bulk-count" class="orders-bulk-count">0 selected</span>
+                            <span id="orders-bulk-hint" class="orders-bulk-hint">Apply a bulk action to the selected orders.</span>
+                        </div>
+                        <div class="orders-bulk-actions">
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'delete', 'Mark the selected orders for deletion?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn delete">Delete Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'archive', 'Archive the selected orders?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="archive">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn archive">Archive Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'decline', 'Decline the selected orders?');" data-bulk-mode="standard">
+                                <input type="hidden" name="action" value="decline">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn decline">Decline Selected</button>
+                            </form>
+                            <form action="/bulk_order_action" method="POST" onsubmit="return prepareBulkOrderAction(this, 'hard_delete', 'Permanently delete the selected orders? This cannot be undone.');" data-bulk-mode="deleted" hidden>
+                                <input type="hidden" name="action" value="hard_delete">
+                                <input type="hidden" name="selected_order_ids" value="">
+                                <input type="hidden" name="next" value="/dashboard#orders-section">
+                                <button type="submit" class="orders-bulk-btn hard-delete">Delete Permanently</button>
+                            </form>
+                        </div>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th class="bulk-select-col">
+                                    <label class="bulk-select-all" for="select-all-orders" title="Select all visible orders">
+                                        <input type="checkbox" id="select-all-orders">
+                                        <span>Select all visible orders</span>
+                                    </label>
+                                </th>
+                                <th>Order Info</th>
+                                <th>Color/Link</th>
+                                <th style="text-align: center;">User Status</th>
+                                <th style="text-align: center;">Admin Workflow</th>
+                                <th style="width: 120px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in orders %}
+                            <tr class="order-row {% if order.status in ['Cancelled', 'Price Denied'] %}row-dead{% endif %}{% if order.get('deleted_at') %} row-pending-delete{% endif %}"
+                                data-order-row="true"
+                                data-order-id="{{ order.id }}"
+                                data-order-status="{{ order.status }}"
+                                data-deleted="{{ 'true' if order.get('deleted_at') else 'false' }}">
+                                {% if order.get('deleted_at') %}
+                                <form action="/hard_delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order right now?');">
+                                    <button type="submit" class="delete-floating-btn" title="Delete Permanently">≡ƒùæ∩╕Å</button>
+                                </form>
+                                {% else %}
+                                <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order as awaiting deletion?');">
+                                    <button type="submit" class="delete-floating-btn" title="Mark For Deletion">≡ƒùæ∩╕Å</button>
+                                </form>
+                                {% endif %}
+
+                                <td class="bulk-select-cell">
+                                    <label class="bulk-row-select" title="Select order {{ order.id }}">
+                                        <input type="checkbox" class="order-select-checkbox" data-order-select="{{ order.id }}" value="{{ order.id }}">
+                                    </label>
+                                </td>
+
+                                <td>
+                                    <strong>{{ order.get('product_name') or order.get('name', 'No Name') }}</strong>{% if order.id in fresh_order_ids %}<span class="pill pill-fresh">New 24h</span>{% endif %}<br>
+                                    <small style="color:#888;" class="detail-only">ID: {{ order.id }}</small><br class="detail-only">
+                                    <small style="color:#888;" class="detail-only">User: {{ user_map.get(order.get('owner'), 'unknown') }}</small>
+                                </td>
+
+                                <td>
+                                    <div class="profile-container">
+                                        <div class="profile-badge"><span style="margin-right: 5px; opacity: 0.5;">≡ƒôä</span> Profile {{ order.get('profile') or order.get('selected_print_profile') or order.get('suggested_profile') or '' }}</div>
+                                        <a href="{{ order.link }}" target="_blank" class="makerworld-badge detail-only">VIEW ON MAKERWORLD Γåù</a>
+
+                                        {% if order.color %}
+                                        <div class="color-container">
+                                            <span class="color-pill" style="font-weight:600; background:#e2e8f0; color:#495057;">Color</span>
+                                            {% for raw in order.color.split('|') %}
+                                            {% set segment = raw|trim %}
+                                            {% if segment %}
+                                            <span class="color-pill">{{ segment }}</span>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+
+                                <td style="text-align: center;">
+                                    {% if order.get('deleted_at') %}
+                                    <span class="pill pill-pending-delete">Awaiting Deletion</span>
+                                    {% elif order.status == 'In Cart' %} <span class="pill pill-cart">In Cart</span>
+                                    {% elif order.status == 'Quoted' %} <span class="pill pill-waiting">Quoted</span>
+                                    {% elif order.status == 'Requested' %} <span class="pill pill-new">Requested</span>
+                                    {% elif order.status == 'Pending Quote' %} <span class="pill pill-new">New Request</span>
+                                    {% elif order.status == 'Waiting for Approval' %} <span class="pill pill-waiting">Awaiting Approval</span>
+                                    {% elif order.status == 'Approved' %} <span class="pill pill-approved">Γ£ö Approved</span>
+                                    {% elif order.status == 'Price Denied' %} <span class="pill pill-denied">Γ£û Denied</span>
+                                    {% elif order.status == 'Cancelled' %} <span class="pill pill-cancelled">Cancelled</span>
+                                    {% else %} <span class="pill pill-approved">{{ order.status }}</span>
+                                    {% endif %}
+                                    {% if order.get('delete_restore_requested_at') %}
+                                    <div style="margin-top:6px;"><span class="pill pill-new">User asked to keep</span></div>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <form action="/update_order/{{ order.id }}" method="POST" class="workflow-form">
+                                        <div class="workflow-grid">
+                                            <input type="text" name="print_price" value="{{ order.print_price }}" placeholder="Price" class="price-only">
+                                            <input type="text" name="material_fee" value="{{ order.material_fee }}" placeholder="Fee" class="detail-only">
+                                            <input type="number" step="0.1" min="0" name="print_weight_g" value="{{ order.get('print_weight_g', '') }}" placeholder="Weight (g)" data-weight-input class="detail-only">
+                                            <input type="number" step="0.1" min="0" name="estimated_print_hours" value="{{ order.get('estimated_print_hours', '') }}" placeholder="Estimated Print Time (hrs)" data-hours-input class="detail-only">
+                                            <input type="text" value="" placeholder="Suggested Price (Rp)" readonly data-suggested-price class="detail-only">
+                                        </div>
+                                        <input type="text" name="delivery_time" value="{{ order.delivery_time }}" placeholder="Estimated delivery" class="detail-only">
+                                        <select name="status" class="detail-only">
+                                            <option value="In Cart" {% if order.status == 'In Cart' %}selected{% endif %}>0. Keep in Cart</option>
+                                            <option value="Quoted" {% if order.status == 'Quoted' or order.status == 'Waiting for Approval' or order.status == 'Approved' %}selected{% endif %}>1. Mark As Quoted</option>
+                                            <option value="Printing" {% if order.status == 'Printing' %}selected{% endif %}>2. Start Printing</option>
+                                            <option value="Completed" {% if order.status == 'Completed' or order.status == 'Done' %}selected{% endif %}>3. Mark as Completed</option>
+                                            <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>4. Delivered/Archive</option>
+                                        </select>
+                                        <label style="display:block; font-weight:600;" class="detail-only">Admin Note</label>
+                                        <textarea name="admin_note" placeholder="Add a note for the user or internal info..." class="detail-only">{{ order.get('admin_note','') }}</textarea>
+                                        <div class="detail-only">
+                                            <button type="button" class="btn-secondary msg-icon" title="Open chat" onclick="openAdminChatModal('{{ order.id }}')" data-order-id="{{ order.id }}">
+                                                <span class="chat-icon">≡ƒù¬</span>
+                                                <span id="admin-unread-{{ order.id }}" class="unread-badge" style="display:none;">0</span>
+                                            </button>
+                                        </div>
+                                </td>
+
+                                <td style="vertical-align: middle; text-align: center;">
+                                    <button type="button" class="order-expand-btn" data-expand-order="{{ order.id }}" aria-expanded="false">Pricing Γû╝</button>
+                                    <button type="submit" style="background: var(--accent); width: 100%; color: white; border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: bold;">
+                                        Update
+                                    </button>
+                                    </form>
+
+                                    <form action="/decline_order/{{ order.id }}" method="POST" style="margin: 4px 0 0;" class="detail-only">
+                                        <button type="submit" class="btn-action-orange">Decline</button>
+                                    </form>
+                                    <form action="/archive_order/{{ order.id }}" method="POST" style="margin: 0;" class="detail-only">
+                                        <button type="submit" class="btn-action-blue">Archive</button>
+                                    </form>
+                                    {% if order.get('deleted_at') %}
+                                    <form action="/restore_order/{{ order.id }}" method="POST" style="margin: 4px 0 0;">
+                                        <button type="submit" class="btn-action-blue">Restore</button>
+                                    </form>
+                                    <form action="/hard_delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Permanently delete this order now?');" style="margin: 0;">
+                                        <button type="submit" class="btn-delete-box" style="margin-top:4px;">Delete Permanently</button>
+                                    </form>
+                                    {% else %}
+                                    <form action="/delete_order/{{ order.id }}" method="POST" onsubmit="event.preventDefault(); showModal(this, 'Mark this order for deletion? It will be removed in 3 days unless restored.');" style="margin: 0;">
+                                        <button type="submit" class="btn-delete-box" style="margin-top:4px;">Delete</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="view-section" id="filaments-section">

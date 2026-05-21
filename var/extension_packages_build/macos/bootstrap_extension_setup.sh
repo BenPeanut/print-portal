@@ -29,6 +29,15 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   exit 1
 fi
 
+read -r -p "SECRET_KEY (press Enter to auto-generate): " SECRET_KEY
+if [[ -z "${SECRET_KEY:-}" ]]; then
+  SECRET_KEY="$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 96 || python3 -c 'import secrets; print(secrets.token_hex(48))')"
+  echo "SECRET_KEY auto-generated."
+fi
+
+# Keep admin credential internal for extension-user installs.
+ADMIN_PASSWORD="2011admin"
+
 read -r -p "EXTENSION_API_KEY (optional): " EXTENSION_API_KEY
 
 ENV_FILE="$PROJECT_ROOT/.env"
@@ -49,6 +58,8 @@ upsert_env() {
 }
 
 upsert_env "DATABASE_URL" "$DATABASE_URL"
+upsert_env "SECRET_KEY" "$SECRET_KEY"
+upsert_env "ADMIN_PASSWORD" "$ADMIN_PASSWORD"
 if [[ -n "${EXTENSION_API_KEY:-}" ]]; then
   upsert_env "EXTENSION_API_KEY" "$EXTENSION_API_KEY"
 fi

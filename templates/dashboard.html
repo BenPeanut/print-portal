@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-FRQH856N5N');
-</script>
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-ND5N4WDP');</script>
+<!-- End Google Tag Manager -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard</title>
@@ -2953,6 +2951,9 @@
     </style>
 </head>
 <body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-ND5N4WDP" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
     <div id="pricing-config"
         data-base-service-fee="{{ '%.0f'|format(control_settings.get('base_service_fee', 0)) }}"
         data-price-per-gram="{{ '%.0f'|format(control_settings.get('price_per_gram', control_settings.get('default_price_per_gram', 0))) }}"
@@ -3540,6 +3541,9 @@
                     <div class="container-fluid">
                         <div class="suggested-toolbar" style="margin-bottom: 12px;">
                             <h1 style="margin: 0;">Users</h1>
+                            <form action="/dashboard/users/cleanup-temporary" method="POST" onsubmit="return confirm('Delete all temporary tmp_ext_ users and their orders?');" style="margin:0;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete Temporary Users</button>
+                            </form>
                         </div>
                         <p class="suggested-intro">Manage customer material credits. These values are visible to users in their portal.</p>
 
@@ -3548,7 +3552,12 @@
                             <div class="col-12 col-md-6 col-xl-4">
                                 <div class="card shadow-sm border-0 h-100">
                                     <div class="card-body d-flex flex-column">
-                                        <h5 class="settings-card-title" style="margin-bottom: 4px;">{{ u.username }}</h5>
+                                        <div class="d-flex justify-content-between align-items-start" style="gap:8px; margin-bottom:4px;">
+                                            <h5 class="settings-card-title" style="margin:0;">{{ u.username }}</h5>
+                                            <form action="/dashboard/users/{{ u.id }}/delete" method="POST" onsubmit="return confirm('Delete user {{ u.username }} and all their orders? This cannot be undone.');" style="margin:0;">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete user" aria-label="Delete user">🗑️</button>
+                                            </form>
+                                        </div>
                                         <p class="settings-card-copy" style="margin-bottom: 10px;">User ID: {{ u.id }}</p>
                                         <form action="/dashboard/users/{{ u.id }}/credits" method="POST" class="mt-auto">
                                             <label class="form-label" style="font-weight:700; font-size:0.86rem;">Material Credits</label>
@@ -4085,15 +4094,18 @@
             });
 
             function activateView(view) {
-                const resolved = view === 'orders'
-                    ? 'orders'
-                    : (view === 'users'
-                            ? 'users'
-                        : (view === 'reports'
-                            ? 'reports'
-                        : (view === 'filaments'
-                            ? 'filaments'
-                            : (view === 'settings' ? 'settings' : 'home')))));
+                let resolved = 'home';
+                if (view === 'orders') {
+                    resolved = 'orders';
+                } else if (view === 'users') {
+                    resolved = 'users';
+                } else if (view === 'reports') {
+                    resolved = 'reports';
+                } else if (view === 'filaments') {
+                    resolved = 'filaments';
+                } else if (view === 'settings') {
+                    resolved = 'settings';
+                }
                 homeSection.classList.toggle('active', resolved === 'home');
                 ordersSection.classList.toggle('active', resolved === 'orders');
                 filamentsSection.classList.toggle('active', resolved === 'filaments');
@@ -4118,16 +4130,37 @@
                 link.addEventListener('click', function (event) {
                     const href = link.getAttribute('href') || '';
                     const view = link.dataset.view || 'home';
-                    if (href.startsWith('#')) {
+                    if (href.includes('#')) {
                         event.preventDefault();
+                        const hashIndex = href.indexOf('#');
+                        const hash = hashIndex >= 0 ? href.slice(hashIndex) : href;
                         activateView(view);
-                        window.location.hash = href;
+                        window.location.hash = hash;
                         if (view === 'home' && href !== '#home-section') {
-                            document.querySelector(href)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
                     }
                 });
             });
+
+            function activateViewFromHash() {
+                const hash = String(window.location.hash || '').toLowerCase();
+                if (hash === '#orders-section') {
+                    activateView('orders');
+                } else if (hash === '#filaments-section') {
+                    activateView('filaments');
+                } else if (hash === '#users-section') {
+                    activateView('users');
+                } else if (hash === '#reports-section') {
+                    activateView('reports');
+                } else if (hash === '#settings-section') {
+                    activateView('settings');
+                } else {
+                    activateView('home');
+                }
+            }
+
+            window.addEventListener('hashchange', activateViewFromHash);
 
             notifBell?.addEventListener('click', function (event) {
                 event.stopPropagation();
@@ -4403,19 +4436,7 @@
                 });
             });
 
-            if (window.location.hash === '#orders-section') {
-                activateView('orders');
-            } else if (window.location.hash === '#filaments-section') {
-                activateView('filaments');
-            } else if (window.location.hash === '#users-section') {
-                activateView('users');
-            } else if (window.location.hash === '#reports-section') {
-                activateView('reports');
-            } else if (window.location.hash === '#settings-section') {
-                activateView('settings');
-            } else {
-                activateView('home');
-            }
+            activateViewFromHash();
 
             function refreshSuggestedPrice(form) {
                 const weightInput = form.querySelector('[data-weight-input]');

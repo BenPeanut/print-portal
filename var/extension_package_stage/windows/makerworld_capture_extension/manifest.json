@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "MakerWorld Capture Companion",
+  "description": "Hover MakerWorld model cards and press Q to open the same order popup flow as Browse Models.",
+  "version": "1.0.4",
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "https://makerworld.com/*",
+    "https://www.makerworld.com/*",
+    "https://*.makerworld.com/*",
+    "http://localhost:5000/*",
+    "http://127.0.0.1:5000/*",
+    "https://print-portal-qm9p.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MakerWorld Capture",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://makerworld.com/*",
+        "https://www.makerworld.com/*",
+        "https://*.makerworld.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup.html",
+        "popup.css",
+        "popup.js",
+        "overlay.html",
+        "overlay.css",
+        "overlay.js"
+      ],
+      "matches": [
+        "https://makerworld.com/*",
+        "https://www.makerworld.com/*",
+        "https://*.makerworld.com/*"
+      ]
+    }
+  ]
+}

@@ -1,18 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-FRQH856N5N');
-</script>
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-ND5N4WDP');</script>
+<!-- End Google Tag Manager -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Desktop Capture</title>
+    <title>MakerWorld Capture App</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='desktop_capture.css', v=request.args.get('_ts', '')) }}" />
     <style>
         .dc-host { padding: 16px !important; }
@@ -43,10 +41,13 @@
     </script>
 </head>
 <body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-ND5N4WDP" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
     <div class="dc-host">
         <div class="dc-box">
-            <h2 class="modal-title">Add Suggested Print</h2>
-
+            <h2 class="modal-title">MakerWorld Model Capture</h2>
+            <p class="modal-copy">Paste a MakerWorld model URL, load scraped details, then save it to your local app.</p>
             <div id="global-status" class="status-bar hidden"></div>
 
             <div id="capture-panel" class="modal-form">
@@ -130,7 +131,7 @@
                 </details>
 
                 <div class="modal-actions">
-                    <button id="submit-btn" class="btn btn-primary" type="button">Save Featured Item</button>
+                    <button id="submit-btn" class="btn btn-primary" type="button">Save Capture</button>
                 </div>
             </div>
         </div>

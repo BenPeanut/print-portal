@@ -4622,6 +4622,72 @@ def update_user_material_credits(user_id):
     return _redirect_back_to_dashboard('#users-section')
 
 
+def _remove_user_from_featured_items(featured_items, user_id):
+    cleaned = []
+    target_id = str(user_id or '').strip()
+    for item in featured_items or []:
+        current = dict(item or {})
+        raw_targets = current.get('target_users')
+        if not isinstance(raw_targets, list) or not raw_targets:
+            raw_targets = [current.get('target_user', 'ALL')]
+
+        normalized_targets = _normalize_target_users(raw_targets, fallback='ALL')
+        if 'ALL' in normalized_targets:
+            cleaned.append(current)
+            continue
+
+        next_targets = [t for t in normalized_targets if str(t or '').strip() != target_id]
+        if not next_targets:
+            continue
+
+        current['target_users'] = next_targets
+        current['target_user'] = next_targets[0] if len(next_targets) == 1 else 'MULTI'
+        cleaned.append(current)
+
+    return cleaned
+
+
+@app.route('/dashboard/users/<user_id>/delete', methods=['POST'])
+def delete_dashboard_user(user_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    target_id = str(user_id or '').strip()
+    if not target_id:
+        return _redirect_back_to_dashboard('#users-section')
+
+    _execute("DELETE FROM users WHERE id = %s", (target_id,))
+    _execute("DELETE FROM orders WHERE (json::jsonb ->> 'owner') = %s", (target_id,))
+    return _redirect_back_to_dashboard('#users-section')
+
+
+@app.route('/dashboard/users/cleanup-temporary', methods=['POST'])
+def cleanup_temporary_dashboard_users():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    rows = _execute("SELECT id, json FROM users", fetch=True) or []
+    temp_ids = []
+    for row in rows:
+        uid = str(row[0] or '').strip()
+        if not uid:
+            continue
+        try:
+            payload = json.loads(row[1]) if row[1] else {}
+        except Exception:
+            payload = {}
+        username = str((payload or {}).get('username') or '').strip().lower()
+        if username.startswith('tmp_ext_'):
+            temp_ids.append(uid)
+
+    if not temp_ids:
+        return _redirect_back_to_dashboard('#users-section')
+
+    _execute("DELETE FROM users WHERE id = ANY(%s)", (temp_ids,))
+    _execute("DELETE FROM orders WHERE (json::jsonb ->> 'owner') = ANY(%s)", (temp_ids,))
+    return _redirect_back_to_dashboard('#users-section')
+
+
 @app.route('/admin/analytics')
 def admin_analytics():
     if not session.get('logged_in'):

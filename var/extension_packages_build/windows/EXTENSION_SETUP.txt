@@ -33,7 +33,7 @@ You need:
   1. Windows 10 or later
   2. Google Chrome browser
   3. Database connection string (DATABASE_URL)
-  4. Extension API key (EXTENSION_API_KEY)
+  4. Extension API key (EXTENSION_API_KEY, optional)
   5. PowerShell 5.0 or later (built into Windows 10+)
 
 Ask your administrator if you don't have the connection string or API key.
@@ -49,8 +49,8 @@ STEP 1: Install the Extension in Chrome
 2. Go to: chrome://extensions/
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked"
-5. Browse to: 
-   C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website\makerworld_capture_extension
+5. Browse to the folder you extracted from the ZIP:
+  <ExtractedFolder>\makerworld_capture_extension
 6. Click "Select Folder"
 
 The extension should now appear in your Chrome toolbar.
@@ -71,15 +71,16 @@ To run the bootstrap:
    • Press Windows key + X
    • Click "Windows PowerShell" or "Terminal"
 
-2. Navigate to the project folder:
-   cd "C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website"
+2. Navigate to the extracted bundle folder:
+  cd "C:\Path\To\Extracted\MakerWorld-Extension-Windows"
 
 3. Run the bootstrap script:
    .\bootstrap_extension_setup.ps1
 
-4. When prompted, paste your secrets:
+4. When prompted, enter the runtime values:
    • DATABASE_URL: (paste the connection string from your administrator)
-   • EXTENSION_API_KEY: (paste the key from your administrator)
+  • SECRET_KEY: (press Enter to auto-generate if unsure)
+  • EXTENSION_API_KEY: (optional, paste from your administrator if used)
 
 5. Wait for the script to complete. You should see:
    ✓ Bootstrap setup completed successfully!
@@ -133,6 +134,7 @@ AUTOSTART VERIFICATION
 ================================================================================
 
 Your Flask backend will now start automatically every time you log into Windows.
+The Windows bundle includes backend\PrintingBusinessApp.exe which is what runs on machines without source code.
 
 To verify this works:
 
@@ -163,6 +165,13 @@ SOLUTION:
      • Try again
      • If still not working, run: .\start_flask_background.ps1 manually
      • Then refresh the extension popup
+
+PROBLEM: "Start-Process ... The operation was canceled by the user"
+SOLUTION:
+  • This is usually Windows or antivirus blocking first launch of backend\PrintingBusinessApp.exe
+  • Right-click backend\PrintingBusinessApp.exe -> Properties -> check Unblock -> Apply
+  • Then rerun Setup.bat
+  • PowerShell alternative: Unblock-File .\backend\PrintingBusinessApp.exe
 
 PROBLEM: Login fails in extension popup
 SOLUTION:
@@ -231,14 +240,14 @@ MANUAL BACKEND STARTUP (IF AUTOSTART FAILS)
 If the backend doesn't start automatically, you can start it manually:
 
 1. Open PowerShell
-2. cd to: C:\Users\<YourUsername>\Documents\MyCode\MyPrintingBuisness\Client_Website
+2. cd to your extracted bundle folder
 3. Run: .\start_flask_background.ps1
 
 The backend will start with a console window hidden (no visible window).
 
 To stop it manually:
   • Open Task Manager (Ctrl+Shift+Esc)
-  • Look for process "python.exe"
+  • Look for process "PrintingBusinessApp.exe" (or python.exe in source/dev mode)
   • Right-click and "End Task"
 
 ================================================================================

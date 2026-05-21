@@ -192,15 +192,18 @@
             <span class="install-badge">Windows</span>
             <h3 class="steps-title">Exactly what to click (Windows)</h3>
             <ol class="steps-list">
-                <li>Click <strong>Download for Windows</strong> below and extract the ZIP file.</li>
+                <li>Click <strong>Download for Windows</strong> below and extract the ZIP file to any folder.</li>
                 <li>Open Chrome and click the address bar, type <strong>chrome://extensions</strong>, then press Enter.</li>
                 <li>On the Extensions page, turn on <strong>Developer mode</strong> (top-right toggle).</li>
                 <li>Click <strong>Load unpacked</strong>.</li>
                 <li>Select the extracted <strong>makerworld_capture_extension</strong> folder, then click <strong>Select Folder</strong>.</li>
-                <li>Open PowerShell in your project folder and run <strong>bootstrap_extension_setup.ps1</strong>.</li>
-                <li>Enter your <strong>DATABASE_URL</strong> (and <strong>EXTENSION_API_KEY</strong> if requested), then wait for completion.</li>
+                <li>Double-click <strong>Setup.bat</strong> inside the extracted folder &mdash; this is a one-click installer that provisions your credentials and registers auto-start.</li>
+                <li>When prompted, paste your <strong>DATABASE_URL</strong>. Optional values can be skipped with Enter.</li>
                 <li>Click the extension icon in Chrome, log in, then open MakerWorld and press <strong>Q</strong> while hovering a model.</li>
             </ol>
+            <div class="install-note" style="margin-top:8px; font-size:0.86rem;">
+                <strong>If Setup.bat is blocked by antivirus or Windows SmartScreen:</strong> right-click it, choose <em>Properties</em>, tick <em>Unblock</em>, then double-click again. Some antivirus programs flag PyInstaller EXEs &mdash; add the <code>backend\</code> folder as an exclusion if needed.
+            </div>
         </article>
 
         <article class="os-panel" id="os-panel-macos" role="tabpanel">
@@ -267,12 +270,12 @@
 
         <div class="install-note" style="margin-top:10px;">
             <strong>Direct Downloads</strong><br>
-            Download the extension bundle for your operating system below. Each bundle includes the extension folder and setup helper files for that platform.
+            Download the extension bundle for your operating system below. The Windows bundle includes a local backend runtime executable so desktop installs work on machines without source code.
 
             <div class="download-grid">
                 <div class="download-card">
                     <p class="download-title">Windows Bundle</p>
-                    <p class="download-copy">Extension + PowerShell setup scripts.</p>
+                    <p class="download-copy">Extension + backend runtime + Setup.bat double-click installer. No Python required.</p>
                     <a class="download-btn" href="/static/downloads/MakerWorld-Extension-Windows.zip" download>Download for Windows</a>
                 </div>
                 <div class="download-card">

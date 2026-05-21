@@ -20,9 +20,6 @@ let modelGalleryImageChoices = [];
 let autoLoadDebounceTimer = null;
 let autoLoadInFlight = false;
 let lastAutoLoadedLink = '';
-let quickCaptureMode = false;
-let desktopCaptureSignalId = 0;
-let desktopCapturePollTimer = null;
 const shared = window.CaptureShared || {};
 
 const el = {
@@ -1167,44 +1164,6 @@ async function tryAutoLoadModelData(force = false) {
   }
 }
 
-async function pollDesktopCaptureSignal() {
-  try {
-    const params = {
-      last_id: String(desktopCaptureSignalId || 0),
-    };
-    const res = await fetch(
-      buildApiUrl('/extension-api/desktop-capture/poll', params),
-      { headers: desktopHeaders() }
-    );
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok || !payload.ok) {
-      return;
-    }
-
-    const nextId = Number(payload.signal_id || 0);
-    if (Number.isFinite(nextId) && nextId > desktopCaptureSignalId) {
-      desktopCaptureSignalId = nextId;
-    }
-
-    if (!payload.has_update) {
-      return;
-    }
-
-    const incoming = normalizeModelUrl(payload.model_url || '');
-    if (!incoming) {
-      return;
-    }
-    if (incoming === normalizeModelUrl(el.fieldLink.value || '') && incoming === lastAutoLoadedLink) {
-      return;
-    }
-
-    el.fieldLink.value = incoming;
-    await tryAutoLoadModelData(true);
-    showGlobalStatus('Loaded model sent from MakerWorld hotkey.', 'success');
-  } catch {
-    // Polling is best effort; ignore transient errors.
-  }
-}
 
 async function loadAppData() {
   try {
@@ -1361,7 +1320,7 @@ async function submitCapture() {
     showGlobalStatus(error && error.message ? String(error.message) : 'Submit failed.', 'error');
   } finally {
     el.submitBtn.disabled = false;
-    el.submitBtn.textContent = 'Save Featured Item';
+    el.submitBtn.textContent = 'Save Capture';
   }
 }
 
@@ -1386,7 +1345,6 @@ function wireEvents() {
   el.submitBtn.addEventListener('click', submitCapture);
 
   document.addEventListener('keydown', (event) => {
-    if (!quickCaptureMode) return;
     if (event.key !== 'Enter') return;
     if (el.submitBtn && el.submitBtn.disabled) return;
     event.preventDefault();
@@ -1461,14 +1419,7 @@ function wireEvents() {
     const params = new URLSearchParams(window.location.search || '');
     const prefill = params.get('makerworld_link') || params.get('model_url') || '';
     const shouldAutoLoad = params.get('auto_load') === '1';
-    quickCaptureMode = params.get('quick_capture') === '1' || params.get('source') === 'extension_popup' || params.get('source') === 'extension_overlay';
     const normalized = normalizeModelUrl(prefill);
-    if (params.get('source') === 'extension_popup') {
-      document.body.classList.add('extension-popup');
-    }
-    if (quickCaptureMode) {
-      document.body.classList.add('quick-capture-wide');
-    }
     if (normalized) {
       el.fieldLink.value = normalized;
       if (shouldAutoLoad) {
@@ -1479,11 +1430,4 @@ function wireEvents() {
     // Ignore malformed URL params.
   }
 
-  if (desktopCapturePollTimer) {
-    clearInterval(desktopCapturePollTimer);
-  }
-  desktopCapturePollTimer = setInterval(() => {
-    pollDesktopCaptureSignal();
-  }, 1200);
-  pollDesktopCaptureSignal();
 })();

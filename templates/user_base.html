@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-FRQH856N5N"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-FRQH856N5N');
-</script>
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-ND5N4WDP');</script>
+<!-- End Google Tag Manager -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or 'Client Portal' }}</title>
@@ -730,6 +728,7 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
+            pointer-events: none;
         }
 
         .cart-checkout-modal.open { display: flex; }
@@ -738,6 +737,7 @@
             position: absolute;
             inset: 0;
             background: rgba(0, 0, 0, 0.45);
+            pointer-events: auto;
         }
 
         .cart-checkout-card {
@@ -748,6 +748,7 @@
             background: #ffffff;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
             padding: 18px;
+            pointer-events: auto;
         }
 
         .cart-checkout-card h3 {
@@ -801,14 +802,19 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
+            pointer-events: none;
         }
 
-        .order-preview-modal.open { display: flex; }
+        .order-preview-modal.open { 
+            display: flex;
+            pointer-events: none;
+        }
 
         .order-preview-backdrop {
             position: absolute;
             inset: 0;
             background: rgba(0, 0, 0, 0.46);
+            pointer-events: auto;
         }
 
         .order-preview-card {
@@ -820,6 +826,7 @@
             background: #ffffff;
             box-shadow: 0 24px 60px rgba(11, 38, 27, 0.34);
             overflow: hidden;
+            pointer-events: auto;
             display: flex;
             flex-direction: column;
         }
@@ -949,14 +956,19 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
+            pointer-events: none;
         }
 
-        .credit-modal.open { display: flex; }
+        .credit-modal.open { 
+            display: flex;
+            pointer-events: none;
+        }
 
         .credit-backdrop {
             position: absolute;
             inset: 0;
             background: rgba(0, 0, 0, 0.52);
+            pointer-events: auto;
         }
 
         .credit-card {
@@ -970,6 +982,7 @@
             transform: translateY(14px) scale(0.97);
             opacity: 0;
             transition: transform 0.28s ease, opacity 0.28s ease;
+            pointer-events: auto;
         }
 
         .credit-modal.open .credit-card {
@@ -1103,6 +1116,9 @@
     </style>
 </head>
 <body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-ND5N4WDP" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
     <div class="shell">
         <nav class="top-nav" aria-label="Client Navigation">
             <div class="brand">USER PORTAL</div>

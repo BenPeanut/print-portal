@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MakerWorld Order Companion</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <p class="eyebrow">MAKERWORLD ORDER EXTENSION</p>
+      <h1 class="title">Account Access</h1>
+    </header>
+
+    <section id="logged-out-view" class="card" aria-label="Log in">
+      <p class="card-title">Log In</p>
+      <p class="card-copy">Sign in to your print portal account to connect Q-hover orders and cart checkout.</p>
+      <label class="field-label" for="username-input">Username</label>
+      <input id="username-input" class="field" type="text" autocomplete="username" placeholder="Enter username" />
+      <label class="field-label" for="password-input">Password</label>
+      <input id="password-input" class="field" type="password" autocomplete="current-password" placeholder="Enter password" />
+      <button id="login-btn" class="primary-btn" type="button">Log In</button>
+    </section>
+
+    <section id="logged-in-view" class="card" aria-label="Logged in" hidden>
+      <p class="card-title">Signed In</p>
+      <p id="welcome-line" class="card-copy">You are logged in.</p>
+      <p class="hint">Hover a model and press <strong>Q</strong> to order. Press <strong>C</strong> anywhere to view your cart.</p>
+      <button id="logout-btn" class="secondary-btn" type="button">Log Out</button>
+    </section>
+
+    <section id="fallback-view" class="card" aria-label="Setup and fallback" hidden>
+      <p id="fallback-title" class="card-title">Setup Required</p>
+      <p id="fallback-copy" class="card-copy">Use the setup guide to finish extension installation.</p>
+      <button id="open-setup-btn" class="secondary-btn" type="button">Open Setup Guide</button>
+      <button id="open-portal-btn" class="primary-btn" type="button" hidden>Open Web Portal</button>
+    </section>
+
+    <div id="status-line" class="status-line" aria-live="polite"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
